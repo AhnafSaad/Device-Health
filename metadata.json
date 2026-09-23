@@ -1,0 +1,6 @@
+{
+  "name": "Server Monitoring Dashboard",
+  "description": "Large-scale server monitoring dashboard with PostgreSQL node registration, real-time health metrics, search, filtering, pagination, and drawer inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

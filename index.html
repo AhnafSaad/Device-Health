@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      /**
+       * Safeguard against iframe/preview environment defining window.fetch with only a getter.
+       * Ensures that subsequent scripts or libraries attempting to wrap or assign window.fetch
+       * do not throw 'TypeError: Cannot set property fetch of #<Window> which has only a getter'.
+       */
+      (function() {
+        try {
+          function patchDescriptor(prop, descriptor) {
+            if (prop === 'fetch' && descriptor && descriptor.get && !descriptor.set) {
+              descriptor.configurable = true;
+              let customFetch = null;
+              const origGet = descriptor.get;
+              descriptor.set = function(newVal) {
+                customFetch = newVal;
+              };
+              descriptor.get = function() {
+                return customFetch !== null ? customFetch : origGet.call(this);
+              };
+            }
+          }
+
+          const originalDefineProperty = Object.defineProperty;
+          Object.defineProperty = function(obj, prop, descriptor) {
+            patchDescriptor(prop, descriptor);
+            return originalDefineProperty.call(Object, obj, prop, descriptor);
+          };
+
+          if (typeof Reflect !== 'undefined' && Reflect.defineProperty) {
+            const originalReflectDefineProperty = Reflect.defineProperty;
+            Reflect.defineProperty = function(target, propertyKey, attributes) {
+              patchDescriptor(propertyKey, attributes);
+              return originalReflectDefineProperty.call(Reflect, target, propertyKey, attributes);
+            };
+          }
+        } catch (e) {
+          // Graceful fallback
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Server Monitoring Dashboard</title>
+    <meta name="description" content="Large-scale server monitoring dashboard with PostgreSQL node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
+    <meta property="og:title" content="Server Monitoring Dashboard" />
+    <meta property="og:description" content="Large-scale server monitoring dashboard with PostgreSQL node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
