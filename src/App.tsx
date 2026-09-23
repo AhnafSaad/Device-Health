@@ -1,18 +1,21 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Server, StatusFilter } from './types';
-import { INITIAL_SERVERS } from './data/mockServers';
+import { Server, StatusFilter, Datacenter } from './types';
+import { INITIAL_SERVERS, INITIAL_DATACENTERS } from './data/mockServers';
 import { TopBar } from './components/TopBar';
 import { FilterCards } from './components/FilterCards';
 import { ServerTable } from './components/ServerTable';
 import { Pagination } from './components/Pagination';
 import { ServerDrawer } from './components/ServerDrawer';
 import { AddServerView } from './components/AddServerView';
+import { DatacenterModal } from './components/DatacenterModal';
 
 export default function App() {
   // Main data state
   const [servers, setServers] = useState<Server[]>(INITIAL_SERVERS);
+  const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDcModalOpen, setIsDcModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'add-device'>('dashboard');
 
   // Search and Filter state
@@ -20,6 +23,40 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [deviceFilter, setDeviceFilter] = useState<string>('all');
   const [healthFilter, setHealthFilter] = useState<'all' | 'normal' | 'critical'>('all');
+  const [datacenterFilter, setDatacenterFilter] = useState<string>('all');
+
+  // Light / Dark mode state with persistence
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('noc-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+    }
+    return 'dark';
+  });
+
+  // Sync theme with document element and localStorage
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      try {
+        localStorage.setItem('noc-theme', theme);
+      } catch {
+        // ignore localStorage errors
+      }
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -27,6 +64,40 @@ export default function App() {
 
   // Live simulation telemetry state
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+
+  // Fetch initial datacenters from API
+  useEffect(() => {
+    async function fetchDatacenters() {
+      try {
+        const res = await fetch('/api/datacenters');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.datacenters) && data.datacenters.length > 0) {
+            setDatacenters(data.datacenters);
+          }
+        }
+      } catch {
+        // Fallback to initial seed
+      }
+    }
+    fetchDatacenters();
+  }, []);
+
+  // Compute node count dynamically for datacenters
+  const enrichedDatacenters = useMemo(() => {
+    return datacenters.map((dc) => {
+      const count = servers.filter((s) => {
+        if (s.datacenterId && String(s.datacenterId) === String(dc.id)) return true;
+        if (s.datacenterName && s.datacenterName.toLowerCase() === dc.name.toLowerCase()) return true;
+        if (s.location && s.location.toLowerCase() === dc.location.toLowerCase()) return true;
+        return false;
+      }).length;
+      return {
+        ...dc,
+        nodeCount: count,
+      };
+    });
+  }, [datacenters, servers]);
 
   // Filter and search computation
   const filteredServers = useMemo(() => {
@@ -42,19 +113,31 @@ export default function App() {
       if (healthFilter === 'normal' && srv.health !== 'Normal') return false;
       if (healthFilter === 'critical' && srv.health === 'Normal') return false;
 
-      // 4. Search query (IP, Hostname, Location, Rack, or Device Type)
+      // 4. Data Center filter
+      if (datacenterFilter !== 'all') {
+        const targetDc = enrichedDatacenters.find((d) => String(d.id) === String(datacenterFilter));
+        const matchDcId = srv.datacenterId && String(srv.datacenterId) === String(datacenterFilter);
+        const matchDcName = targetDc && srv.datacenterName && srv.datacenterName.toLowerCase() === targetDc.name.toLowerCase();
+        const matchDcLoc = targetDc && srv.location && srv.location.toLowerCase() === targetDc.location.toLowerCase();
+        if (!matchDcId && !matchDcName && !matchDcLoc) {
+          return false;
+        }
+      }
+
+      // 5. Search query (IP, Hostname, Location, Rack, DC Name, or Device Type)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchIp = srv.ip.toLowerCase().includes(query);
         const matchHost = srv.hostname.toLowerCase().includes(query);
         const matchLoc = srv.location?.toLowerCase().includes(query);
         const matchRack = srv.rackNumber?.toLowerCase().includes(query);
+        const matchDc = srv.datacenterName?.toLowerCase().includes(query);
         const matchType = srv.deviceType?.toLowerCase().includes(query);
-        return matchIp || matchHost || matchLoc || matchRack || matchType;
+        return matchIp || matchHost || matchLoc || matchRack || matchDc || matchType;
       }
       return true;
     });
-  }, [servers, statusFilter, deviceFilter, healthFilter, searchQuery]);
+  }, [servers, statusFilter, deviceFilter, healthFilter, datacenterFilter, enrichedDatacenters, searchQuery]);
 
   // Pagination computation
   const totalPages = Math.max(1, Math.ceil(filteredServers.length / pageSize));
@@ -83,6 +166,11 @@ export default function App() {
     setCurrentPage(1);
   };
 
+  const handleDatacenterFilterChange = (dcId: string) => {
+    setDatacenterFilter(dcId);
+    setCurrentPage(1);
+  };
+
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
     setCurrentPage(1);
@@ -92,11 +180,17 @@ export default function App() {
     setStatusFilter('all');
     setDeviceFilter('all');
     setHealthFilter('all');
+    setDatacenterFilter('all');
     setSearchQuery('');
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = statusFilter !== 'all' || deviceFilter !== 'all' || healthFilter !== 'all' || !!searchQuery;
+  const hasActiveFilters = 
+    statusFilter !== 'all' || 
+    deviceFilter !== 'all' || 
+    healthFilter !== 'all' || 
+    datacenterFilter !== 'all' || 
+    !!searchQuery;
 
   // Row selection handler
   const handleSelectServer = (server: Server) => {
@@ -108,6 +202,18 @@ export default function App() {
   const handleServerAdded = (newServer: Server) => {
     setServers((prev) => [newServer, ...prev]);
     setSelectedServer(newServer);
+  };
+
+  // Datacenter modal handlers
+  const handleAddDatacenter = (newDc: Datacenter) => {
+    setDatacenters((prev) => [newDc, ...prev]);
+  };
+
+  const handleDeleteDatacenter = (id: string | number) => {
+    setDatacenters((prev) => prev.filter((d) => String(d.id) !== String(id)));
+    if (String(datacenterFilter) === String(id)) {
+      setDatacenterFilter('all');
+    }
   };
 
   // Live telemetry polling (every 10s from /api/telemetry or simulated fallback)
@@ -129,6 +235,8 @@ export default function App() {
                 status: (live.status as any) || s.status,
                 health: (live.health as any) || s.health,
                 uptime: live.uptime || s.uptime,
+                datacenterId: live.datacenter_id ?? s.datacenterId,
+                datacenterName: live.datacenter_name ?? s.datacenterName,
               };
             })
           );
@@ -231,6 +339,10 @@ export default function App() {
         clusterHealthPercent={clusterHealthPercent}
         currentView={currentView}
         onNavigate={setCurrentView}
+        onOpenDcModal={() => setIsDcModalOpen(true)}
+        datacenterCount={enrichedDatacenters.length}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -241,6 +353,8 @@ export default function App() {
             onBack={() => setCurrentView('dashboard')}
             onServerAdded={handleServerAdded}
             existingIps={existingIps}
+            datacenters={enrichedDatacenters}
+            onOpenDcModal={() => setIsDcModalOpen(true)}
           />
         ) : (
           /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
@@ -262,6 +376,10 @@ export default function App() {
                 onSelectDeviceFilter={handleDeviceFilterChange}
                 healthFilter={healthFilter}
                 onSelectHealthFilter={handleHealthFilterChange}
+                datacenters={enrichedDatacenters}
+                datacenterFilter={datacenterFilter}
+                onSelectDatacenterFilter={handleDatacenterFilterChange}
+                onOpenDcModal={() => setIsDcModalOpen(true)}
                 onResetFilters={handleResetAllFilters}
                 hasActiveFilters={hasActiveFilters}
               />
@@ -283,6 +401,9 @@ export default function App() {
                 statusFilter={statusFilter}
                 deviceFilter={deviceFilter}
                 healthFilter={healthFilter}
+                datacenters={enrichedDatacenters}
+                datacenterFilter={datacenterFilter}
+                onSelectDatacenterFilter={handleDatacenterFilterChange}
                 onClearSearch={() => handleSearchChange('')}
                 onClearAllFilters={handleResetAllFilters}
               >
@@ -305,12 +426,17 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="footer footer-center p-4 bg-base-100/80 border-t border-base-content/10 text-xs text-base-content/50 backdrop-blur-md mt-auto">
-        <aside className="flex items-center gap-2">
-          <span>NOC Fleet Monitor • Mission-Critical Global Telemetry</span>
-          <span>•</span>
-          <span className="font-mono font-semibold text-primary">PostgreSQL Backend Live</span>
+      {/* Production Enterprise Footer */}
+      <footer className="footer footer-center py-3.5 px-4 bg-base-100 border-t border-base-content/10 text-xs text-base-content/60 backdrop-blur-md mt-auto">
+        <aside className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 font-medium">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Enterprise NOC Platform • Telemetry Engine v4.8
+          </span>
+          <span className="hidden sm:inline text-base-content/30">•</span>
+          <span>High-Availability Tier IV • SLA 99.999%</span>
+          <span className="hidden sm:inline text-base-content/30">•</span>
+          <span>Global Fleet Management Active</span>
         </aside>
       </footer>
 
@@ -320,6 +446,15 @@ export default function App() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onRebootServer={handleRebootServer}
+      />
+
+      {/* Datacenter Fleet Management Modal */}
+      <DatacenterModal
+        isOpen={isDcModalOpen}
+        onClose={() => setIsDcModalOpen(false)}
+        datacenters={enrichedDatacenters}
+        onAddDatacenter={handleAddDatacenter}
+        onDeleteDatacenter={handleDeleteDatacenter}
       />
     </div>
   );

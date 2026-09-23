@@ -40,13 +40,26 @@
         } catch (e) {
           // Graceful fallback
         }
+
+        // Initialize theme before DOM render to prevent flash
+        try {
+          const savedTheme = localStorage.getItem('noc-theme');
+          const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          const initialTheme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : (prefersLight ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-theme', initialTheme);
+          if (initialTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Server Monitoring Dashboard</title>
-    <meta name="description" content="Large-scale server monitoring dashboard with PostgreSQL node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
+    <meta name="description" content="Large-scale server monitoring dashboard with enterprise node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
     <meta property="og:title" content="Server Monitoring Dashboard" />
-    <meta property="og:description" content="Large-scale server monitoring dashboard with PostgreSQL node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
+    <meta property="og:description" content="Large-scale server monitoring dashboard with enterprise node registration, real-time health metrics, search, filtering, pagination, and drawer inspection." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>

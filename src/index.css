@@ -1,2 +1,36 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+/* Smooth theme transitions */
+html {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  color-scheme: light dark;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Light & Dark mode support for native select options */
+html[data-theme="dark"] select option {
+  background-color: #0f172a !important; /* solid opaque slate-900 */
+  color: #f8fafc !important;
+  padding: 8px 12px;
+}
+
+html[data-theme="light"] select option {
+  background-color: #ffffff !important; /* solid opaque white */
+  color: #0f172a !important;
+  padding: 8px 12px;
+}
+
+select:focus option,
+select option:hover,
+select option:focus {
+  background-color: var(--color-primary, #6366f1) !important;
+  color: #ffffff !important;
+}

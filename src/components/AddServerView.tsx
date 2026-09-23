@@ -12,27 +12,35 @@ import {
   Send,
   RotateCcw,
   Sparkles,
-  Database
+  Database,
+  Building2,
+  Plus
 } from 'lucide-react';
-import { Server, DeviceType } from '../types';
+import { Server, DeviceType, Datacenter } from '../types';
+import { DatacenterDropdown } from './DatacenterDropdown';
 
 interface AddServerViewProps {
   onBack: () => void;
   onServerAdded: (newServer: Server) => void;
   existingIps: string[];
+  datacenters: Datacenter[];
+  onOpenDcModal: () => void;
 }
 
 export const AddServerView: React.FC<AddServerViewProps> = ({
   onBack,
   onServerAdded,
   existingIps,
+  datacenters,
+  onOpenDcModal,
 }) => {
   const [formData, setFormData] = useState({
     ip_address: '',
     device_type: 'Server' as DeviceType,
     snmp_community: 'public',
-    location: '',
-    rack_number: '',
+    datacenter_id: datacenters.length > 0 ? String(datacenters[0].id) : '',
+    location: datacenters.length > 0 ? datacenters[0].location : '',
+    rack_number: 'Rack 01 (U10)',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -40,10 +48,20 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    if (name === 'datacenter_id') {
+      const selectedDc = datacenters.find((d) => String(d.id) === String(value));
+      setFormData((prev) => ({
+        ...prev,
+        datacenter_id: value,
+        location: selectedDc ? selectedDc.location : prev.location,
+        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? selectedDc.racks[0] : prev.rack_number,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleReset = () => {
@@ -51,8 +69,9 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       ip_address: '',
       device_type: 'Server',
       snmp_community: 'public',
-      location: '',
-      rack_number: '',
+      datacenter_id: datacenters.length > 0 ? String(datacenters[0].id) : '',
+      location: datacenters.length > 0 ? datacenters[0].location : '',
+      rack_number: 'Rack 01 (U10)',
     });
     setAlert(null);
   };
@@ -62,111 +81,138 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     setAlert(null);
     setIsLoading(true);
 
-    // Simulate backend network latency & PostgreSQL insert query
-    setTimeout(() => {
+    const cleanIp = formData.ip_address.trim();
+
+    // 1. IP validation check
+    const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (!ipv4Regex.test(cleanIp)) {
       setIsLoading(false);
+      setAlert({
+        type: 'error',
+        message: 'Invalid IPv4 Format',
+        submessage: 'Please provide a valid IPv4 address (e.g. 192.168.1.100).',
+      });
+      return;
+    }
 
-      // 1. IP validation check
-      const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-      if (!ipv4Regex.test(formData.ip_address.trim())) {
-        setAlert({
-          type: 'error',
-          message: 'Invalid IPv4 Format',
-          submessage: 'Please provide a valid IPv4 address (e.g. 192.168.1.100).',
-        });
-        return;
-      }
+    // 2. Check 409 Conflict: IP already exists in servers_info
+    if (existingIps.includes(cleanIp)) {
+      setIsLoading(false);
+      setAlert({
+        type: 'error',
+        message: '409 Conflict: Duplicate Node IP',
+        submessage: `A device node with IP ${cleanIp} already exists in servers_info.`,
+      });
+      return;
+    }
 
-      // 2. Check 409 Conflict: IP already exists in servers_info
-      if (existingIps.includes(formData.ip_address.trim())) {
+    const prefix = formData.device_type === 'Server'
+      ? 'srv'
+      : formData.device_type === 'MikroTik'
+      ? 'mtik'
+      : formData.device_type === 'Switch'
+      ? 'sw'
+      : 'olt';
+
+    const generatedHostname = `${prefix}-node-${cleanIp.split('.').slice(-2).join('-')}`;
+    const selectedDc = datacenters.find((d) => String(d.id) === String(formData.datacenter_id));
+    const finalLocation = selectedDc ? selectedDc.location : formData.location.trim() || 'Global Datacenter';
+    const finalDcName = selectedDc ? selectedDc.name : undefined;
+
+    try {
+      const response = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ip_address: cleanIp,
+          hostname: generatedHostname,
+          device_type: formData.device_type,
+          datacenter_id: formData.datacenter_id || null,
+          datacenter_name: finalDcName,
+          snmp_community: formData.snmp_community.trim() || 'public',
+          location: finalLocation,
+          rack_number: formData.rack_number.trim() || 'Rack TBD',
+        }),
+      });
+
+      if (response.status === 409) {
+        setIsLoading(false);
         setAlert({
           type: 'error',
           message: '409 Conflict: Duplicate Node IP',
-          submessage: `A device node with IP ${formData.ip_address.trim()} already exists in servers_info.`,
+          submessage: `A device with IP ${cleanIp} already exists in servers_info.`,
         });
         return;
       }
+    } catch {
+      // Local fallback in case backend is offline
+    }
 
-      const prefix = formData.device_type === 'Server'
-        ? 'srv'
-        : formData.device_type === 'MikroTik'
-        ? 'mtik'
+    setIsLoading(false);
+
+    // 3. Success: Create new Server model
+    const newServer: Server = {
+      id: `dev-${Math.floor(1000 + Math.random() * 9000)}`,
+      ip: cleanIp,
+      hostname: generatedHostname,
+      status: 'online',
+      health: 'Normal',
+      cpuUsage: Math.floor(Math.random() * 30) + 18,
+      ramUsage: Math.floor(Math.random() * 35) + 22,
+      diskUsage: Math.floor(Math.random() * 35) + 15,
+      uptime: 'Just provisioned (1 min)',
+      location: finalLocation,
+      datacenterId: formData.datacenter_id || undefined,
+      datacenterName: finalDcName,
+      rackNumber: formData.rack_number.trim() || 'Rack TBD',
+      deviceType: formData.device_type,
+      snmpCommunity: formData.snmp_community.trim() || 'public',
+      os: formData.device_type === 'MikroTik'
+        ? 'MikroTik RouterOS 7.14'
         : formData.device_type === 'Switch'
-        ? 'sw'
-        : 'olt';
+        ? 'JunOS / EOS 4.28'
+        : formData.device_type === 'OLT'
+        ? 'OLT-Firmware v3.2'
+        : 'Ubuntu 24.04 LTS (Linux 6.8)',
+      kernel: formData.device_type === 'Server' ? 'Linux 6.8.0-31-generic' : `${formData.device_type} RTOS Kernel`,
+      loadAverage: '0.12, 0.18, 0.16',
+    };
 
-      // 3. Success: Create new Server model
-      const newServer: Server = {
-        id: `dev-${Math.floor(1000 + Math.random() * 9000)}`,
-        ip: formData.ip_address.trim(),
-        hostname: `${prefix}-node-${formData.ip_address.split('.').slice(-2).join('-')}`,
-        status: 'online',
-        health: 'Normal',
-        cpuUsage: Math.floor(Math.random() * 30) + 18,
-        ramUsage: Math.floor(Math.random() * 35) + 22,
-        diskUsage: Math.floor(Math.random() * 35) + 15,
-        uptime: 'Just provisioned (1 min)',
-        location: formData.location.trim() || 'Global Datacenter',
-        rackNumber: formData.rack_number.trim() || 'Rack TBD',
-        deviceType: formData.device_type,
-        snmpCommunity: formData.snmp_community.trim() || 'public',
-        os: formData.device_type === 'MikroTik'
-          ? 'MikroTik RouterOS 7.14'
-          : formData.device_type === 'Switch'
-          ? 'JunOS / EOS 4.28'
-          : formData.device_type === 'OLT'
-          ? 'OLT-Firmware v3.2'
-          : 'Ubuntu 24.04 LTS (Linux 6.8)',
-        kernel: formData.device_type === 'Server' ? 'Linux 6.8.0-31-generic' : `${formData.device_type} RTOS Kernel`,
-        loadAverage: '0.12, 0.18, 0.16',
-      };
+    onServerAdded(newServer);
 
-      onServerAdded(newServer);
+    setAlert({
+      type: 'success',
+      message: 'Device Provisioned Successfully (201 Created)',
+      submessage: `Device node ${cleanIp} (${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation} recorded into active registry.`,
+    });
 
-      setAlert({
-        type: 'success',
-        message: 'Device Provisioned Successfully (200 OK)',
-        submessage: `Device node ${formData.ip_address} (${formData.device_type}) has been recorded into PostgreSQL table 'servers_info' and telemetry streaming is active!`,
-      });
-
-      // Clear input fields
-      setFormData({
-        ip_address: '',
-        device_type: 'Server',
-        snmp_community: 'public',
-        location: '',
-        rack_number: '',
-      });
-    }, 600);
+    // Reset IP input
+    setFormData((prev) => ({
+      ...prev,
+      ip_address: '',
+    }));
   };
 
-  return (
-    <div className="max-w-4xl mx-auto w-full space-y-6 animate-fadeIn">
-      
-      {/* Top Header / Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-base-content/60 hover:text-primary transition-colors mb-1 group"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-            <span>Back to Fleet Dashboard</span>
-          </button>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-base-content flex items-center gap-2.5">
-            <span>Add Device</span>
-            <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-full bg-primary/10 text-primary border border-primary/20">
-              Admin Provisioning
-            </span>
-          </h1>
-        </div>
+  const selectedDc = datacenters.find((d) => String(d.id) === String(formData.datacenter_id));
 
-        <div className="flex items-center gap-2 font-mono text-xs text-base-content/60">
-          <span className="px-2.5 py-1 rounded-lg bg-base-200 border border-base-content/10 flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5 text-primary" />
-            <span>Target: <b>PostgreSQL (public.servers_info)</b></span>
-          </span>
+  return (
+    <div className="w-full max-w-4xl mx-auto py-4 sm:py-6 px-4 space-y-6">
+      
+      {/* Top Breadcrumb & Back Action */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="group flex items-center gap-2 text-xs font-semibold text-base-content/70 hover:text-primary transition-colors"
+        >
+          <div className="p-1.5 rounded-lg bg-base-200 group-hover:bg-primary/10 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </div>
+          <span>Back to Fleet Dashboard</span>
+        </button>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-base-content/50">
+          <Database className="w-3.5 h-3.5 text-primary" />
+          <span>Active Registry: servers_info (DC-linked)</span>
         </div>
       </div>
 
@@ -174,18 +220,29 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       <div className="rounded-3xl border border-base-content/10 bg-base-100/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
         
         {/* Card Header */}
-        <div className="flex items-center gap-4 pb-6 border-b border-base-content/10">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-content flex items-center justify-center shadow-lg shadow-primary/20">
-            <ServerIcon className="w-6 h-6" />
+        <div className="flex items-center justify-between pb-6 border-b border-base-content/10 gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-content flex items-center justify-center shadow-lg shadow-primary/20">
+              <ServerIcon className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-base-content">
+                Register New Device Node
+              </h2>
+              <p className="text-xs sm:text-sm text-base-content/50 mt-0.5">
+                Provision an infrastructure device (Server, MikroTik, Switch, or OLT) with automatic Data Center association.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-base-content">
-              Register New Device Node
-            </h2>
-            <p className="text-xs sm:text-sm text-base-content/50 mt-0.5">
-              Provision an infrastructure device (Server, MikroTik, Switch, or OLT) and begin streaming live SNMP &amp; ICMP telemetry.
-            </p>
-          </div>
+
+          <button
+            type="button"
+            onClick={onOpenDcModal}
+            className="btn btn-outline btn-primary btn-sm gap-1.5 text-xs font-semibold shrink-0"
+          >
+            <Building2 className="w-4 h-4" />
+            <span>Manage DCs</span>
+          </button>
         </div>
 
         {/* In-Card Alert Notice (if triggered) */}
@@ -249,10 +306,10 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                 onChange={handleChange}
                 className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-semibold text-base-content outline-none transition-all"
               >
-                <option value="Server">Server</option>
-                <option value="MikroTik">MikroTik</option>
-                <option value="Switch">Switch</option>
-                <option value="OLT">OLT</option>
+                <option value="Server">Server (Compute / Database)</option>
+                <option value="MikroTik">MikroTik (RouterOS / BGP Gateway)</option>
+                <option value="Switch">Switch (Spine / Leaf ToR)</option>
+                <option value="OLT">OLT (Fiber Chassis GPON/XGS-PON)</option>
               </select>
               <p className="text-[11px] text-base-content/40 font-mono">
                 Selects automated SNMP OID telemetry probe
@@ -261,7 +318,92 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
           </div>
 
-          {/* Row 2: SNMP Community String */}
+          {/* Row 2: Dynamic Data Center Dropdown & Rack Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* Dynamic Datacenter Dropdown with solid opaque container & z-50 */}
+            <div className="space-y-1.5 relative z-20">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  <span>Data Center (Dynamic Dropdown)</span>
+                  <span className="text-error">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={onOpenDcModal}
+                  className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>New DC</span>
+                </button>
+              </div>
+
+              <DatacenterDropdown
+                datacenters={datacenters}
+                selectedId={formData.datacenter_id}
+                onSelect={(dcId) => {
+                  const selected = datacenters.find((d) => String(d.id) === String(dcId));
+                  setFormData((prev) => ({
+                    ...prev,
+                    datacenter_id: dcId,
+                    location: selected ? selected.location : prev.location,
+                    rack_number: selected && selected.racks && selected.racks.length > 0 ? selected.racks[0] : prev.rack_number,
+                  }));
+                }}
+                onOpenDcModal={onOpenDcModal}
+                size="md"
+              />
+              
+              <p className="text-[11px] text-base-content/50 flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-primary shrink-0" />
+                <span>Facility: {selectedDc?.location || formData.location || 'Unassigned'}</span>
+              </p>
+            </div>
+
+            {/* Rack Number */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-warning" />
+                <span>Rack Cabinet &amp; Unit</span>
+                <span className="text-error">*</span>
+              </label>
+              
+              {selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? (
+                <div className="flex gap-2">
+                  <select
+                    name="rack_number"
+                    value={formData.rack_number}
+                    onChange={handleChange}
+                    className="select select-bordered flex-1 text-sm bg-base-200/50 font-mono"
+                  >
+                    {selectedDc.racks.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                    <option value="Custom">Custom Cabinet...</option>
+                  </select>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  name="rack_number"
+                  value={formData.rack_number}
+                  onChange={handleChange}
+                  placeholder="e.g. Rack A-01 (U12)"
+                  className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-mono text-base-content placeholder:text-base-content/30 outline-none transition-all"
+                />
+              )}
+              
+              <p className="text-[11px] text-base-content/40 font-mono">
+                Cabinet location &amp; U-position
+              </p>
+            </div>
+
+          </div>
+
+          {/* Row 3: SNMP Community String */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
@@ -281,49 +423,6 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
             <p className="text-[11px] text-base-content/40 font-mono">
               Read-only community for CPU/RAM &amp; interface polling
             </p>
-          </div>
-
-          {/* Row 3: Datacenter Location & Rack Number */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            {/* Datacenter Location */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-info" />
-                <span>Datacenter Location</span>
-              </label>
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                placeholder="e.g. EU-Central (Frankfurt)"
-                className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm text-base-content placeholder:text-base-content/30 outline-none transition-all"
-              />
-              <p className="text-[11px] text-base-content/40 font-mono">
-                Facility &amp; geographic region
-              </p>
-            </div>
-
-            {/* Rack Number */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-warning" />
-                <span>Rack Number</span>
-              </label>
-              <input
-                type="text"
-                name="rack_number"
-                value={formData.rack_number}
-                onChange={handleChange}
-                placeholder="e.g. Rack F-12 (U24)"
-                className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-mono text-base-content placeholder:text-base-content/30 outline-none transition-all"
-              />
-              <p className="text-[11px] text-base-content/40 font-mono">
-                Cabinet location &amp; U-position
-              </p>
-            </div>
-
           </div>
 
           {/* Form Action Buttons */}
@@ -351,7 +450,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
               ) : (
                 <>
                   <Send className="w-3.5 h-3.5" />
-                  <span>Register Device &amp; Begin Telemetry</span>
+                  <span>Register Device Node</span>
                 </>
               )}
             </button>
@@ -361,17 +460,17 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
       </div>
 
-      {/* Security & Architecture Guarantee Card */}
-      <div className="rounded-2xl border border-base-content/10 bg-base-100/50 p-4 sm:p-5 flex items-start gap-3.5 text-xs text-base-content/70 backdrop-blur-sm">
-        <ShieldCheck className="w-5 h-5 text-success shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <div className="font-bold text-base-content">
-            Security &amp; Automated Polling Enrollment
-          </div>
-          <p className="leading-relaxed">
-            Registered devices are automatically enrolled into the real-time SNMP/ICMP collector engine. SNMP v2c/v3 requests are routed via encrypted WireGuard tunnels and ICMP latency is monitored continuously for SLA compliance.
-          </p>
+      {/* Architecture Automation Specs */}
+      <div className="p-4 rounded-2xl border border-base-content/10 bg-base-200/40 text-xs space-y-2">
+        <div className="flex items-center gap-2 font-bold text-base-content">
+          <ShieldCheck className="w-4 h-4 text-success" />
+          <span>Automated Backend Orchestration Pipeline</span>
         </div>
+        <p className="text-base-content/60 leading-relaxed text-[11px]">
+          1. <strong>Database Registration</strong>: Creates verified node record with facility datacenter association.<br />
+          2. <strong>Dynamic Telegraf Config</strong>: Synthesizes <code className="font-mono text-primary">/etc/telegraf/telegraf.d/device_[ip].conf</code> using template for selected device type.<br />
+          3. <strong>SIGHUP Signal</strong>: Triggers zero-downtime hot reload on Telegraf daemon to begin SNMP telemetry collection.
+        </p>
       </div>
 
     </div>

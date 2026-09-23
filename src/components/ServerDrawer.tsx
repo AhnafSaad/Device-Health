@@ -80,7 +80,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
   const partitions = [
     { mount: '/', filesystem: '/dev/nvme0n1p2', total: '250 GB', usedPct: server.diskUsage, role: 'Root Filesystem' },
     { mount: '/var/log', filesystem: '/dev/nvme0n1p3', total: '120 GB', usedPct: Math.min(98, Math.round(server.diskUsage * 1.08)), role: 'System Audit Logs' },
-    { mount: '/data', filesystem: '/dev/nvme1n1p1', total: '1.6 TB', usedPct: Math.max(12, Math.round(server.diskUsage * 0.85)), role: 'PostgreSQL Datadir' },
+    { mount: '/data', filesystem: '/dev/nvme1n1p1', total: '1.6 TB', usedPct: Math.max(12, Math.round(server.diskUsage * 0.85)), role: 'Primary Data Volume' },
   ];
 
   return (

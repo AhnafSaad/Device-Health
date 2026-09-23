@@ -2,11 +2,14 @@ import React from 'react';
 import { 
   Server as ServerIcon, 
   RefreshCw, 
-  PlusCircle,
-  LayoutDashboard,
-  ShieldCheck,
-  UserCheck,
-  Activity
+  PlusCircle, 
+  LayoutDashboard, 
+  ShieldCheck, 
+  UserCheck, 
+  Activity, 
+  Building2,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -16,6 +19,10 @@ interface TopBarProps {
   clusterHealthPercent: number;
   currentView: 'dashboard' | 'add-device' | 'add-server';
   onNavigate: (view: 'dashboard' | 'add-device') => void;
+  onOpenDcModal?: () => void;
+  datacenterCount?: number;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -25,6 +32,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   clusterHealthPercent,
   currentView,
   onNavigate,
+  onOpenDcModal,
+  datacenterCount,
+  theme = 'dark',
+  onToggleTheme,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-base-content/10 bg-base-100/80 backdrop-blur-md transition-all">
@@ -84,6 +95,22 @@ export const TopBar: React.FC<TopBarProps> = ({
             <PlusCircle className="w-3.5 h-3.5" />
             <span>Add Device</span>
           </button>
+
+          {onOpenDcModal && (
+            <button
+              onClick={onOpenDcModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-base-content/70 hover:text-primary hover:bg-base-100/60 transition-all duration-200 cursor-pointer"
+              title="Manage Data Centers"
+            >
+              <Building2 className="w-3.5 h-3.5 text-primary" />
+              <span>Data Centers</span>
+              {datacenterCount !== undefined && (
+                <span className="px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-mono text-[10px] font-bold">
+                  {datacenterCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Right Section: Telemetry Pulse, Cluster Health & Operator Status */}
@@ -119,6 +146,22 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+
+          {/* Light / Dark Mode Toggle Button */}
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-primary hover:bg-base-200 transition-all duration-200"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400 transition-transform duration-300 hover:rotate-45" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-600 transition-transform duration-300 hover:-rotate-12" />
+              )}
+            </button>
+          )}
 
           {/* Operator Profile / Status Indicator */}
           <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-base-content/10">

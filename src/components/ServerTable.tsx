@@ -1,5 +1,6 @@
 import React from 'react';
-import { Server, StatusFilter } from '../types';
+import { Server, StatusFilter, Datacenter } from '../types';
+import { DatacenterDropdown } from './DatacenterDropdown';
 import { 
   Search, 
   ChevronRight, 
@@ -9,7 +10,8 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Command,
-  Server as ServerIcon
+  Server as ServerIcon,
+  Building2
 } from 'lucide-react';
 
 interface ServerTableProps {
@@ -22,6 +24,9 @@ interface ServerTableProps {
   statusFilter?: StatusFilter;
   deviceFilter?: string;
   healthFilter?: string;
+  datacenters?: Datacenter[];
+  datacenterFilter?: string;
+  onSelectDatacenterFilter?: (dcId: string) => void;
   onClearSearch?: () => void;
   onClearAllFilters?: () => void;
   children?: React.ReactNode;
@@ -37,6 +42,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   statusFilter = 'all',
   deviceFilter = 'all',
   healthFilter = 'all',
+  datacenters = [],
+  datacenterFilter = 'all',
+  onSelectDatacenterFilter,
   onClearSearch,
   onClearAllFilters,
   children,
@@ -127,6 +135,20 @@ export const ServerTable: React.FC<ServerTableProps> = ({
 
           {/* Live Node Telemetry Counter Pill */}
           <div className="flex items-center gap-2 text-xs font-mono shrink-0">
+            {/* Fast Data Center Filter Dropdown in Table Header */}
+            {onSelectDatacenterFilter && (
+              <div className="w-44 sm:w-56">
+                <DatacenterDropdown
+                  datacenters={datacenters}
+                  selectedId={datacenterFilter || 'all'}
+                  onSelect={onSelectDatacenterFilter}
+                  allowAll={true}
+                  totalCount={datacenters.length}
+                  size="sm"
+                />
+              </div>
+            )}
+
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-base-200/80 border border-base-content/10 text-base-content/70">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
@@ -148,6 +170,14 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               <SlidersHorizontal className="w-3 h-3" />
               Active Scopes:
             </span>
+
+            {/* Datacenter Chip */}
+            {datacenterFilter && datacenterFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-primary/15 border-primary/30 text-primary">
+                <Building2 className="w-3 h-3" />
+                <span>DC: {datacenters.find((d) => String(d.id) === String(datacenterFilter))?.name || datacenterFilter}</span>
+              </span>
+            )}
 
             {/* Status Chip */}
             {statusFilter !== 'all' && (
@@ -380,11 +410,15 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     {/* 5. Location & Rack */}
                     <td className="py-2.5 px-3.5 hidden lg:table-cell text-xs text-base-content/70 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-base-content/40 shrink-0" />
-                        <span className="truncate max-w-[140px] font-medium">{server.location}</span>
+                        <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="truncate max-w-[140px] font-semibold text-base-content">
+                          {server.datacenterName || server.location.split(' ')[0]}
+                        </span>
                       </div>
-                      <div className="text-[10px] font-mono text-base-content/50 ml-5">
-                        {server.rackNumber}
+                      <div className="flex items-center gap-1 text-[10px] font-mono text-base-content/50 ml-5">
+                        <span className="truncate max-w-[110px]">{server.location}</span>
+                        <span>•</span>
+                        <span>{server.rackNumber}</span>
                       </div>
                     </td>
 

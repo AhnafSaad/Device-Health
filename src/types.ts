@@ -4,6 +4,15 @@ export type ServerHealth = 'Normal' | 'Warning' | 'High CPU' | 'Critical';
 
 export type DeviceType = 'Server' | 'MikroTik' | 'Switch' | 'OLT';
 
+export interface Datacenter {
+  id: string | number;
+  name: string;
+  location: string;
+  nodeCount?: number;
+  created_at?: string;
+  racks?: string[];
+}
+
 export interface Server {
   id: string;
   ip: string;
@@ -17,6 +26,8 @@ export interface Server {
   location: string;
   rackNumber: string;
   deviceType: DeviceType | string;
+  datacenterId?: string | number;
+  datacenterName?: string;
   snmpCommunity?: string;
   os?: string;
   kernel?: string;
@@ -26,3 +37,4 @@ export interface Server {
 export type StatusFilter = 'all' | 'online' | 'offline';
 
 export type DeviceFilter = 'all' | 'Server' | 'MikroTik' | 'Switch' | 'OLT';
+

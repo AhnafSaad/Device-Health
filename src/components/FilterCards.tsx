@@ -1,5 +1,6 @@
 import React from 'react';
-import { StatusFilter } from '../types';
+import { StatusFilter, Datacenter } from '../types';
+import { DatacenterDropdown } from './DatacenterDropdown';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -7,7 +8,9 @@ import {
   ArrowUpRight,
   SlidersHorizontal,
   RotateCcw,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  Plus
 } from 'lucide-react';
 
 interface FilterCardsProps {
@@ -21,6 +24,10 @@ interface FilterCardsProps {
   onSelectDeviceFilter?: (device: string) => void;
   healthFilter?: 'all' | 'normal' | 'critical';
   onSelectHealthFilter?: (health: 'all' | 'normal' | 'critical') => void;
+  datacenters?: Datacenter[];
+  datacenterFilter?: string;
+  onSelectDatacenterFilter?: (dcId: string) => void;
+  onOpenDcModal?: () => void;
   onResetFilters?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -36,6 +43,10 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
   onSelectDeviceFilter,
   healthFilter = 'all',
   onSelectHealthFilter,
+  datacenters = [],
+  datacenterFilter = 'all',
+  onSelectDatacenterFilter,
+  onOpenDcModal,
   onResetFilters,
   hasActiveFilters = false,
 }) => {
@@ -281,6 +292,38 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
             </button>
           )}
         </div>
+
+        {/* Filter 0: Data Center Scope */}
+        {onSelectDatacenterFilter && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-medium text-base-content/60 flex items-center gap-1">
+                <Building2 className="w-3 h-3 text-primary" />
+                <span>Data Center Facility</span>
+              </label>
+              {onOpenDcModal && (
+                <button
+                  type="button"
+                  onClick={onOpenDcModal}
+                  className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                  <span>Manage</span>
+                </button>
+              )}
+            </div>
+
+            <DatacenterDropdown
+              datacenters={datacenters}
+              selectedId={datacenterFilter || 'all'}
+              onSelect={onSelectDatacenterFilter}
+              onOpenDcModal={onOpenDcModal}
+              allowAll={true}
+              totalCount={totalCount}
+              size="sm"
+            />
+          </div>
+        )}
 
         {/* Filter 1: Status Scope */}
         <div className="space-y-1">
