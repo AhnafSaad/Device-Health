@@ -382,6 +382,62 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/devices/:id
+app.get('/api/devices/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Device ID is required.' });
+    }
+
+    // Try database first
+    const isNumeric = /^\d+$/.test(id);
+    const dbRes = await query(`
+      SELECT 
+        s.id, 
+        s.ip_address, 
+        s.hostname, 
+        s.device_type, 
+        s.datacenter_id,
+        d.name AS datacenter_name,
+        COALESCE(s.location, d.location) AS location, 
+        s.rack_number, 
+        s.snmp_community, 
+        s.created_at
+      FROM servers_info s
+      LEFT JOIN datacenters d ON s.datacenter_id = d.id
+      WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
+      LIMIT 1;
+    `, [id]);
+
+    if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+      return res.json({
+        status: 'success',
+        device: dbRes.rows[0],
+      });
+    }
+
+    // Fallback to memory
+    const dev = memoryDevices.find((d) => String(d.id) === String(id) || d.ip_address === String(id));
+    if (dev) {
+      return res.json({
+        status: 'success',
+        device: dev,
+      });
+    }
+
+    return res.status(404).json({
+      error: 'Not Found',
+      message: `Device with ID ${id} was not found.`,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to retrieve device',
+    });
+  }
+});
+
 // POST /api/devices
 app.post('/api/devices', async (req: Request, res: Response) => {
   try {
@@ -481,6 +537,203 @@ app.post('/api/devices', async (req: Request, res: Response) => {
     });
   }
 });
+
+// PUT /api/devices/:id - Update existing device
+const updateDeviceHandler = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id || req.body?.id;
+    if (!id) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Device ID is required.' });
+    }
+
+    const {
+      ip_address,
+      ip,
+      hostname,
+      device_type,
+      deviceType,
+      datacenter_id,
+      datacenterId,
+      datacenter_name,
+      datacenterName,
+      location,
+      rack_number,
+      rackNumber,
+      snmp_community,
+      snmpCommunity,
+      status,
+      health,
+    } = req.body || {};
+
+    const cleanIp = (ip_address || ip || '').trim();
+    const cleanHost = (hostname || '').trim();
+    const cleanType = (device_type || deviceType || '').trim();
+    const cleanDcId = datacenter_id !== undefined ? datacenter_id : datacenterId;
+    const cleanLocation = (location || '').trim();
+    const cleanRack = (rack_number || rackNumber || '').trim();
+    const cleanCommunity = (snmp_community || snmpCommunity || '').trim();
+
+    // Find existing device in memory
+    const devIndex = memoryDevices.findIndex(
+      (d) => String(d.id) === String(id) || d.ip_address === String(id)
+    );
+
+    // If new IP given, check conflict with other devices
+    if (cleanIp) {
+      const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+      if (!ipv4Regex.test(cleanIp)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Invalid IPv4 address format: "${cleanIp}"`,
+        });
+      }
+
+      const conflict = memoryDevices.some(
+        (d, idx) => idx !== devIndex && d.ip_address === cleanIp
+      );
+      if (conflict) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: `Another device with IP address ${cleanIp} already exists.`,
+        });
+      }
+    }
+
+    // Resolve datacenter name
+    let resolvedDcName = datacenter_name || datacenterName;
+    if (cleanDcId && !resolvedDcName) {
+      const dcMatch = memoryDatacenters.find((d) => String(d.id) === String(cleanDcId));
+      if (dcMatch) resolvedDcName = dcMatch.name;
+    }
+
+    // Try PostgreSQL update if connected
+    try {
+      await query(
+        `UPDATE servers_info
+         SET ip_address = COALESCE(NULLIF($1, ''), ip_address),
+             hostname = COALESCE(NULLIF($2, ''), hostname),
+             device_type = COALESCE(NULLIF($3, ''), device_type),
+             datacenter_id = $4,
+             location = COALESCE(NULLIF($5, ''), location),
+             rack_number = COALESCE(NULLIF($6, ''), rack_number),
+             snmp_community = COALESCE(NULLIF($7, ''), snmp_community),
+             updated_at = NOW()
+         WHERE id::text = $8 OR ip_address = $8;`,
+        [
+          cleanIp || null,
+          cleanHost || null,
+          cleanType || null,
+          cleanDcId || null,
+          cleanLocation || null,
+          cleanRack || null,
+          cleanCommunity || null,
+          id,
+        ]
+      );
+    } catch {
+      // Safe fallback
+    }
+
+    if (devIndex !== -1) {
+      const existing = memoryDevices[devIndex];
+      if (cleanIp) existing.ip_address = cleanIp;
+      if (cleanHost) existing.hostname = cleanHost;
+      if (cleanType) existing.device_type = cleanType;
+      if (cleanDcId !== undefined) existing.datacenter_id = cleanDcId;
+      if (resolvedDcName) existing.datacenter_name = resolvedDcName;
+      if (cleanLocation) existing.location = cleanLocation;
+      if (cleanRack) existing.rack_number = cleanRack;
+      if (cleanCommunity) existing.snmp_community = cleanCommunity;
+      if (status) existing.status = status;
+      if (health) existing.health = health;
+
+      return res.json({
+        status: 'success',
+        message: `Device "${existing.hostname}" (${existing.ip_address}) updated successfully.`,
+        device: existing,
+      });
+    }
+
+    // If not found in memory array (e.g. added via mock ID)
+    const virtualDev: DeviceRecord = {
+      id: String(id),
+      ip_address: cleanIp || '10.0.0.1',
+      hostname: cleanHost || 'srv-updated',
+      device_type: cleanType || 'Server',
+      datacenter_id: cleanDcId || undefined,
+      datacenter_name: resolvedDcName || undefined,
+      location: cleanLocation || 'Datacenter',
+      rack_number: cleanRack || 'Rack 01',
+      snmp_community: cleanCommunity || 'public',
+      created_at: new Date().toISOString(),
+      status: status || 'online',
+      health: health || 'Normal',
+    };
+    memoryDevices.push(virtualDev);
+
+    return res.json({
+      status: 'success',
+      message: `Device updated successfully.`,
+      device: virtualDev,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to update device.',
+    });
+  }
+};
+
+app.put('/api/devices/:id', updateDeviceHandler);
+app.put('/api/devices', updateDeviceHandler);
+
+// DELETE /api/devices/:id - Delete device from fleet
+const deleteDeviceHandler = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id || (req.query.id as string) || (req.body && req.body.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Device ID is required.' });
+    }
+
+    // Try PostgreSQL delete if connected
+    try {
+      await query(
+        `DELETE FROM telemetry_data WHERE ip_address IN (
+           SELECT ip_address FROM servers_info WHERE id::text = $1 OR ip_address = $1
+         );
+         DELETE FROM servers_info WHERE id::text = $1 OR ip_address = $1;`,
+        [id]
+      );
+    } catch {
+      // Safe fallback
+    }
+
+    // Remove from in-memory store
+    const devIndex = memoryDevices.findIndex(
+      (d) => String(d.id) === String(id) || d.ip_address === String(id)
+    );
+
+    let deletedName = String(id);
+    if (devIndex !== -1) {
+      deletedName = memoryDevices[devIndex].hostname || memoryDevices[devIndex].ip_address;
+      memoryDevices.splice(devIndex, 1);
+    }
+
+    return res.json({
+      status: 'success',
+      message: `Device "${deletedName}" was successfully removed from HealthStream fleet.`,
+      deletedId: id,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to delete device.',
+    });
+  }
+};
+
+app.delete('/api/devices/:id', deleteDeviceHandler);
+app.delete('/api/devices', deleteDeviceHandler);
 
 // POST /api/servers (alias compatibility)
 app.post('/api/servers', async (req: Request, res: Response) => {

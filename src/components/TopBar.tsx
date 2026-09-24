@@ -17,7 +17,7 @@ interface TopBarProps {
   isAutoRefresh: boolean;
   setIsAutoRefresh: (val: boolean) => void;
   clusterHealthPercent: number;
-  currentView: 'dashboard' | 'add-device' | 'add-server';
+  currentView: 'dashboard' | 'add-device' | 'add-server' | 'inspect';
   onNavigate: (view: 'dashboard' | 'add-device') => void;
   onOpenDcModal?: () => void;
   datacenterCount?: number;

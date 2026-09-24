@@ -11,13 +11,19 @@ import {
   SlidersHorizontal,
   Command,
   Server as ServerIcon,
-  Building2
+  Building2,
+  Pencil,
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
 
 interface ServerTableProps {
   servers: Server[];
   selectedServer: Server | null;
   onSelectServer: (server: Server) => void;
+  onInspectServer?: (server: Server) => void;
+  onEditServer?: (server: Server) => void;
+  onDeleteServer?: (server: Server) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   totalFilteredCount: number;
@@ -36,6 +42,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   servers,
   selectedServer,
   onSelectServer,
+  onInspectServer,
+  onEditServer,
+  onDeleteServer,
   searchQuery,
   setSearchQuery,
   totalFilteredCount,
@@ -49,6 +58,14 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   onClearAllFilters,
   children,
 }) => {
+  const handleInspect = (server: Server) => {
+    if (onInspectServer) {
+      onInspectServer(server);
+    } else {
+      onSelectServer(server);
+    }
+  };
+
   // Helper for resource indicator color
   const getResourceColor = (val: number) => {
     if (val < 70) return 'text-emerald-500';
@@ -275,7 +292,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                 </td>
               </tr>
             ) : (
-              servers.map((server) => {
+              servers.map((server, index) => {
                 const isSelected = selectedServer?.id === server.id;
                 const isOnline = server.status === 'online';
 
@@ -283,7 +300,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                   <tr
                     key={server.id}
                     id={`server-row-${server.id}`}
-                    onClick={() => onSelectServer(server)}
+                    onClick={() => handleInspect(server)}
                     className={`group cursor-pointer transition-all duration-150 ${
                       isSelected
                         ? 'bg-primary/10 hover:bg-primary/15'
@@ -422,19 +439,70 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       </div>
                     </td>
 
-                    {/* 6. Action: Inspect button */}
+                    {/* 6. Action: Inspect button + 3-dot dropdown menu */}
                     <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectServer(server);
-                        }}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/5 hover:bg-primary hover:text-primary-content transition-all duration-200 shadow-xs group/btn"
-                        aria-label={`Inspect ${server.hostname}`}
-                      >
-                        <span>Inspect</span>
-                        <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleInspect(server)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary hover:text-primary-content transition-all duration-200 shadow-xs group/btn"
+                          aria-label={`Inspect ${server.hostname}`}
+                        >
+                          <span>Inspect</span>
+                          <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
+                        </button>
+
+                        {(onEditServer || onDeleteServer) && (
+                          <div className={`dropdown dropdown-end ${index >= servers.length - 2 && servers.length > 2 ? 'dropdown-top' : 'dropdown-bottom'}`}>
+                            <div
+                              tabIndex={0}
+                              role="button"
+                              className="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors"
+                              title={`More actions for ${server.hostname}`}
+                              aria-label={`More actions for ${server.hostname}`}
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </div>
+                            <ul
+                              tabIndex={0}
+                              className="dropdown-content menu z-50 p-1.5 shadow-2xl bg-base-100 border border-base-content/10 rounded-xl w-36 text-xs text-base-content font-medium opacity-100"
+                            >
+                              {onEditServer && (
+                                <li>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      (document.activeElement as HTMLElement)?.blur();
+                                      onEditServer(server);
+                                    }}
+                                    className="flex items-center gap-2 py-2 px-2.5 rounded-lg text-base-content hover:text-primary hover:bg-primary/10 transition-colors"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5 text-base-content/70" />
+                                    <span>Edit</span>
+                                  </button>
+                                </li>
+                              )}
+                              {onDeleteServer && (
+                                <li>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      (document.activeElement as HTMLElement)?.blur();
+                                      onDeleteServer(server);
+                                    }}
+                                    className="flex items-center gap-2 py-2 px-2.5 rounded-lg text-error hover:bg-error/10 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-error" />
+                                    <span>Delete</span>
+                                  </button>
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

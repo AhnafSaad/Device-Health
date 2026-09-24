@@ -5,18 +5,70 @@ import { TopBar } from './components/TopBar';
 import { FilterCards } from './components/FilterCards';
 import { ServerTable } from './components/ServerTable';
 import { Pagination } from './components/Pagination';
-import { ServerDrawer } from './components/ServerDrawer';
 import { AddServerView } from './components/AddServerView';
 import { DatacenterModal } from './components/DatacenterModal';
+import { EditDeviceModal } from './components/EditDeviceModal';
+import { DeleteDeviceModal } from './components/DeleteDeviceModal';
+import { InspectDeviceView } from './components/InspectDeviceView';
+import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
 
 export default function App() {
   // Main data state
   const [servers, setServers] = useState<Server[]>(INITIAL_SERVERS);
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect'>('dashboard');
+  const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
+
+  // Synchronize route with browser URL for App Router and direct links
+  const syncRouteFromUrl = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname;
+    if (path.startsWith('/inspect/')) {
+      const id = path.replace('/inspect/', '').trim();
+      if (id) {
+        setInspectDeviceId(id);
+        setCurrentView('inspect');
+        return;
+      }
+    }
+    if (path === '/add-device' || path === '/add-server') {
+      setCurrentView('add-device');
+      setInspectDeviceId(null);
+      return;
+    }
+    setCurrentView('dashboard');
+    setInspectDeviceId(null);
+  }, []);
+
+  useEffect(() => {
+    syncRouteFromUrl();
+    window.addEventListener('popstate', syncRouteFromUrl);
+    return () => window.removeEventListener('popstate', syncRouteFromUrl);
+  }, [syncRouteFromUrl]);
+
+  // App Router navigation object
+  const router = useMemo(() => ({
+    push: (url: string) => {
+      if (typeof window !== 'undefined') {
+        window.history.pushState(null, '', url);
+        syncRouteFromUrl();
+      }
+    },
+    back: () => {
+      if (typeof window !== 'undefined') {
+        window.history.back();
+      }
+    }
+  }), [syncRouteFromUrl]);
+
+  // Device Edit and Delete state
+  const [editingServer, setEditingServer] = useState<Server | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deletingServer, setDeletingServer] = useState<Server | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,11 +244,68 @@ export default function App() {
     datacenterFilter !== 'all' || 
     !!searchQuery;
 
-  // Row selection handler
-  const handleSelectServer = (server: Server) => {
+  // Dedicated Inspect navigation and current inspected server
+  const handleInspectServer = (server: Server) => {
     setSelectedServer(server);
-    setIsDrawerOpen(true);
+    setInspectDeviceId(server.id);
+    router.push(`/inspect/${server.id}`);
   };
+
+  // Row selection handler redirects to dedicated inspect page
+  const handleSelectServer = (server: Server) => {
+    handleInspectServer(server);
+  };
+
+  const currentInspectServer = useMemo(() => {
+    if (!inspectDeviceId) return selectedServer;
+    return servers.find((s) => s.id === inspectDeviceId || s.ip === inspectDeviceId) || selectedServer;
+  }, [inspectDeviceId, servers, selectedServer]);
+
+  // Device Edit and Delete handlers
+  const handleOpenEditModal = (server: Server) => {
+    setEditingServer(server);
+    setIsEditModalOpen(true);
+  };
+
+  const handleOpenDeleteModal = (server: Server) => {
+    setDeletingServer(server);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeviceUpdated = (updatedServer: Server) => {
+    setServers((prev) =>
+      prev.map((s) => (s.id === updatedServer.id ? { ...s, ...updatedServer } : s))
+    );
+    if (selectedServer?.id === updatedServer.id) {
+      setSelectedServer((prev) => (prev ? { ...prev, ...updatedServer } : updatedServer));
+    }
+    setToast({
+      type: 'success',
+      message: `Device "${updatedServer.hostname}" (${updatedServer.ip}) was successfully updated.`,
+    });
+  };
+
+  const handleDeviceDeleted = (deviceId: string) => {
+    const target = servers.find((s) => s.id === deviceId);
+    setServers((prev) => prev.filter((s) => s.id !== deviceId));
+    if (selectedServer?.id === deviceId) {
+      setSelectedServer(null);
+    }
+    if (inspectDeviceId === deviceId || currentView === 'inspect') {
+      router.push('/');
+    }
+    setToast({
+      type: 'info',
+      message: `Device "${target?.hostname || deviceId}" was successfully removed from HealthStream.`,
+    });
+  };
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // When a new server is added through the admin form
   const handleServerAdded = (newServer: Server) => {
@@ -338,7 +447,10 @@ export default function App() {
         setIsAutoRefresh={setIsAutoRefresh}
         clusterHealthPercent={clusterHealthPercent}
         currentView={currentView}
-        onNavigate={setCurrentView}
+        onNavigate={(view) => {
+          if (view === 'dashboard') router.push('/');
+          else if (view === 'add-device') router.push('/add-device');
+        }}
         onOpenDcModal={() => setIsDcModalOpen(true)}
         datacenterCount={enrichedDatacenters.length}
         theme={theme}
@@ -348,9 +460,35 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 sm:pb-6 flex flex-col min-h-0">
         
-        {currentView === 'add-device' ? (
+        {currentView === 'inspect' ? (
+          currentInspectServer ? (
+            <InspectDeviceView
+              server={currentInspectServer}
+              onBack={() => router.push('/')}
+              onEditServer={handleOpenEditModal}
+              onDeleteServer={handleOpenDeleteModal}
+              onRebootServer={handleRebootServer}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="max-w-md p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+                <h2 className="text-lg font-bold">Node Not Found</h2>
+                <p className="text-xs text-base-content/70">
+                  The specified device ({inspectDeviceId}) could not be located in fleet inventory.
+                </p>
+                <button
+                  onClick={() => router.push('/')}
+                  className="btn btn-primary btn-sm rounded-xl font-bold"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+          )
+        ) : currentView === 'add-device' ? (
           <AddServerView
-            onBack={() => setCurrentView('dashboard')}
+            onBack={() => router.push('/')}
             onServerAdded={handleServerAdded}
             existingIps={existingIps}
             datacenters={enrichedDatacenters}
@@ -395,6 +533,9 @@ export default function App() {
                 servers={paginatedServers}
                 selectedServer={selectedServer}
                 onSelectServer={handleSelectServer}
+                onInspectServer={handleInspectServer}
+                onEditServer={handleOpenEditModal}
+                onDeleteServer={handleOpenDeleteModal}
                 searchQuery={searchQuery}
                 setSearchQuery={handleSearchChange}
                 totalFilteredCount={filteredServers.length}
@@ -440,14 +581,6 @@ export default function App() {
         </aside>
       </footer>
 
-      {/* Server Details Slide-over Drawer */}
-      <ServerDrawer
-        server={selectedServer}
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        onRebootServer={handleRebootServer}
-      />
-
       {/* Datacenter Fleet Management Modal */}
       <DatacenterModal
         isOpen={isDcModalOpen}
@@ -456,6 +589,57 @@ export default function App() {
         onAddDatacenter={handleAddDatacenter}
         onDeleteDatacenter={handleDeleteDatacenter}
       />
+
+      {/* Edit Device Modal */}
+      <EditDeviceModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingServer(null);
+        }}
+        device={editingServer}
+        datacenters={enrichedDatacenters}
+        onDeviceUpdated={handleDeviceUpdated}
+        existingIps={existingIps}
+      />
+
+      {/* Delete Device Warning Modal */}
+      <DeleteDeviceModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setDeletingServer(null);
+        }}
+        device={deletingServer}
+        onDeviceDeleted={handleDeviceDeleted}
+      />
+
+      {/* Sleek Floating Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto transition-all animate-bounce-short">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-md text-xs font-semibold ${
+            toast.type === 'success'
+              ? 'bg-base-100 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-emerald-500/10'
+              : toast.type === 'error'
+              ? 'bg-base-100 border-rose-500/30 text-rose-600 dark:text-rose-400 shadow-rose-500/10'
+              : 'bg-base-100 border-primary/30 text-primary shadow-primary/10'
+          }`}>
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-primary" />
+            )}
+            <span>{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="p-1 rounded-lg hover:bg-base-content/10 transition-colors ml-1 text-base-content/50 hover:text-base-content"
+              aria-label="Dismiss notification"
+            >
+              <CloseIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

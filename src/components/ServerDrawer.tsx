@@ -130,6 +130,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
               className="p-2 rounded-xl text-base-content/50 hover:text-base-content hover:bg-base-200 transition-colors"
               aria-label="Close drawer"
@@ -432,6 +433,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
               UID: {server.id}
             </span>
             <button
+              type="button"
               onClick={onClose}
               className="px-5 py-2 rounded-xl text-xs font-bold bg-primary text-primary-content hover:opacity-90 shadow-md shadow-primary/20 transition-all"
             >
