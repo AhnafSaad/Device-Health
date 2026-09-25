@@ -7,6 +7,7 @@ import { ServerTable } from './components/ServerTable';
 import { Pagination } from './components/Pagination';
 import { AddServerView } from './components/AddServerView';
 import { DatacenterModal } from './components/DatacenterModal';
+import { DatacenterPageView } from './components/DatacenterPageView';
 import { EditDeviceModal } from './components/EditDeviceModal';
 import { DeleteDeviceModal } from './components/DeleteDeviceModal';
 import { InspectDeviceView } from './components/InspectDeviceView';
@@ -18,7 +19,7 @@ export default function App() {
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
   // Synchronize route with browser URL for App Router and direct links
@@ -35,6 +36,11 @@ export default function App() {
     }
     if (path === '/add-device' || path === '/add-server') {
       setCurrentView('add-device');
+      setInspectDeviceId(null);
+      return;
+    }
+    if (path === '/admin/data-centers' || path === '/data-centers') {
+      setCurrentView('data-centers');
       setInspectDeviceId(null);
       return;
     }
@@ -318,6 +324,25 @@ export default function App() {
     setDatacenters((prev) => [newDc, ...prev]);
   };
 
+  const handleUpdateDatacenter = (updatedDc: Datacenter) => {
+    setDatacenters((prev) =>
+      prev.map((d) => (String(d.id) === String(updatedDc.id) ? { ...d, ...updatedDc } : d))
+    );
+    // Also sync datacenterName/location across loaded servers
+    setServers((prev) =>
+      prev.map((s) => {
+        if (String(s.datacenterId) === String(updatedDc.id)) {
+          return {
+            ...s,
+            datacenterName: updatedDc.name,
+            location: updatedDc.location || s.location,
+          };
+        }
+        return s;
+      })
+    );
+  };
+
   const handleDeleteDatacenter = (id: string | number) => {
     setDatacenters((prev) => prev.filter((d) => String(d.id) !== String(id)));
     if (String(datacenterFilter) === String(id)) {
@@ -451,7 +476,7 @@ export default function App() {
           if (view === 'dashboard') router.push('/');
           else if (view === 'add-device') router.push('/add-device');
         }}
-        onOpenDcModal={() => setIsDcModalOpen(true)}
+        onOpenDcModal={() => router.push('/admin/data-centers')}
         datacenterCount={enrichedDatacenters.length}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -492,7 +517,16 @@ export default function App() {
             onServerAdded={handleServerAdded}
             existingIps={existingIps}
             datacenters={enrichedDatacenters}
-            onOpenDcModal={() => setIsDcModalOpen(true)}
+            onOpenDcModal={() => router.push('/admin/data-centers')}
+            onNavigateToDatacenters={() => router.push('/admin/data-centers')}
+          />
+        ) : currentView === 'data-centers' ? (
+          <DatacenterPageView
+            datacenters={enrichedDatacenters}
+            onBack={() => router.push('/')}
+            onAddDatacenter={handleAddDatacenter}
+            onDeleteDatacenter={handleDeleteDatacenter}
+            onUpdateDatacenter={handleUpdateDatacenter}
           />
         ) : (
           /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
@@ -517,7 +551,7 @@ export default function App() {
                 datacenters={enrichedDatacenters}
                 datacenterFilter={datacenterFilter}
                 onSelectDatacenterFilter={handleDatacenterFilterChange}
-                onOpenDcModal={() => setIsDcModalOpen(true)}
+                onOpenDcModal={() => router.push('/admin/data-centers')}
                 onResetFilters={handleResetAllFilters}
                 hasActiveFilters={hasActiveFilters}
               />
@@ -588,6 +622,7 @@ export default function App() {
         datacenters={enrichedDatacenters}
         onAddDatacenter={handleAddDatacenter}
         onDeleteDatacenter={handleDeleteDatacenter}
+        onUpdateDatacenter={handleUpdateDatacenter}
       />
 
       {/* Edit Device Modal */}

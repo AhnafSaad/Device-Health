@@ -2,7 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query } from './lib/db.js';
+import { query, ensureTablesExist } from './lib/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,14 +31,14 @@ const memoryDatacenters: DatacenterRecord[] = [
 ];
 
 const INITIAL_NODES = [
-  { id: 'dev-1001', ip_address: '10.0.1.1', hostname: 'srv-postgres-db-01', device_type: 'Server', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-02 (U10)', snmp_community: 'public' },
-  { id: 'dev-1002', ip_address: '192.168.10.1', hostname: 'mtik-edge-router-02', device_type: 'MikroTik', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-01 (U14)', snmp_community: 'public' },
-  { id: 'dev-1003', ip_address: '172.20.10.5', hostname: 'sw-spine-switch-03', device_type: 'Switch', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-06 (U20)', snmp_community: 'public' },
-  { id: 'dev-1004', ip_address: '172.31.20.2', hostname: 'olt-gpon-chassis-04', device_type: 'OLT', datacenter_id: 'dc-1', datacenter_name: 'DC-US-East', location: 'US-East (N. Virginia)', rack_number: 'Rack A-01 (U12)', snmp_community: 'public' },
-  { id: 'dev-1005', ip_address: '10.0.4.15', hostname: 'srv-k8s-worker-05', device_type: 'Server', datacenter_id: 'dc-6', datacenter_name: 'DC-AP-South', location: 'AP-Southeast (Singapore)', rack_number: 'Rack S-02 (U18)', snmp_community: 'public' },
-  { id: 'dev-1006', ip_address: '192.168.20.1', hostname: 'mtik-bgp-border-06', device_type: 'MikroTik', datacenter_id: 'dc-5', datacenter_name: 'DC-AP-East', location: 'AP-East (Tokyo)', rack_number: 'Rack T-01 (U16)', snmp_community: 'public' },
-  { id: 'dev-1007', ip_address: '172.20.30.12', hostname: 'sw-leaf-tor-07', device_type: 'Switch', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-12 (U24)', snmp_community: 'public' },
-  { id: 'dev-1008', ip_address: '172.31.50.6', hostname: 'olt-xgspon-fiber-08', device_type: 'OLT', datacenter_id: 'dc-2', datacenter_name: 'DC-US-West', location: 'US-West (Oregon)', rack_number: 'Rack W-01 (U14)', snmp_community: 'public' },
+  { id: 'dev-1001', ip_address: '10.0.1.1', hostname: 'srv-postgres-db-01', device_type: 'Server', brand: 'Cisco', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-02 (U10)', snmp_community: 'public' },
+  { id: 'dev-1002', ip_address: '192.168.10.1', hostname: 'mtik-edge-router-02', device_type: 'MikroTik', brand: 'MikroTik', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-01 (U14)', snmp_community: 'public' },
+  { id: 'dev-1003', ip_address: '172.20.10.5', hostname: 'sw-spine-switch-03', device_type: 'Switch', brand: 'Juniper', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-06 (U20)', snmp_community: 'public' },
+  { id: 'dev-1004', ip_address: '172.31.20.2', hostname: 'olt-gpon-chassis-04', device_type: 'OLT', brand: 'Huawei', datacenter_id: 'dc-1', datacenter_name: 'DC-US-East', location: 'US-East (N. Virginia)', rack_number: 'Rack A-01 (U12)', snmp_community: 'public' },
+  { id: 'dev-1005', ip_address: '10.0.4.15', hostname: 'srv-k8s-worker-05', device_type: 'Server', brand: 'Arista', datacenter_id: 'dc-6', datacenter_name: 'DC-AP-South', location: 'AP-Southeast (Singapore)', rack_number: 'Rack S-02 (U18)', snmp_community: 'public' },
+  { id: 'dev-1006', ip_address: '192.168.20.1', hostname: 'mtik-bgp-border-06', device_type: 'MikroTik', brand: 'MikroTik', datacenter_id: 'dc-5', datacenter_name: 'DC-AP-East', location: 'AP-East (Tokyo)', rack_number: 'Rack T-01 (U16)', snmp_community: 'public' },
+  { id: 'dev-1007', ip_address: '172.20.30.12', hostname: 'sw-leaf-tor-07', device_type: 'Switch', brand: 'BDCOM', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-12 (U24)', snmp_community: 'public' },
+  { id: 'dev-1008', ip_address: '172.31.50.6', hostname: 'olt-xgspon-fiber-08', device_type: 'OLT', brand: 'V-SOL', datacenter_id: 'dc-2', datacenter_name: 'DC-US-West', location: 'US-West (Oregon)', rack_number: 'Rack W-01 (U14)', snmp_community: 'public' },
 ];
 
 interface DeviceRecord {
@@ -46,6 +46,7 @@ interface DeviceRecord {
   ip_address: string;
   hostname: string;
   device_type: string;
+  brand?: string;
   datacenter_id?: string | number;
   datacenter_name?: string;
   snmp_community: string;
@@ -244,6 +245,75 @@ const deleteDatacenterHandler = async (req: Request, res: Response) => {
 app.delete('/api/datacenters/:id', deleteDatacenterHandler);
 app.delete('/api/datacenters', deleteDatacenterHandler);
 
+// PUT /api/datacenters/:id and /api/datacenters - Update existing datacenter
+const updateDatacenterHandler = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id || (req.query.id as string) || (req.body && req.body.id);
+    const { name, location } = req.body || {};
+
+    if (!id) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Datacenter ID is required.' });
+    }
+
+    const cleanName = (name || '').trim();
+    const cleanLocation = (location || '').trim();
+
+    if (!cleanName && !cleanLocation) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Name or Location is required.' });
+    }
+
+    // Try DB update if available
+    try {
+      await query(
+        `UPDATE datacenters
+         SET name = COALESCE(NULLIF($1, ''), name),
+             location = COALESCE(NULLIF($2, ''), location),
+             updated_at = NOW()
+         WHERE id::text = $3;`,
+        [cleanName || null, cleanLocation || null, String(id)]
+      );
+    } catch {
+      // safe fallback
+    }
+
+    // Update in-memory
+    const dc = memoryDatacenters.find((d) => String(d.id) === String(id));
+    if (dc) {
+      if (cleanName) dc.name = cleanName;
+      if (cleanLocation) dc.location = cleanLocation;
+
+      // Update associated device records
+      if (cleanName) {
+        memoryDevices.forEach((dev) => {
+          if (String(dev.datacenter_id) === String(id)) {
+            dev.datacenter_name = cleanName;
+            if (cleanLocation) dev.location = cleanLocation;
+          }
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: `Data Center "${dc.name}" updated successfully.`,
+        datacenter: dc,
+      });
+    }
+
+    return res.status(404).json({
+      error: 'Not Found',
+      message: `Datacenter with ID ${id} was not found.`,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to update datacenter',
+    });
+  }
+};
+
+app.put('/api/datacenters/:id', updateDatacenterHandler);
+app.put('/api/datacenters', updateDatacenterHandler);
+
 // ==========================================
 // 2. TELEMETRY API ENDPOINT
 // ==========================================
@@ -258,6 +328,7 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
         COALESCE(s.ip_address, t.ip_address) AS ip_address,
         COALESCE(s.hostname, CONCAT(LOWER(COALESCE(s.device_type, 'node')), '-', REPLACE(t.ip_address, '.', '-'))) AS hostname,
         COALESCE(s.device_type, 'Server') AS device_type,
+        s.brand,
         s.datacenter_id,
         d.name AS datacenter_name,
         COALESCE(s.location, d.location, 'Local Datacenter') AS location,
@@ -308,6 +379,7 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
         ip_address: d.ip_address,
         hostname: d.hostname,
         device_type: d.device_type,
+        brand: d.brand,
         datacenter_id: d.datacenter_id,
         datacenter_name: d.datacenter_name,
         location: d.location,
@@ -350,6 +422,7 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         s.ip_address, 
         s.hostname, 
         s.device_type, 
+        s.brand,
         s.datacenter_id,
         d.name AS datacenter_name,
         COALESCE(s.location, d.location) AS location, 
@@ -398,6 +471,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         s.ip_address, 
         s.hostname, 
         s.device_type, 
+        s.brand,
         s.datacenter_id,
         d.name AS datacenter_name,
         COALESCE(s.location, d.location) AS location, 
@@ -441,7 +515,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
 // POST /api/devices
 app.post('/api/devices', async (req: Request, res: Response) => {
   try {
-    const { ip_address, hostname, device_type, snmp_community, location, rack_number, datacenter_id, datacenter_name } = req.body || {};
+    const { ip_address, hostname, device_type, brand, snmp_community, location, rack_number, datacenter_id, datacenter_name } = req.body || {};
 
     if (!ip_address || !ip_address.trim()) {
       return res.status(400).json({
@@ -452,6 +526,7 @@ app.post('/api/devices', async (req: Request, res: Response) => {
 
     const cleanIp = ip_address.trim();
     const cleanType = (device_type || 'Server').trim();
+    const cleanBrand = (brand && brand.trim()) ? brand.trim() : undefined;
     const cleanHost = (hostname && hostname.trim()) ? hostname.trim() : `${cleanType.toLowerCase()}-node-${cleanIp.replace(/\./g, '-')}`;
     const cleanCommunity = (snmp_community && snmp_community.trim()) ? snmp_community.trim() : 'public';
     const cleanLocation = (location && location.trim()) ? location.trim() : 'Global Datacenter';
@@ -487,6 +562,7 @@ app.post('/api/devices', async (req: Request, res: Response) => {
       ip_address: cleanIp,
       hostname: cleanHost,
       device_type: cleanType,
+      brand: cleanBrand,
       datacenter_id: datacenter_id || undefined,
       datacenter_name: resolvedDcName || undefined,
       snmp_community: cleanCommunity,
@@ -506,9 +582,9 @@ app.post('/api/devices', async (req: Request, res: Response) => {
     // Try PostgreSQL insert if connection available
     try {
       await query(`
-        INSERT INTO servers_info (ip_address, hostname, device_type, datacenter_id, snmp_community, location, rack_number, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW());
-      `, [cleanIp, cleanHost, cleanType, datacenter_id || null, cleanCommunity, cleanLocation, cleanRack]);
+        INSERT INTO servers_info (ip_address, hostname, device_type, brand, datacenter_id, snmp_community, location, rack_number, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW());
+      `, [cleanIp, cleanHost, cleanType, cleanBrand || null, datacenter_id || null, cleanCommunity, cleanLocation, cleanRack]);
     } catch {
       // safe fallback
     }
@@ -552,6 +628,7 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
       hostname,
       device_type,
       deviceType,
+      brand,
       datacenter_id,
       datacenterId,
       datacenter_name,
@@ -568,6 +645,7 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
     const cleanIp = (ip_address || ip || '').trim();
     const cleanHost = (hostname || '').trim();
     const cleanType = (device_type || deviceType || '').trim();
+    const cleanBrand = brand !== undefined ? (brand ? String(brand).trim() : '') : undefined;
     const cleanDcId = datacenter_id !== undefined ? datacenter_id : datacenterId;
     const cleanLocation = (location || '').trim();
     const cleanRack = (rack_number || rackNumber || '').trim();
@@ -613,16 +691,18 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
          SET ip_address = COALESCE(NULLIF($1, ''), ip_address),
              hostname = COALESCE(NULLIF($2, ''), hostname),
              device_type = COALESCE(NULLIF($3, ''), device_type),
-             datacenter_id = $4,
-             location = COALESCE(NULLIF($5, ''), location),
-             rack_number = COALESCE(NULLIF($6, ''), rack_number),
-             snmp_community = COALESCE(NULLIF($7, ''), snmp_community),
+             brand = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE brand END,
+             datacenter_id = $5,
+             location = COALESCE(NULLIF($6, ''), location),
+             rack_number = COALESCE(NULLIF($7, ''), rack_number),
+             snmp_community = COALESCE(NULLIF($8, ''), snmp_community),
              updated_at = NOW()
-         WHERE id::text = $8 OR ip_address = $8;`,
+         WHERE id::text = $9 OR ip_address = $9;`,
         [
           cleanIp || null,
           cleanHost || null,
           cleanType || null,
+          cleanBrand !== undefined ? cleanBrand : null,
           cleanDcId || null,
           cleanLocation || null,
           cleanRack || null,
@@ -639,6 +719,7 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
       if (cleanIp) existing.ip_address = cleanIp;
       if (cleanHost) existing.hostname = cleanHost;
       if (cleanType) existing.device_type = cleanType;
+      if (cleanBrand !== undefined) existing.brand = cleanBrand || undefined;
       if (cleanDcId !== undefined) existing.datacenter_id = cleanDcId;
       if (resolvedDcName) existing.datacenter_name = resolvedDcName;
       if (cleanLocation) existing.location = cleanLocation;
@@ -660,6 +741,7 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
       ip_address: cleanIp || '10.0.0.1',
       hostname: cleanHost || 'srv-updated',
       device_type: cleanType || 'Server',
+      brand: cleanBrand || undefined,
       datacenter_id: cleanDcId || undefined,
       datacenter_name: resolvedDcName || undefined,
       location: cleanLocation || 'Datacenter',
@@ -753,6 +835,7 @@ app.post('/api/servers', async (req: Request, res: Response) => {
     ip_address: cleanIp,
     hostname: req.body.hostname,
     device_type: device_type || 'Server',
+    brand: req.body.brand || undefined,
     datacenter_id: datacenter_id || undefined,
     snmp_community: snmp_community || 'public',
     location: location || 'Local Datacenter',
@@ -778,6 +861,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Vite or Static assets mounting
 async function startServer() {
   const PORT = Number(process.env.PORT || 3000);
+
+  // Initialize and verify database tables and snmp_community column
+  try {
+    await ensureTablesExist();
+  } catch (err: any) {
+    console.warn('[server.ts] Database schema initialization warning:', err?.message);
+  }
 
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));

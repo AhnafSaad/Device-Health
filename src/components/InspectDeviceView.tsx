@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Server } from '../types';
+import { BrandLogo } from './BrandLogo';
 import { 
   ArrowLeft,
   Server as ServerIcon, 
@@ -164,6 +165,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
+              <BrandLogo brand={server.brand} size="md" />
+
               <h1 className="text-xl sm:text-2xl font-black text-base-content tracking-tight">
                 {server.hostname}
               </h1>
@@ -183,6 +186,14 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
               {/* Device Type Badge */}
               {renderDeviceBadge(server.deviceType)}
+
+              {/* Brand Name Badge */}
+              {server.brand && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-base-content/20 bg-base-200/80 text-base-content shadow-2xs">
+                  <BrandLogo brand={server.brand} size="xs" />
+                  <span>{server.brand}</span>
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-base-content/60 font-mono mt-1.5">
@@ -442,6 +453,20 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
             <div className="space-y-3">
               <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+                <div className="text-[11px] text-base-content/50 flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <ServerIcon className="w-3.5 h-3.5 text-primary" />
+                    Device Brand / Vendor
+                  </span>
+                  <BrandLogo brand={server.brand} size="xs" />
+                </div>
+                <div className="font-semibold text-base-content flex items-center gap-2">
+                  <BrandLogo brand={server.brand} size="sm" />
+                  <span>{server.brand || 'Unassigned / Other'}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Clock className="w-3.5 h-3.5 text-primary" />
                   System Uptime
@@ -470,11 +495,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
               <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
-                  <Network className="w-3.5 h-3.5 text-info" />
-                  SNMP v2c Community
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  SNMPv2c Polling Engine
                 </div>
-                <div className="font-semibold font-mono text-base-content truncate">
-                  {server.snmpCommunity || 'public'}
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <span className="font-bold text-emerald-500">Active &amp; Protected</span>
+                  <span className="text-[10px] text-base-content/40 font-sans">(Community string secured)</span>
                 </div>
               </div>
             </div>

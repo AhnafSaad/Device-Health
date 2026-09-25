@@ -22,10 +22,25 @@ import {
   Database,
   Radio,
   Network,
+  ShieldCheck,
   Pencil,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  Tag
 } from 'lucide-react';
+import { BrandLogo } from '../../src/components/BrandLogo';
+
+const BRAND_OPTIONS = [
+  'MikroTik',
+  'Huawei',
+  'Juniper',
+  'Cisco',
+  'Arista',
+  'BDCOM',
+  'V-SOL',
+  'DBC',
+  'Other',
+];
 
 export default function InspectDevicePage({ params: paramsProp }) {
   const router = useRouter();
@@ -53,6 +68,7 @@ export default function InspectDevicePage({ params: paramsProp }) {
     ip_address: '',
     hostname: '',
     device_type: 'Server',
+    brand: 'Other',
     location: '',
     rack_number: '',
     snmp_community: 'public'
@@ -73,6 +89,7 @@ export default function InspectDevicePage({ params: paramsProp }) {
               ip_address: data.device.ip_address || data.device.ip || '',
               hostname: data.device.hostname || '',
               device_type: data.device.device_type || data.device.deviceType || 'Server',
+              brand: data.device.brand || 'Other',
               location: data.device.location || '',
               rack_number: data.device.rack_number || data.device.rackNumber || '',
               snmp_community: data.device.snmp_community || data.device.snmpCommunity || 'public',
@@ -92,6 +109,7 @@ export default function InspectDevicePage({ params: paramsProp }) {
               ip_address: match.ip_address || '',
               hostname: match.hostname || '',
               device_type: match.device_type || 'Server',
+              brand: match.brand || 'Other',
               location: match.location || '',
               rack_number: match.rack_number || '',
               snmp_community: match.snmp_community || 'public',
@@ -265,6 +283,8 @@ export default function InspectDevicePage({ params: paramsProp }) {
 
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
+                <BrandLogo brand={device.brand} size="md" />
+
                 <h1 className="text-xl sm:text-2xl font-black text-base-content tracking-tight">
                   {device.hostname}
                 </h1>
@@ -286,6 +306,14 @@ export default function InspectDevicePage({ params: paramsProp }) {
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border border-primary/30 bg-primary/10 text-primary">
                   {device.device_type || device.deviceType || 'Server'}
                 </span>
+
+                {/* Brand Name Badge */}
+                {device.brand && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-base-content/20 bg-base-200/80 text-base-content shadow-2xs">
+                    <BrandLogo brand={device.brand} size="xs" />
+                    <span>{device.brand}</span>
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-base-content/60 font-mono mt-1.5">
@@ -532,6 +560,20 @@ export default function InspectDevicePage({ params: paramsProp }) {
 
               <div className="space-y-3">
                 <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+                  <div className="text-[11px] text-base-content/50 flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <ServerIcon className="w-3.5 h-3.5 text-primary" />
+                      Device Brand / Vendor
+                    </span>
+                    <BrandLogo brand={device.brand} size="xs" />
+                  </div>
+                  <div className="font-semibold text-base-content flex items-center gap-2">
+                    <BrandLogo brand={device.brand} size="sm" />
+                    <span>{device.brand || 'Unassigned / Other'}</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                   <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                     <Clock className="w-3.5 h-3.5 text-primary" />
                     Uptime
@@ -560,11 +602,12 @@ export default function InspectDevicePage({ params: paramsProp }) {
 
                 <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                   <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
-                    <Network className="w-3.5 h-3.5 text-info" />
-                    SNMP v2c Community
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    SNMPv2c Polling Engine
                   </div>
-                  <div className="font-semibold font-mono text-base-content truncate">
-                    {device.snmp_community || 'public'}
+                  <div className="flex items-center gap-1.5 font-mono text-xs">
+                    <span className="font-bold text-emerald-500">Active &amp; Protected</span>
+                    <span className="text-[10px] text-base-content/40 font-sans">(Community string secured)</span>
                   </div>
                 </div>
               </div>
@@ -646,6 +689,34 @@ export default function InspectDevicePage({ params: paramsProp }) {
                     <option value="Switch">Switch</option>
                     <option value="OLT">GPON OLT</option>
                   </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-base-content/70 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-accent" />
+                      <span>Device Brand / Vendor</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <BrandLogo brand={editForm.brand} size="xs" />
+                      <span className="text-[10px] text-base-content/50 font-mono">{editForm.brand}</span>
+                    </div>
+                  </div>
+                  <div className="relative flex items-center">
+                    <select
+                      value={editForm.brand}
+                      onChange={(e) => setEditForm({ ...editForm, brand: e.target.value })}
+                      className="select select-sm select-bordered w-full rounded-xl pr-8"
+                    >
+                      {BRAND_OPTIONS.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-2.5 pointer-events-none flex items-center">
+                      <BrandLogo brand={editForm.brand} size="sm" />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block font-semibold mb-1 text-base-content/70">Rack Elevation</label>

@@ -1,4 +1,4 @@
-import { Server, DeviceType, Datacenter } from '../types';
+import { Server, DeviceType, Datacenter, DeviceBrand } from '../types';
 
 export const INITIAL_DATACENTERS: Datacenter[] = [
   { id: 'dc-1', name: 'DC-US-East', location: 'US-East (N. Virginia)', racks: ['Rack A-01', 'Rack A-04', 'Rack A-09', 'Rack A-12', 'Rack B-03'] },
@@ -33,6 +33,16 @@ export const INITIAL_SERVERS: Server[] = Array.from({ length: 60 }, (_, i) => {
   const role = roles[index % roles.length];
   const prefix = deviceType === 'Server' ? 'srv' : deviceType === 'MikroTik' ? 'mtik' : deviceType === 'Switch' ? 'sw' : 'olt';
 
+  // Realistic brand assignment for mock inventory
+  const brandsForType: Record<DeviceType, DeviceBrand[]> = {
+    Server: ['Cisco', 'Arista', 'Huawei', 'Other'],
+    MikroTik: ['MikroTik'],
+    Switch: ['Cisco', 'Juniper', 'Arista', 'BDCOM'],
+    OLT: ['Huawei', 'BDCOM', 'V-SOL', 'DBC'],
+  };
+  const typeBrands = brandsForType[deviceType] || ['Cisco', 'MikroTik', 'Juniper', 'Huawei', 'Arista', 'BDCOM', 'V-SOL', 'DBC', 'Other'];
+  const brand = typeBrands[index % typeBrands.length];
+
   const cpu = isOffline ? 0 : isCritical ? 92 + (index % 7) : isWarning ? 78 + (index % 12) : 18 + (index % 48);
   const ram = isOffline ? 0 : isCritical ? 88 + (index % 10) : isWarning ? 75 + (index % 14) : 28 + (index % 48);
   const disk = isOffline ? 0 : isCritical ? 85 + (index % 12) : 22 + (index % 60);
@@ -60,6 +70,7 @@ export const INITIAL_SERVERS: Server[] = Array.from({ length: 60 }, (_, i) => {
     datacenterName: dc.name,
     rackNumber: rack,
     deviceType,
+    brand,
     snmpCommunity: 'public',
     os: deviceType === 'MikroTik'
       ? 'RouterOS v7.14.3'

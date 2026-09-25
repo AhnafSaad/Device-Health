@@ -4,6 +4,29 @@ export type ServerHealth = 'Normal' | 'Warning' | 'High CPU' | 'Critical';
 
 export type DeviceType = 'Server' | 'MikroTik' | 'Switch' | 'OLT';
 
+export type DeviceBrand = 
+  | 'MikroTik' 
+  | 'Huawei' 
+  | 'Juniper' 
+  | 'Cisco' 
+  | 'Arista' 
+  | 'BDCOM' 
+  | 'V-SOL' 
+  | 'DBC' 
+  | 'Other';
+
+export const BRAND_OPTIONS: DeviceBrand[] = [
+  'MikroTik',
+  'Huawei',
+  'Juniper',
+  'Cisco',
+  'Arista',
+  'BDCOM',
+  'V-SOL',
+  'DBC',
+  'Other',
+];
+
 export interface Datacenter {
   id: string | number;
   name: string;
@@ -26,6 +49,7 @@ export interface Server {
   location: string;
   rackNumber: string;
   deviceType: DeviceType | string;
+  brand?: DeviceBrand | string;
   datacenterId?: string | number;
   datacenterName?: string;
   snmpCommunity?: string;
@@ -37,4 +61,3 @@ export interface Server {
 export type StatusFilter = 'all' | 'online' | 'offline';
 
 export type DeviceFilter = 'all' | 'Server' | 'MikroTik' | 'Switch' | 'OLT';
-

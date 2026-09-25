@@ -1,6 +1,7 @@
 import React from 'react';
 import { Server, StatusFilter, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
+import { BrandLogo } from './BrandLogo';
 import { 
   Search, 
   ChevronRight, 
@@ -307,7 +308,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                         : 'hover:bg-base-200/60'
                     }`}
                   >
-                    {/* 1. Node & Identity: IP Address, Hostname, sleek Device Type Badge (Server, MikroTik, Switch, OLT) */}
+                    {/* 1. Node & Identity: IP Address, Hostname, Brand Logo & Name, Device Type Badge */}
                     <td className="py-2.5 px-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {/* Live Ping Beacon */}
@@ -322,6 +323,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                           )}
                         </span>
 
+                        {/* Brand Logo next to Node IP */}
+                        <BrandLogo brand={server.brand} size="sm" />
+
                         {/* Node IP Address */}
                         <span className="font-mono text-xs font-bold text-base-content group-hover:text-primary transition-colors tracking-tight">
                           {server.ip}
@@ -331,11 +335,16 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                         {renderDeviceBadge(server.deviceType)}
                       </div>
 
-                      {/* Hostname & Node ID */}
+                      {/* Hostname, Brand Name & Node ID */}
                       <div className="flex items-center gap-1.5 mt-0.5 text-xs text-base-content/70">
-                        <span className="font-semibold truncate max-w-[200px] group-hover:text-primary transition-colors">
+                        <span className="font-semibold truncate max-w-[190px] group-hover:text-primary transition-colors">
                           {server.hostname}
                         </span>
+                        {server.brand && (
+                          <span className="text-[10px] font-mono font-medium text-base-content/60">
+                            • {server.brand}
+                          </span>
+                        )}
                         <span className="text-[10px] text-base-content/40 font-mono">
                           • {server.id}
                         </span>

@@ -7,9 +7,11 @@ import {
   X, 
   AlertCircle, 
   CheckCircle2, 
-  Server,
-  Layers,
-  Search
+  Server, 
+  Layers, 
+  Search,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { Datacenter } from '../types';
 
@@ -19,6 +21,7 @@ interface DatacenterModalProps {
   datacenters: Datacenter[];
   onAddDatacenter: (dc: Datacenter) => void;
   onDeleteDatacenter: (id: string | number) => void;
+  onUpdateDatacenter?: (dc: Datacenter) => void;
 }
 
 export const DatacenterModal: React.FC<DatacenterModalProps> = ({
@@ -27,6 +30,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   datacenters,
   onAddDatacenter,
   onDeleteDatacenter,
+  onUpdateDatacenter,
 }) => {
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -34,6 +38,12 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Edit state for inline datacenter modification
+  const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   if (!isOpen) return null;
 
@@ -76,7 +86,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
         setLocation('');
         setAlert({ type: 'success', message: `Data Center "${cleanName}" created successfully!` });
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         setAlert({ type: 'error', message: err.message || 'Failed to create Data Center.' });
       }
     } catch {
@@ -96,8 +106,80 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
     }
   };
 
+  const handleStartEdit = (dc: Datacenter) => {
+    setEditingId(dc.id);
+    setEditName(dc.name);
+    setEditLocation(dc.location);
+    setAlert(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditName('');
+    setEditLocation('');
+  };
+
+  const handleSaveEdit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingId) return;
+
+    const cleanName = editName.trim();
+    const cleanLoc = editLocation.trim();
+
+    if (!cleanName || !cleanLoc) {
+      setAlert({ type: 'error', message: 'Both Data Center Name and Location are required.' });
+      return;
+    }
+
+    // Check duplicate name with other DCs
+    if (datacenters.some((dc) => dc.id !== editingId && dc.name.toLowerCase() === cleanName.toLowerCase())) {
+      setAlert({ type: 'error', message: `Another Data Center named "${cleanName}" already exists.` });
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setAlert(null);
+
+    try {
+      const res = await fetch(`/api/datacenters/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cleanName, location: cleanLoc }),
+      });
+
+      const updatedDc: Datacenter = {
+        id: editingId,
+        name: cleanName,
+        location: cleanLoc,
+      };
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.datacenter) {
+          updatedDc.name = data.datacenter.name || cleanName;
+          updatedDc.location = data.datacenter.location || cleanLoc;
+        }
+      }
+
+      onUpdateDatacenter?.(updatedDc);
+      setAlert({ type: 'success', message: `Data Center "${cleanName}" updated successfully!` });
+      setEditingId(null);
+    } catch {
+      const updatedDc: Datacenter = {
+        id: editingId,
+        name: cleanName,
+        location: cleanLoc,
+      };
+      onUpdateDatacenter?.(updatedDc);
+      setAlert({ type: 'success', message: `Data Center "${cleanName}" updated.` });
+      setEditingId(null);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleDelete = async (id: string | number, dcName: string) => {
-    if (!window.confirm(`Are you sure you want to delete Data Center "${dcName}"? Nodes assigned to this DC will be unassigned.`)) {
+    if (!window.confirm(`Are you sure you want to delete Data Center "${dcName}"? Devices assigned to this DC will be unassigned.`)) {
       return;
     }
 
@@ -171,7 +253,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
         )}
 
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Add Data Center Form */}
+          {/* Register New Data Center Form */}
           <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/10">
             <h4 className="text-xs font-bold uppercase tracking-wider text-base-content/70 mb-3 flex items-center gap-2">
               <Plus className="w-3.5 h-3.5 text-primary" />
@@ -189,7 +271,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. DC-US-Central"
+                    placeholder="e.g. Colo Universe"
                     className="input input-sm input-bordered w-full text-xs font-mono"
                   />
                 </div>
@@ -197,7 +279,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
 
               <div className="sm:col-span-2">
                 <label className="text-[11px] font-semibold text-base-content/70 mb-1 block">
-                  Geographic Location *
+                  Location *
                 </label>
                 <div className="relative">
                   <input
@@ -205,7 +287,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
                     required
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. Chicago, IL (ORD-1)"
+                    placeholder="e.g. Dhaka"
                     className="input input-sm input-bordered w-full text-xs"
                   />
                 </div>
@@ -257,61 +339,155 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
                   No data centers matching your search.
                 </div>
               ) : (
-                filteredDcs.map((dc) => (
-                  <div
-                    key={dc.id}
-                    className="p-3.5 flex items-center justify-between gap-4 hover:bg-base-200/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-base-200 border border-base-content/10 flex items-center justify-center text-base-content/70 shrink-0">
-                        <Building2 className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold font-mono text-base-content truncate">
-                            {dc.name}
-                          </span>
-                          <span className="badge badge-ghost badge-xs font-mono">
-                            ID: {dc.id}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-base-content/60 mt-0.5 truncate">
-                          <MapPin className="w-3 h-3 text-base-content/40 shrink-0" />
-                          <span className="truncate">{dc.location}</span>
-                        </div>
-                      </div>
-                    </div>
+                filteredDcs.map((dc) => {
+                  const isThisEditing = editingId === dc.id;
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="flex items-center gap-1 text-[11px] font-mono text-base-content/70 bg-base-200/80 px-2 py-1 rounded-md border border-base-content/10">
-                        <Server className="w-3 h-3 text-primary" />
-                        <span className="font-semibold">{dc.nodeCount ?? 0}</span>
-                        <span className="text-[10px] text-base-content/50">nodes</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleDelete(dc.id, dc.name)}
-                        disabled={deletingId === dc.id}
-                        className="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
-                        title="Delete Data Center"
+                  if (isThisEditing) {
+                    return (
+                      <div
+                        key={dc.id}
+                        className="p-3.5 bg-base-200/70 border-l-4 border-l-primary space-y-2.5"
                       >
-                        {deletingId === dc.id ? (
-                          <span className="loading loading-spinner loading-xs" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span>Edit Data Center</span>
+                          </span>
+                          <span className="text-[11px] font-mono text-base-content/50">
+                            {dc.nodeCount ?? 0} Devices
+                          </span>
+                        </div>
+
+                        <form onSubmit={handleSaveEdit} className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                          <div className="sm:col-span-2">
+                            <label className="text-[10px] font-semibold text-base-content/70 mb-0.5 block">
+                              Data Center Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              placeholder="e.g. Colo Universe"
+                              disabled={isSavingEdit}
+                              className="input input-xs input-bordered w-full text-xs font-mono"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="text-[10px] font-semibold text-base-content/70 mb-0.5 block">
+                              Location *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={editLocation}
+                              onChange={(e) => setEditLocation(e.target.value)}
+                              placeholder="e.g. Dhaka"
+                              disabled={isSavingEdit}
+                              className="input input-xs input-bordered w-full text-xs"
+                            />
+                          </div>
+                          <div className="sm:col-span-1 flex items-end gap-1.5 justify-end">
+                            <button
+                              type="submit"
+                              disabled={isSavingEdit}
+                              className="btn btn-primary btn-xs flex-1 gap-1 text-[11px] font-bold"
+                              title="Save changes"
+                            >
+                              {isSavingEdit ? (
+                                <span className="loading loading-spinner loading-xs" />
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Save</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEdit}
+                              disabled={isSavingEdit}
+                              className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-base-content"
+                              title="Cancel editing"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={dc.id}
+                      className="p-3.5 flex items-center justify-between gap-4 hover:bg-base-200/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-base-200 border border-base-content/10 flex items-center justify-center text-base-content/70 shrink-0">
+                          <Building2 className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold font-mono text-base-content truncate">
+                              {dc.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-base-content/60 mt-0.5 truncate">
+                            <MapPin className="w-3 h-3 text-base-content/40 shrink-0" />
+                            <span className="truncate">{dc.location}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        {/* Device Count badge: shows "Devices" instead of "nodes" */}
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-base-content/70 bg-base-200/80 px-2 py-1 rounded-md border border-base-content/10">
+                          <Server className="w-3 h-3 text-primary" />
+                          <span className="font-semibold">{dc.nodeCount ?? 0}</span>
+                          <span className="text-[10px] text-base-content/50">Devices</span>
+                        </div>
+
+                        {/* Edit Action (Pencil) */}
+                        <button
+                          onClick={() => handleStartEdit(dc)}
+                          disabled={deletingId === dc.id || isSavingEdit}
+                          className="btn btn-ghost btn-xs btn-square text-base-content/70 hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Edit Data Center"
+                          aria-label="Edit Data Center"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Action (Trash) */}
+                        <button
+                          onClick={() => handleDelete(dc.id, dc.name)}
+                          disabled={deletingId === dc.id || isSavingEdit}
+                          className="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10 transition-colors"
+                          title="Delete Data Center"
+                          aria-label="Delete Data Center"
+                        >
+                          {deletingId === dc.id ? (
+                            <span className="loading loading-spinner loading-xs" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer without developer/debug notes */}
         <div className="px-6 py-3 border-t border-base-content/10 bg-base-200/40 flex items-center justify-between text-xs text-base-content/60">
-          <span>SQL table: <code className="font-mono text-primary font-semibold">datacenters</code> (FK: <code className="font-mono">servers_info.datacenter_id</code>)</span>
+          <span className="text-xs text-base-content/50 font-medium">
+            Total active facilities: <span className="font-mono font-bold text-base-content">{datacenters.length}</span>
+          </span>
           <button
             onClick={onClose}
             className="btn btn-sm btn-ghost"
