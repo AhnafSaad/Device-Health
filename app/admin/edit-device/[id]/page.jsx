@@ -270,7 +270,7 @@ export default function EditDevicePage(props) {
 
   const deviceTypes = [
     { type: 'Server', label: 'Compute Server', icon: ServerIcon },
-    { type: 'MikroTik', label: 'MikroTik Router', icon: Radio },
+    { type: 'Router', label: 'Router / Gateway', icon: Radio },
     { type: 'Switch', label: 'Managed Switch', icon: Layers },
     { type: 'OLT', label: 'Fiber GPON OLT', icon: HardDrive },
   ];

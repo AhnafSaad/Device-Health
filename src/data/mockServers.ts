@@ -11,11 +11,11 @@ export const INITIAL_DATACENTERS: Datacenter[] = [
   { id: 'dc-8', name: 'DC-AF-South', location: 'AF-South (Cape Town)', racks: ['Rack C-02', 'Rack C-07'] },
 ];
 
-const DEVICE_TYPES: DeviceType[] = ['Server', 'MikroTik', 'Switch', 'OLT'];
+const DEVICE_TYPES: DeviceType[] = ['Server', 'Router', 'Switch', 'OLT'];
 
 const ROLE_PRESETS: Record<DeviceType, string[]> = {
   Server: ['postgres-db', 'k8s-node-worker', 'kafka-broker', 'redis-cluster', 'api-gateway', 'worker-pool'],
-  MikroTik: ['edge-router', 'bgp-border-gw', 'vpn-concentrator', 'core-router'],
+  Router: ['edge-router', 'bgp-border-gw', 'vpn-concentrator', 'core-router'],
   Switch: ['spine-switch', 'leaf-tor-sw', 'agg-switch', 'core-backbone-sw'],
   OLT: ['gpon-olt-chassis', 'xgspon-fiber-agg', 'ftth-distribution-olt', 'metro-access-olt'],
 };
@@ -31,23 +31,24 @@ export const INITIAL_SERVERS: Server[] = Array.from({ length: 60 }, (_, i) => {
   const rack = dc.racks ? dc.racks[index % dc.racks.length] : 'Rack 01';
   const roles = ROLE_PRESETS[deviceType];
   const role = roles[index % roles.length];
-  const prefix = deviceType === 'Server' ? 'srv' : deviceType === 'MikroTik' ? 'mtik' : deviceType === 'Switch' ? 'sw' : 'olt';
 
   // Realistic brand assignment for mock inventory
   const brandsForType: Record<DeviceType, DeviceBrand[]> = {
     Server: ['Cisco', 'Arista', 'Huawei', 'Other'],
-    MikroTik: ['MikroTik'],
+    Router: ['MikroTik', 'Cisco', 'Juniper', 'Huawei', 'TP-Link', 'Ubiquiti'],
     Switch: ['Cisco', 'Juniper', 'Arista', 'BDCOM'],
     OLT: ['Huawei', 'BDCOM', 'V-SOL', 'DBC'],
   };
   const typeBrands = brandsForType[deviceType] || ['Cisco', 'MikroTik', 'Juniper', 'Huawei', 'Arista', 'BDCOM', 'V-SOL', 'DBC', 'Other'];
   const brand = typeBrands[index % typeBrands.length];
 
+  const prefix = deviceType === 'Server' ? 'srv' : deviceType === 'Router' ? (brand === 'MikroTik' ? 'mtik' : 'rtr') : deviceType === 'Switch' ? 'sw' : 'olt';
+
   const cpu = isOffline ? 0 : isCritical ? 92 + (index % 7) : isWarning ? 78 + (index % 12) : 18 + (index % 48);
   const ram = isOffline ? 0 : isCritical ? 88 + (index % 10) : isWarning ? 75 + (index % 14) : 28 + (index % 48);
   const disk = isOffline ? 0 : isCritical ? 85 + (index % 12) : 22 + (index % 60);
 
-  const ip = deviceType === 'MikroTik'
+  const ip = deviceType === 'Router'
     ? `192.168.${(index * 3) % 250 + 1}.${(index * 7) % 250 + 2}`
     : deviceType === 'Switch'
     ? `172.20.${(index * 2) % 250 + 1}.${(index * 5) % 250 + 3}`
@@ -72,8 +73,8 @@ export const INITIAL_SERVERS: Server[] = Array.from({ length: 60 }, (_, i) => {
     deviceType,
     brand,
     snmpCommunity: 'public',
-    os: deviceType === 'MikroTik'
-      ? 'RouterOS v7.14.3'
+    os: deviceType === 'Router'
+      ? (brand === 'MikroTik' ? 'RouterOS v7.14.3' : brand === 'Cisco' ? 'Cisco IOS-XE 17.9' : brand === 'Juniper' ? 'Junos OS 23.2' : `${brand} RouterOS`)
       : deviceType === 'Switch'
       ? 'NOS JunOS/EOS 4.28'
       : deviceType === 'OLT'

@@ -298,7 +298,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
                 >
                   <option value="Server">Server (Compute / Database)</option>
-                  <option value="MikroTik">MikroTik (Router / Firewall)</option>
+                  <option value="Router">Router (Gateway / BGP / Firewall)</option>
                   <option value="Switch">Switch (Spine / Leaf / ToR)</option>
                   <option value="OLT">OLT (Fiber Access Chassis)</option>
                 </select>

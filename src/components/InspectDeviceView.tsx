@@ -92,10 +92,11 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
   const renderDeviceBadge = (type?: string) => {
     switch (type) {
+      case 'Router':
       case 'MikroTik':
         return (
           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-            MikroTik Router
+            Router
           </span>
         );
       case 'Switch':

@@ -80,13 +80,13 @@ export const ServerTable: React.FC<ServerTableProps> = ({
     return 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.5)]';
   };
 
-  // Small, sleek Device Type Badge (Server, MikroTik, Switch, OLT)
+  // Small, sleek Device Type Badge (Server, Router, Switch, OLT)
   const renderDeviceBadge = (type?: string) => {
     const raw = (type || 'Server').toLowerCase();
-    if (raw === 'mikrotik') {
+    if (raw === 'router' || raw === 'mikrotik') {
       return (
         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-tight bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25 shrink-0">
-          MikroTik
+          Router
         </span>
       );
     }
@@ -130,7 +130,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               id="server-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search 10,482 devices by IP address, hostname, device type (Server, MikroTik, Switch, OLT), rack..."
+              placeholder="Search 10,482 devices by IP address, hostname, device type (Server, Router, Switch, OLT), rack..."
               className="w-full pl-10 pr-24 py-2 text-xs sm:text-sm rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/25 text-base-content placeholder:text-base-content/40 transition-all outline-none shadow-inner"
             />
             
@@ -331,7 +331,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                           {server.ip}
                         </span>
 
-                        {/* Device Type Badge (Server, MikroTik, Switch, OLT) */}
+                        {/* Device Type Badge (Server, Router, Switch, OLT) */}
                         {renderDeviceBadge(server.deviceType)}
                       </div>
 

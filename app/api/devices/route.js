@@ -1,4 +1,5 @@
 import { query } from '../../../lib/db.js';
+import { pollDevice } from '../../../lib/snmp/poller.js';
 
 /**
  * Next.js App Router Route Handler: /api/devices
@@ -116,11 +117,29 @@ export async function POST(request) {
       created_at: new Date().toISOString(),
     };
 
+    // Real one-time poll for immediate connectivity feedback
+    const pollResult = await pollDevice({
+      id: createdRecord.id,
+      ip_address: cleanIp,
+      snmp_community: cleanCommunity,
+      brand: brand,
+      device_type: cleanType,
+    });
+
     return Response.json(
       {
         status: 'success',
-        message: `Device ${cleanHost} (${cleanIp}) successfully registered with SNMP community.`,
-        device: createdRecord,
+        message: `Device ${cleanHost} (${cleanIp}) registered. SNMP ${pollResult.snmp_reachable ? 'reachable' : 'unreachable'}.`,
+        device: {
+          ...createdRecord,
+          status: pollResult.status,
+          health: pollResult.health,
+          cpu_usage: pollResult.cpu_usage,
+          ram_usage: pollResult.ram_usage,
+          uptime: pollResult.uptime,
+        },
+        snmp_reachable: pollResult.snmp_reachable,
+        telemetry: pollResult,
       },
       { status: 201 }
     );

@@ -2,7 +2,7 @@ export type ServerStatus = 'online' | 'offline';
 
 export type ServerHealth = 'Normal' | 'Warning' | 'High CPU' | 'Critical';
 
-export type DeviceType = 'Server' | 'MikroTik' | 'Switch' | 'OLT';
+export type DeviceType = 'Server' | 'Router' | 'Switch' | 'OLT';
 
 export type DeviceBrand = 
   | 'MikroTik' 
@@ -13,6 +13,10 @@ export type DeviceBrand =
   | 'BDCOM' 
   | 'V-SOL' 
   | 'DBC' 
+  | 'TP-Link'
+  | 'Ubiquiti'
+  | 'D-Link'
+  | 'Cambium'
   | 'Other';
 
 export const BRAND_OPTIONS: DeviceBrand[] = [
@@ -24,6 +28,10 @@ export const BRAND_OPTIONS: DeviceBrand[] = [
   'BDCOM',
   'V-SOL',
   'DBC',
+  'TP-Link',
+  'Ubiquiti',
+  'D-Link',
+  'Cambium',
   'Other',
 ];
 
@@ -60,4 +68,4 @@ export interface Server {
 
 export type StatusFilter = 'all' | 'online' | 'offline';
 
-export type DeviceFilter = 'all' | 'Server' | 'MikroTik' | 'Switch' | 'OLT';
+export type DeviceFilter = 'all' | 'Server' | 'Router' | 'Switch' | 'OLT';

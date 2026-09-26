@@ -376,7 +376,7 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
               Device Type
             </label>
             <div className="flex flex-wrap gap-1 bg-base-200/60 p-1 rounded-lg border border-base-content/10">
-              {['all', 'Server', 'MikroTik', 'Switch', 'OLT'].map((dtype) => {
+              {['all', 'Server', 'Router', 'Switch', 'OLT'].map((dtype) => {
                 const isSelected = (deviceFilter || 'all').toLowerCase() === dtype.toLowerCase();
                 return (
                   <button

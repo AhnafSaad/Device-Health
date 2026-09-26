@@ -39,6 +39,10 @@ const BRAND_OPTIONS = [
   'BDCOM',
   'V-SOL',
   'DBC',
+  'TP-Link',
+  'Ubiquiti',
+  'D-Link',
+  'Cambium',
   'Other',
 ];
 
@@ -685,7 +689,7 @@ export default function InspectDevicePage({ params: paramsProp }) {
                     className="select select-sm select-bordered w-full rounded-xl"
                   >
                     <option value="Server">Server</option>
-                    <option value="MikroTik">MikroTik Router</option>
+                    <option value="Router">Router (Gateway / BGP / Core Router)</option>
                     <option value="Switch">Switch</option>
                     <option value="OLT">GPON OLT</option>
                   </select>

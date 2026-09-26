@@ -18,10 +18,12 @@ import {
   Radio,
   Pencil,
   ChevronRight,
-  Activity
+  Activity,
+  Tag
 } from 'lucide-react';
-import { Server, DeviceType, Datacenter } from '../types';
+import { Server, DeviceType, Datacenter, DeviceBrand, BRAND_OPTIONS } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
+import { BrandLogo } from './BrandLogo';
 
 interface EditDeviceViewProps {
   deviceId: string;
@@ -53,6 +55,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
     ip_address: '',
     hostname: '',
     device_type: 'Server' as DeviceType,
+    brand: 'Other' as DeviceBrand,
     snmp_community: 'public',
     datacenter_id: '',
     location: '',
@@ -82,6 +85,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
           ip_address: initialDevice.ip,
           hostname: initialDevice.hostname,
           device_type: (initialDevice.deviceType as DeviceType) || 'Server',
+          brand: (initialDevice.brand as DeviceBrand) || 'Other',
           snmp_community: initialDevice.snmpCommunity || 'public',
           datacenter_id: initialDevice.datacenterId ? String(initialDevice.datacenterId) : '',
           location: initialDevice.location,
@@ -110,6 +114,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 ip: found.ip_address,
                 hostname: found.hostname,
                 deviceType: found.device_type,
+                brand: found.brand,
                 datacenterId: found.datacenter_id,
                 datacenterName: found.datacenter_name,
                 location: found.location,
@@ -127,6 +132,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 ip_address: mapped.ip,
                 hostname: mapped.hostname,
                 device_type: (mapped.deviceType as DeviceType) || 'Server',
+                brand: (mapped.brand as DeviceBrand) || 'Other',
                 snmp_community: mapped.snmpCommunity || 'public',
                 datacenter_id: mapped.datacenterId ? String(mapped.datacenterId) : '',
                 location: mapped.location,
@@ -147,6 +153,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
             ip: d.ip_address,
             hostname: d.hostname,
             deviceType: d.device_type,
+            brand: d.brand,
             datacenterId: d.datacenter_id,
             datacenterName: d.datacenter_name,
             location: d.location,
@@ -164,6 +171,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
             ip_address: mapped.ip,
             hostname: mapped.hostname,
             device_type: (mapped.deviceType as DeviceType) || 'Server',
+            brand: (mapped.brand as DeviceBrand) || 'Other',
             snmp_community: mapped.snmpCommunity || 'public',
             datacenter_id: mapped.datacenterId ? String(mapped.datacenterId) : '',
             location: mapped.location,
@@ -215,6 +223,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         ip_address: device.ip,
         hostname: device.hostname,
         device_type: (device.deviceType as DeviceType) || 'Server',
+        brand: (device.brand as DeviceBrand) || 'Other',
         snmp_community: device.snmpCommunity || 'public',
         datacenter_id: device.datacenterId ? String(device.datacenterId) : '',
         location: device.location,
@@ -268,6 +277,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         ip_address: cleanIp,
         hostname: formData.hostname.trim() || `${formData.device_type.toLowerCase()}-${cleanIp.replace(/\./g, '-')}`,
         device_type: formData.device_type,
+        brand: formData.brand,
         datacenter_id: formData.datacenter_id || undefined,
         datacenter_name: resolvedDcName,
         location: formData.location.trim() || (matchedDc ? matchedDc.location : 'Primary Datacenter'),
@@ -302,6 +312,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         ip: updatedServerData.ip_address || cleanIp,
         hostname: updatedServerData.hostname || payload.hostname,
         deviceType: (updatedServerData.device_type || formData.device_type) as DeviceType,
+        brand: updatedServerData.brand || formData.brand,
         datacenterId: updatedServerData.datacenter_id || formData.datacenter_id,
         datacenterName: updatedServerData.datacenter_name || resolvedDcName,
         location: updatedServerData.location || payload.location,
@@ -342,7 +353,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
 
   const deviceTypes: { type: DeviceType; label: string; desc: string; icon: any }[] = [
     { type: 'Server', label: 'Compute Server', desc: 'Bare-metal, VM, or Hypervisor node', icon: ServerIcon },
-    { type: 'MikroTik', label: 'MikroTik Router', desc: 'Edge, BGP border, or core CCR/CHR', icon: Radio },
+    { type: 'Router', label: 'Router / Gateway', desc: 'Edge, BGP border, or core router', icon: Radio },
     { type: 'Switch', label: 'Managed Switch', desc: 'Spine, leaf, or Top-of-Rack Layer 2/3', icon: Layers },
     { type: 'OLT', label: 'Fiber GPON OLT', desc: 'Optical Line Terminal chassis / PON', icon: HardDrive },
   ];
@@ -548,6 +559,37 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Device Brand / Vendor Dropdown */}
+              <div className="space-y-2 pt-2 border-t border-base-content/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-accent" />
+                    <span>Device Brand / Vendor *</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <BrandLogo brand={formData.brand} size="xs" />
+                    <span className="text-[10px] text-base-content/50 font-mono">{formData.brand}</span>
+                  </div>
+                </div>
+                <div className="relative flex items-center">
+                  <select
+                    name="brand"
+                    value={formData.brand}
+                    onChange={handleChange}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-semibold text-xs text-base-content focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all pr-10"
+                  >
+                    {BRAND_OPTIONS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 pointer-events-none flex items-center">
+                    <BrandLogo brand={formData.brand} size="sm" />
+                  </div>
                 </div>
               </div>
             </div>

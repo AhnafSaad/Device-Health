@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { query, ensureTablesExist } from './lib/db.js';
+import { pollDevice } from './lib/snmp/poller.js';
+import { startSnmpScheduler, registerMemoryDevicesProvider, getLatestTelemetryMap } from './lib/snmp/scheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,11 +34,11 @@ const memoryDatacenters: DatacenterRecord[] = [
 
 const INITIAL_NODES = [
   { id: 'dev-1001', ip_address: '10.0.1.1', hostname: 'srv-postgres-db-01', device_type: 'Server', brand: 'Cisco', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-02 (U10)', snmp_community: 'public' },
-  { id: 'dev-1002', ip_address: '192.168.10.1', hostname: 'mtik-edge-router-02', device_type: 'MikroTik', brand: 'MikroTik', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-01 (U14)', snmp_community: 'public' },
+  { id: 'dev-1002', ip_address: '192.168.10.1', hostname: 'mtik-edge-router-02', device_type: 'Router', brand: 'MikroTik', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-01 (U14)', snmp_community: 'public' },
   { id: 'dev-1003', ip_address: '172.20.10.5', hostname: 'sw-spine-switch-03', device_type: 'Switch', brand: 'Juniper', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-06 (U20)', snmp_community: 'public' },
   { id: 'dev-1004', ip_address: '172.31.20.2', hostname: 'olt-gpon-chassis-04', device_type: 'OLT', brand: 'Huawei', datacenter_id: 'dc-1', datacenter_name: 'DC-US-East', location: 'US-East (N. Virginia)', rack_number: 'Rack A-01 (U12)', snmp_community: 'public' },
   { id: 'dev-1005', ip_address: '10.0.4.15', hostname: 'srv-k8s-worker-05', device_type: 'Server', brand: 'Arista', datacenter_id: 'dc-6', datacenter_name: 'DC-AP-South', location: 'AP-Southeast (Singapore)', rack_number: 'Rack S-02 (U18)', snmp_community: 'public' },
-  { id: 'dev-1006', ip_address: '192.168.20.1', hostname: 'mtik-bgp-border-06', device_type: 'MikroTik', brand: 'MikroTik', datacenter_id: 'dc-5', datacenter_name: 'DC-AP-East', location: 'AP-East (Tokyo)', rack_number: 'Rack T-01 (U16)', snmp_community: 'public' },
+  { id: 'dev-1006', ip_address: '192.168.20.1', hostname: 'mtik-bgp-border-06', device_type: 'Router', brand: 'MikroTik', datacenter_id: 'dc-5', datacenter_name: 'DC-AP-East', location: 'AP-East (Tokyo)', rack_number: 'Rack T-01 (U16)', snmp_community: 'public' },
   { id: 'dev-1007', ip_address: '172.20.30.12', hostname: 'sw-leaf-tor-07', device_type: 'Switch', brand: 'BDCOM', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-12 (U24)', snmp_community: 'public' },
   { id: 'dev-1008', ip_address: '172.31.50.6', hostname: 'olt-xgspon-fiber-08', device_type: 'OLT', brand: 'V-SOL', datacenter_id: 'dc-2', datacenter_name: 'DC-US-West', location: 'US-West (Oregon)', rack_number: 'Rack W-01 (U14)', snmp_community: 'public' },
 ];
@@ -61,16 +63,35 @@ interface DeviceRecord {
   uptime?: string;
 }
 
+export interface NormalizedTelemetry {
+  id?: string;
+  ip_address: string;
+  status: string;
+  health: string;
+  cpu_usage: number;
+  ram_usage: number;
+  disk_usage: number;
+  uptime: string;
+  load_average: string;
+  snmp_reachable: boolean;
+  error?: string;
+  recorded_at?: string;
+  sys_descr?: string;
+}
+
 const memoryDevices: DeviceRecord[] = INITIAL_NODES.map((n) => ({
   ...n,
   created_at: new Date().toISOString(),
-  cpu_usage: Math.floor(Math.random() * 40) + 15,
-  ram_usage: Math.floor(Math.random() * 40) + 25,
-  disk_usage: Math.floor(Math.random() * 30) + 20,
-  status: 'online',
-  health: 'Normal',
-  uptime: '14d 6h',
+  cpu_usage: 0,
+  ram_usage: 0,
+  disk_usage: 0,
+  status: 'offline',
+  health: 'Critical',
+  uptime: '0d 0h (Pending Poll)',
 }));
+
+// Register memory devices with SNMP background scheduler
+registerMemoryDevicesProvider(() => memoryDevices);
 
 // ==========================================
 // 1. DATACENTER API ENDPOINTS
@@ -321,12 +342,12 @@ app.put('/api/datacenters', updateDatacenterHandler);
 // GET /api/telemetry
 app.get('/api/telemetry', async (_req: Request, res: Response) => {
   try {
-    // If PostgreSQL is connected and has rows, return from DB
+    // If PostgreSQL is connected and has rows, return latest telemetry row per device from DB
     const dbRes = await query(`
-      SELECT DISTINCT ON (COALESCE(s.ip_address, t.ip_address))
-        COALESCE(s.id, t.id) AS id,
-        COALESCE(s.ip_address, t.ip_address) AS ip_address,
-        COALESCE(s.hostname, CONCAT(LOWER(COALESCE(s.device_type, 'node')), '-', REPLACE(t.ip_address, '.', '-'))) AS hostname,
+      SELECT DISTINCT ON (s.ip_address)
+        s.id,
+        s.ip_address,
+        s.hostname,
         COALESCE(s.device_type, 'Server') AS device_type,
         s.brand,
         s.datacenter_id,
@@ -336,15 +357,15 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
         ROUND(COALESCE(t.cpu_usage, 0)::numeric, 1) AS cpu_usage,
         ROUND(COALESCE(t.ram_usage, 0)::numeric, 1) AS ram_usage,
         ROUND(COALESCE(t.disk_usage, 0)::numeric, 1) AS disk_usage,
-        COALESCE(t.uptime, '0d 0h') AS uptime,
-        COALESCE(t.status, 'online') AS status,
-        COALESCE(t.health, 'Normal') AS health,
-        COALESCE(t.load_average, '0.10, 0.08, 0.05') AS load_average,
+        COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
+        COALESCE(t.status, 'offline') AS status,
+        COALESCE(t.health, 'Critical') AS health,
+        COALESCE(t.load_average, '0.00, 0.00, 0.00') AS load_average,
         COALESCE(t.recorded_at, NOW()) AS recorded_at
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
-      FULL OUTER JOIN telemetry_data t ON s.ip_address = t.ip_address
-      ORDER BY COALESCE(s.ip_address, t.ip_address), t.recorded_at DESC NULLS LAST;
+      LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
+      ORDER BY s.ip_address, t.recorded_at DESC NULLS LAST;
     `);
 
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
@@ -357,22 +378,31 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
       });
     }
 
-    // In-memory telemetry fallback with slight realistic variations
-    const telemetry = memoryDevices.map((d, idx) => {
-      const isOffline = d.status === 'offline';
-      const cpuDelta = isOffline ? 0 : Math.floor(Math.random() * 9) - 4;
-      const ramDelta = isOffline ? 0 : Math.floor(Math.random() * 5) - 2;
-      const cpu = isOffline ? 0 : Math.min(99, Math.max(10, (d.cpu_usage || 35) + cpuDelta));
-      const ram = isOffline ? 0 : Math.min(99, Math.max(20, (d.ram_usage || 45) + ramDelta));
-
-      let health = d.health || 'Normal';
-      if (isOffline) health = 'Critical';
-      else if (cpu > 85) health = 'High CPU';
-      else health = 'Normal';
-
-      d.cpu_usage = cpu;
-      d.ram_usage = ram;
-      d.health = health;
+    // In-memory telemetry cache (reads real latest polled SNMP metrics, with zero Math.random fallback)
+    const latestMap = getLatestTelemetryMap() as Map<string, NormalizedTelemetry>;
+    const telemetry = memoryDevices.map((d) => {
+      const latest = latestMap.get(d.ip_address);
+      if (latest) {
+        return {
+          id: d.id,
+          ip_address: d.ip_address,
+          hostname: d.hostname,
+          device_type: d.device_type,
+          brand: d.brand,
+          datacenter_id: d.datacenter_id,
+          datacenter_name: d.datacenter_name,
+          location: d.location,
+          rack_number: d.rack_number,
+          cpu_usage: latest.cpu_usage,
+          ram_usage: latest.ram_usage,
+          disk_usage: latest.disk_usage,
+          uptime: latest.uptime,
+          status: latest.status,
+          health: latest.health,
+          load_average: latest.load_average,
+          recorded_at: latest.recorded_at,
+        };
+      }
 
       return {
         id: d.id,
@@ -384,20 +414,20 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
         datacenter_name: d.datacenter_name,
         location: d.location,
         rack_number: d.rack_number,
-        cpu_usage: cpu,
-        ram_usage: ram,
-        disk_usage: d.disk_usage || 32,
-        uptime: isOffline ? '0 hrs (Outage)' : d.uptime || `${(idx * 17) % 360 + 5}d ${(idx * 3) % 24}h`,
-        status: d.status || 'online',
-        health,
-        load_average: isOffline ? '0.00, 0.00, 0.00' : `${(cpu / 50).toFixed(2)}, ${((cpu - 4) / 50).toFixed(2)}, 0.45`,
-        recorded_at: new Date().toISOString(),
+        cpu_usage: d.cpu_usage ?? 0,
+        ram_usage: d.ram_usage ?? 0,
+        disk_usage: d.disk_usage ?? 0,
+        uptime: d.uptime ?? '0d 0h (Offline)',
+        status: d.status ?? 'offline',
+        health: d.health ?? 'Critical',
+        load_average: '0.00, 0.00, 0.00',
+        recorded_at: d.created_at || new Date().toISOString(),
       };
     });
 
     return res.json({
       status: 'success',
-      source: 'in_memory_telemetry',
+      source: 'snmp_telemetry_cache',
       total_nodes: telemetry.length,
       telemetry,
     });
@@ -569,15 +599,13 @@ app.post('/api/devices', async (req: Request, res: Response) => {
       location: cleanLocation,
       rack_number: cleanRack,
       created_at: new Date().toISOString(),
-      cpu_usage: Math.floor(Math.random() * 25) + 15,
-      ram_usage: Math.floor(Math.random() * 30) + 20,
-      disk_usage: Math.floor(Math.random() * 30) + 15,
-      status: 'online',
-      health: 'Normal',
-      uptime: '0d 0h (Just Registered)',
+      cpu_usage: 0,
+      ram_usage: 0,
+      disk_usage: 0,
+      status: 'offline',
+      health: 'Critical',
+      uptime: '0d 0h',
     };
-
-    memoryDevices.unshift(newRecord);
 
     // Try PostgreSQL insert if connection available
     try {
@@ -589,22 +617,51 @@ app.post('/api/devices', async (req: Request, res: Response) => {
       // safe fallback
     }
 
+    // Execute real one-time SNMP poll against new node to verify connectivity
+    const pollResult = (await pollDevice({
+      id: newRecord.id,
+      ip_address: cleanIp,
+      snmp_community: cleanCommunity,
+      brand: cleanBrand,
+      device_type: cleanType,
+    })) as NormalizedTelemetry;
+
+    // Update record with real polled telemetry
+    newRecord.status = pollResult.status;
+    newRecord.health = pollResult.health;
+    newRecord.cpu_usage = pollResult.cpu_usage;
+    newRecord.ram_usage = pollResult.ram_usage;
+    newRecord.disk_usage = pollResult.disk_usage;
+    newRecord.uptime = pollResult.uptime;
+
+    // Persist real telemetry in database if available
+    try {
+      await query(`
+        INSERT INTO telemetry_data (ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, recorded_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW());
+      `, [
+        cleanIp,
+        pollResult.cpu_usage,
+        pollResult.ram_usage,
+        pollResult.disk_usage,
+        pollResult.uptime,
+        pollResult.status,
+        pollResult.health,
+        pollResult.load_average,
+      ]);
+    } catch {
+      // safe fallback
+    }
+
+    memoryDevices.unshift(newRecord);
+    getLatestTelemetryMap().set(cleanIp, pollResult);
+
     return res.status(201).json({
       status: 'success',
-      message: `Device ${cleanHost} (${cleanIp}) successfully registered.`,
+      message: `Device ${cleanHost} (${cleanIp}) registered. SNMP ${pollResult.snmp_reachable ? 'reachable' : 'unreachable'}.`,
       device: newRecord,
-      automation: {
-        step_a_db: 'Record inserted into servers_info',
-        step_b_telegraf_config: {
-          status: 'virtual_orchestration_active',
-          path: `/etc/telegraf/telegraf.d/device_${cleanIp.replace(/\./g, '_')}.conf`,
-        },
-        step_c_reload: {
-          reloaded: true,
-          command: 'kill -SIGHUP $(pidof telegraf)',
-          message: 'SIGHUP signal sent successfully to Telegraf daemon.',
-        },
-      },
+      snmp_reachable: pollResult.snmp_reachable,
+      telemetry: pollResult,
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -867,6 +924,13 @@ async function startServer() {
     await ensureTablesExist();
   } catch (err: any) {
     console.warn('[server.ts] Database schema initialization warning:', err?.message);
+  }
+
+  // Start background SNMP poller scheduler
+  try {
+    startSnmpScheduler();
+  } catch (err: any) {
+    console.warn('[server.ts] SNMP poller scheduler initialization warning:', err?.message);
   }
 
   if (process.env.NODE_ENV === 'production') {

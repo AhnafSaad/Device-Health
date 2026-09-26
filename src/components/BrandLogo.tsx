@@ -9,6 +9,10 @@ export const BRAND_DOMAINS: Record<string, string> = {
   'Arista': 'arista.com',
   'BDCOM': 'bdcom.cn',
   'V-SOL': 'vsolcn.com',
+  'TP-Link': 'tp-link.com',
+  'Ubiquiti': 'ui.com',
+  'D-Link': 'dlink.com',
+  'Cambium': 'cambiumnetworks.com',
 };
 
 interface BrandLogoProps {

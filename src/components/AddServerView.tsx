@@ -56,7 +56,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
   });
 
   const [isLoading, setIsLoading] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string; submessage?: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'warning'; message: string; submessage?: string } | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -108,8 +108,8 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
     const prefix = formData.device_type === 'Server'
       ? 'srv'
-      : formData.device_type === 'MikroTik'
-      ? 'mtik'
+      : formData.device_type === 'Router'
+      ? (formData.brand === 'MikroTik' ? 'mtik' : 'rtr')
       : formData.device_type === 'Switch'
       ? 'sw'
       : 'olt';
@@ -118,6 +118,9 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     const selectedDc = datacenters.find((d) => String(d.id) === String(formData.datacenter_id));
     const finalLocation = selectedDc ? selectedDc.location : formData.location.trim() || 'Global Datacenter';
     const finalDcName = selectedDc ? selectedDc.name : undefined;
+
+    let pollReachable: boolean | undefined = undefined;
+    let polledTelemetry: any = null;
 
     try {
       const response = await fetch('/api/devices', {
@@ -145,23 +148,35 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
         });
         return;
       }
+
+      if (response.ok) {
+        try {
+          const resJson = await response.json();
+          pollReachable = resJson.snmp_reachable;
+          polledTelemetry = resJson.telemetry;
+        } catch {
+          // ignore
+        }
+      }
     } catch {
       // Local fallback in case backend is offline
     }
 
     setIsLoading(false);
 
-    // 3. Success: Create new Server model
+    const isOnline = pollReachable === true;
+
+    // 3. Success: Create new Server model reflecting real polled status
     const newServer: Server = {
       id: `dev-${Math.floor(1000 + Math.random() * 9000)}`,
       ip: cleanIp,
       hostname: generatedHostname,
-      status: 'online',
-      health: 'Normal',
-      cpuUsage: Math.floor(Math.random() * 30) + 18,
-      ramUsage: Math.floor(Math.random() * 35) + 22,
-      diskUsage: Math.floor(Math.random() * 35) + 15,
-      uptime: 'Just provisioned (1 min)',
+      status: isOnline ? 'online' : 'offline',
+      health: isOnline ? (polledTelemetry?.health || 'Normal') : 'Critical',
+      cpuUsage: isOnline ? (polledTelemetry?.cpu_usage || 15) : 0,
+      ramUsage: isOnline ? (polledTelemetry?.ram_usage || 35) : 0,
+      diskUsage: isOnline ? (polledTelemetry?.disk_usage || 25) : 0,
+      uptime: isOnline ? (polledTelemetry?.uptime || '0d 1h') : '0d 0h (Offline)',
       location: finalLocation,
       datacenterId: formData.datacenter_id || undefined,
       datacenterName: finalDcName,
@@ -169,23 +184,29 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       deviceType: formData.device_type,
       brand: formData.brand,
       snmpCommunity: formData.snmp_community.trim() || 'public',
-      os: formData.device_type === 'MikroTik'
-        ? 'MikroTik RouterOS 7.14'
+      os: formData.device_type === 'Router'
+        ? (formData.brand === 'MikroTik' ? 'MikroTik RouterOS 7.14' : formData.brand === 'Cisco' ? 'Cisco IOS-XE 17.9' : formData.brand === 'Juniper' ? 'Junos OS 23.2' : `${formData.brand} RouterOS`)
         : formData.device_type === 'Switch'
         ? 'JunOS / EOS 4.28'
         : formData.device_type === 'OLT'
         ? 'OLT-Firmware v3.2'
         : 'Ubuntu 24.04 LTS (Linux 6.8)',
       kernel: formData.device_type === 'Server' ? 'Linux 6.8.0-31-generic' : `${formData.device_type} RTOS Kernel`,
-      loadAverage: '0.12, 0.18, 0.16',
+      loadAverage: isOnline ? (polledTelemetry?.load_average || '0.12, 0.18, 0.16') : '0.00, 0.00, 0.00',
     };
 
     onServerAdded(newServer);
 
+    const reachabilityText = pollReachable === true 
+      ? 'SNMP Reachability: Verified Online (Community accepted)' 
+      : pollReachable === false 
+      ? 'SNMP Reachability: Unreachable / Offline (Check IP & Community)'
+      : 'Registered into active registry';
+
     setAlert({
-      type: 'success',
-      message: 'Device Provisioned Successfully (201 Created)',
-      submessage: `Device node ${cleanIp} (${formData.brand} ${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation} recorded into active registry.`,
+      type: pollReachable === false ? 'warning' : 'success',
+      message: pollReachable === false ? 'Device Registered (SNMP Unreachable)' : 'Device Provisioned Successfully (201 Created)',
+      submessage: `Device node ${cleanIp} (${formData.brand} ${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation}. ${reachabilityText}.`,
     });
 
     // Reset IP input
@@ -240,7 +261,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                 Register New Device
               </h2>
               <p className="text-xs sm:text-sm text-base-content/50 mt-0.5">
-                Provision an infrastructure device (Server, MikroTik, Switch, or OLT) with automatic Data Center association.
+                Provision an infrastructure device (Server, Router, Switch, or OLT) with automatic Data Center association.
               </p>
             </div>
           </div>
@@ -261,6 +282,8 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
             className={`mt-6 p-4 rounded-2xl border text-xs flex items-start gap-3 ${
               alert.type === 'success'
                 ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400'
+                : alert.type === 'warning'
+                ? 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400'
                 : 'bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400'
             }`}
           >
@@ -303,7 +326,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
               </p>
             </div>
 
-            {/* Device Type Select (Server, MikroTik, Switch, OLT) */}
+            {/* Device Type Select (Server, Router, Switch, OLT) */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-secondary" />
@@ -317,7 +340,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                 className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-semibold text-base-content outline-none transition-all"
               >
                 <option value="Server">Server (Compute / Database)</option>
-                <option value="MikroTik">MikroTik (RouterOS / BGP Gateway)</option>
+                <option value="Router">Router (Gateway / BGP / Core Router)</option>
                 <option value="Switch">Switch (Spine / Leaf ToR)</option>
                 <option value="OLT">OLT (Fiber Chassis GPON/XGS-PON)</option>
               </select>
