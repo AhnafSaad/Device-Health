@@ -11,6 +11,8 @@ import { DatacenterPageView } from './components/DatacenterPageView';
 import { EditDeviceModal } from './components/EditDeviceModal';
 import { DeleteDeviceModal } from './components/DeleteDeviceModal';
 import { InspectDeviceView } from './components/InspectDeviceView';
+import { LoginView } from './components/LoginView';
+import { ManageUsersModal } from './components/ManageUsersModal';
 import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
 
 export default function App() {
@@ -19,8 +21,53 @@ export default function App() {
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
+  const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
+  const [usersModalTab, setUsersModalTab] = useState<'users' | 'polling'>('users');
   const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
+
+  // Three-state authentication lifecycle: 'checking' | 'authenticated' | 'unauthenticated'
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const [currentUsername, setCurrentUsername] = useState<string>('admin');
+  const [currentUserId, setCurrentUserId] = useState<string | number>('');
+
+  const checkAuth = useCallback(async () => {
+    setAuthStatus('checking');
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data.authenticated) {
+        setAuthStatus('authenticated');
+        if (data.username) setCurrentUsername(data.username);
+        if (data.userId) setCurrentUserId(data.userId);
+      } else {
+        setAuthStatus('unauthenticated');
+      }
+    } catch {
+      setAuthStatus('unauthenticated');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  const handleLoginSuccess = (username: string, userId?: string | number) => {
+    setAuthStatus('authenticated');
+    setCurrentUsername(username);
+    if (userId) setCurrentUserId(userId);
+    setToast({ type: 'success', message: `Authenticated as ${username}` });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    setAuthStatus('unauthenticated');
+    setToast({ type: 'info', message: 'Logged out of session.' });
+  };
 
   // Synchronize route with browser URL for App Router and direct links
   const syncRouteFromUrl = useCallback(() => {
@@ -41,6 +88,20 @@ export default function App() {
     }
     if (path === '/admin/data-centers' || path === '/data-centers') {
       setCurrentView('data-centers');
+      setInspectDeviceId(null);
+      return;
+    }
+    if (path === '/admin/polling' || path === '/polling' || path === '/settings' || path === '/admin/settings') {
+      setUsersModalTab('polling');
+      setIsUsersModalOpen(true);
+      setCurrentView('dashboard');
+      setInspectDeviceId(null);
+      return;
+    }
+    if (path === '/admin/users' || path === '/users') {
+      setUsersModalTab('users');
+      setIsUsersModalOpen(true);
+      setCurrentView('dashboard');
       setInspectDeviceId(null);
       return;
     }
@@ -127,7 +188,7 @@ export default function App() {
   useEffect(() => {
     async function fetchDatacenters() {
       try {
-        const res = await fetch('/api/datacenters');
+        const res = await fetch('/api/datacenters', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.datacenters) && data.datacenters.length > 0) {
@@ -353,7 +414,7 @@ export default function App() {
   // Live telemetry polling (every 10s from /api/telemetry or simulated fallback)
   const handleRefresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/telemetry');
+      const res = await fetch('/api/telemetry', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.telemetry) && data.telemetry.length > 0) {
@@ -463,6 +524,21 @@ export default function App() {
   // Existing IPs list for 409 conflict detection
   const existingIps = useMemo(() => servers.map((s) => s.ip), [servers]);
 
+  // Neutral loading state while checking authentication session
+  if (authStatus === 'checking') {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-base-100 gap-3">
+        <span className="loading loading-spinner loading-lg text-primary" />
+        <span className="text-xs font-semibold text-base-content/70">Connecting to NOC Fleet Telemetry...</span>
+      </div>
+    );
+  }
+
+  // Not authenticated: render Login page gate
+  if (authStatus === 'unauthenticated') {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-base-200/40 text-base-content flex flex-col font-sans selection:bg-primary/20 selection:text-primary">
       {/* Top Navigation Bar */}
@@ -478,6 +554,12 @@ export default function App() {
         }}
         onOpenDcModal={() => router.push('/admin/data-centers')}
         datacenterCount={enrichedDatacenters.length}
+        onOpenUsersModal={() => {
+          setUsersModalTab('users');
+          setIsUsersModalOpen(true);
+        }}
+        currentUsername={currentUsername}
+        onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
@@ -623,6 +705,16 @@ export default function App() {
         onAddDatacenter={handleAddDatacenter}
         onDeleteDatacenter={handleDeleteDatacenter}
         onUpdateDatacenter={handleUpdateDatacenter}
+      />
+
+      {/* User Management Modal */}
+      <ManageUsersModal
+        isOpen={isUsersModalOpen}
+        onClose={() => setIsUsersModalOpen(false)}
+        currentUsername={currentUsername}
+        currentUserId={currentUserId}
+        initialTab={usersModalTab}
+        authStatus={authStatus}
       />
 
       {/* Edit Device Modal */}

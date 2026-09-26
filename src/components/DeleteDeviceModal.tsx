@@ -37,6 +37,7 @@ export const DeleteDeviceModal: React.FC<DeleteDeviceModalProps> = ({
       const response = await fetch(`/api/devices/${encodeURIComponent(device.id)}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ id: device.id, ip_address: device.ip }),
       });
 

@@ -42,3 +42,44 @@ INSERT INTO datacenters (name, location) VALUES
   ('DC-SA-East', 'SA-East (São Paulo)'),
   ('DC-AF-South', 'AF-South (Cape Town)')
 ON CONFLICT (name) DO NOTHING;
+
+-- 6. Create telemetry_data table for SNMP telemetry metrics
+CREATE TABLE IF NOT EXISTS telemetry_data (
+  id SERIAL PRIMARY KEY,
+  ip_address VARCHAR(45) NOT NULL,
+  cpu_usage NUMERIC(5, 2) DEFAULT 0,
+  ram_usage NUMERIC(5, 2) DEFAULT 0,
+  disk_usage NUMERIC(5, 2) DEFAULT 0,
+  status VARCHAR(50) DEFAULT 'online',
+  health VARCHAR(50) DEFAULT 'Normal',
+  uptime VARCHAR(100) DEFAULT '0d 0h',
+  load_average VARCHAR(100) DEFAULT '0.00, 0.00, 0.00',
+  recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes on ip_address and recorded_at (descending)
+CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);
+CREATE INDEX IF NOT EXISTS idx_telemetry_recorded_at_desc ON telemetry_data(recorded_at DESC);
+
+-- 7. Create users table for multi-user authentication
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(50) DEFAULT 'admin',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 8. Create settings table for runtime system configuration
+CREATE TABLE IF NOT EXISTS settings (
+  key VARCHAR(255) PRIMARY KEY,
+  value VARCHAR(255) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Seed default snmp_poll_cron if not exists
+INSERT INTO settings (key, value)
+VALUES ('snmp_poll_cron', '*/1 * * * *')
+ON CONFLICT (key) DO NOTHING;
+
+

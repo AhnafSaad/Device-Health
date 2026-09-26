@@ -70,6 +70,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
       const res = await fetch('/api/datacenters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
 
@@ -144,6 +145,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
       const res = await fetch(`/api/datacenters/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
 
@@ -187,7 +189,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
     setAlert(null);
 
     try {
-      await fetch(`/api/datacenters/${id}`, { method: 'DELETE' });
+      await fetch(`/api/datacenters/${id}`, { method: 'DELETE', credentials: 'include' });
       onDeleteDatacenter(id);
       setAlert({ type: 'success', message: `Data Center "${dcName}" deleted successfully.` });
     } catch {

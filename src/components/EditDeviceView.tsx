@@ -99,10 +99,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
       setFetchError(null);
 
       try {
-        const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`);
+        const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`, { credentials: 'include' });
         if (!res.ok) {
           // If specific endpoint failed, fallback to listing devices
-          const listRes = await fetch('/api/devices');
+          const listRes = await fetch('/api/devices', { credentials: 'include' });
           if (listRes.ok) {
             const listData = await listRes.json();
             const found = (listData.devices || []).find(
@@ -288,6 +288,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
       const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 

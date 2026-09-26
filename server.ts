@@ -1,16 +1,125 @@
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import session from 'express-session';
+import bcrypt from 'bcryptjs';
+import cron from 'node-cron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query, ensureTablesExist } from './lib/db.js';
+import { query, ensureTablesExist, getSetting, setSetting } from './lib/db.js';
 import { pollDevice } from './lib/snmp/poller.js';
-import { startSnmpScheduler, registerMemoryDevicesProvider, getLatestTelemetryMap } from './lib/snmp/scheduler.js';
+import { 
+  startSnmpScheduler, 
+  rescheduleSnmpPolling, 
+  registerMemoryDevicesProvider, 
+  getLatestTelemetryMap 
+} from './lib/snmp/scheduler.js';
+
+declare module 'express-session' {
+  interface SessionData {
+    userId?: number | string;
+    isAdmin?: boolean;
+    username?: string;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Trust proxy 1 hop: required because the app runs behind AI Studio reverse-proxy infrastructure
+// terminating HTTPS and forwarding HTTP internally. Allows req.secure and secure cookies to function.
+app.set('trust proxy', 1);
+console.log('[AI Studio] Express trust proxy is ENABLED (app.set("trust proxy", 1)) - HTTPS/Secure cookie termination active.');
+
 app.use(express.json());
+
+// Express Session configuration
+// Note: cookie.secure is always true and sameSite is always 'none'.
+// Since trust proxy is set to 1, secure: true works whenever the real client connection is HTTPS
+// (which it always is in both the AI Studio preview and any real production deploy).
+// Plain-HTTP localhost dev will fail closed (session not persisted), which is an acceptable tradeoff.
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'healthstream-noc-session-secret-key-32chars',
+    resave: false,
+    saveUninitialized: false,
+    proxy: true,
+    cookie: {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
+
+export interface UserRecord {
+  id: number | string;
+  username: string;
+  password_hash: string;
+  role: string;
+  created_at: string;
+}
+
+const memoryUsers: UserRecord[] = [];
+
+/**
+ * requireAdmin middleware checking req.session.isAdmin
+ */
+export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (req.session && req.session.isAdmin) {
+    return next();
+  }
+  return res.status(401).json({
+    error: 'Unauthorized',
+    message: 'Admin authentication required. Please log in.',
+  });
+};
+
+/**
+ * Seed initial administrator account if users table is empty.
+ */
+async function seedAdminUser() {
+  const adminUsername = (process.env.ADMIN_USERNAME || 'admin').trim();
+  const adminPassword = (process.env.ADMIN_PASSWORD || 'adminpassword123').trim();
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+  let hasUsersInDb = false;
+  try {
+    const res = await query(`SELECT COUNT(*) AS count FROM users;`);
+    if (res && res.rows && Number(res.rows[0].count) > 0) {
+      hasUsersInDb = true;
+    }
+  } catch {
+    // Database table may not be ready or DB not connected
+  }
+
+  if (!hasUsersInDb) {
+    try {
+      await query(
+        `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin') ON CONFLICT (username) DO NOTHING;`,
+        [adminUsername, hashedPassword]
+      );
+    } catch {
+      // safe fallback
+    }
+  }
+
+  if (memoryUsers.length === 0) {
+    memoryUsers.push({
+      id: 1,
+      username: adminUsername,
+      password_hash: hashedPassword,
+      role: 'admin',
+      created_at: new Date().toISOString(),
+    });
+
+    console.log(
+      `\n=======================================================\n[AUTH] Seed admin user created: "${adminUsername}"\nIMPORTANT: Please change this default password in the Manage Users screen after first login!\n=======================================================\n`
+    );
+  }
+}
+
 
 // In-memory store for registered Datacenters
 export interface DatacenterRecord {
@@ -94,6 +203,300 @@ const memoryDevices: DeviceRecord[] = INITIAL_NODES.map((n) => ({
 registerMemoryDevicesProvider(() => memoryDevices);
 
 // ==========================================
+// AUTHENTICATION & MULTI-USER API ENDPOINTS
+// ==========================================
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid username or password' });
+    }
+
+    const cleanUsername = String(username).trim();
+    let user: UserRecord | undefined;
+
+    try {
+      const dbRes = await query(
+        `SELECT id, username, password_hash, role, created_at FROM users WHERE username = $1 LIMIT 1;`,
+        [cleanUsername]
+      );
+      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+        user = dbRes.rows[0];
+      }
+    } catch {
+      // Safe fallback if database table not available
+    }
+
+    if (!user) {
+      user = memoryUsers.find((u) => u.username.toLowerCase() === cleanUsername.toLowerCase());
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid username or password' });
+    }
+
+    const isMatch = await bcrypt.compare(String(password), user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid username or password' });
+    }
+
+    req.session.userId = user.id;
+    req.session.isAdmin = true;
+    req.session.username = user.username;
+
+    return res.json({
+      status: 'success',
+      authenticated: true,
+      username: user.username,
+      role: user.role || 'admin',
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Login request failed.',
+    });
+  }
+});
+
+// POST /api/auth/logout
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to destroy session.' });
+    }
+    res.clearCookie('connect.sid');
+    return res.json({ status: 'success', message: 'Logged out successfully.' });
+  });
+});
+
+// GET /api/auth/me
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  if (req.session && req.session.isAdmin) {
+    return res.json({
+      authenticated: true,
+      username: req.session.username || 'admin',
+      userId: req.session.userId,
+    });
+  }
+  return res.json({ authenticated: false });
+});
+
+// POST /api/auth/users - Create a new user (admin required)
+app.post('/api/auth/users', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body || {};
+    const cleanUsername = (username ? String(username) : '').trim();
+    const cleanPassword = password ? String(password) : '';
+
+    if (!cleanUsername) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Username cannot be empty.' });
+    }
+
+    if (cleanPassword.length < 8) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Password must be at least 8 characters long.' });
+    }
+
+    // Check if username already exists in PostgreSQL
+    let existsInDb = false;
+    try {
+      const checkRes = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1);`, [cleanUsername]);
+      if (checkRes && checkRes.rows && checkRes.rows.length > 0) {
+        existsInDb = true;
+      }
+    } catch {
+      // safe fallback
+    }
+
+    const existsInMemory = memoryUsers.some((u) => u.username.toLowerCase() === cleanUsername.toLowerCase());
+    if (existsInDb || existsInMemory) {
+      return res.status(409).json({ error: 'Conflict', message: 'Username is already taken.' });
+    }
+
+    const passwordHash = await bcrypt.hash(cleanPassword, 10);
+    let createdUser: { id: number | string; username: string; role: string; created_at: string } | null = null;
+
+    try {
+      const insertRes = await query(
+        `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin') RETURNING id, username, role, created_at;`,
+        [cleanUsername, passwordHash]
+      );
+      if (insertRes && insertRes.rows && insertRes.rows[0]) {
+        createdUser = insertRes.rows[0];
+      }
+    } catch {
+      // safe fallback
+    }
+
+    if (!createdUser) {
+      createdUser = {
+        id: memoryUsers.length + 1,
+        username: cleanUsername,
+        role: 'admin',
+        created_at: new Date().toISOString(),
+      };
+    }
+
+    memoryUsers.push({
+      id: createdUser.id,
+      username: createdUser.username,
+      password_hash: passwordHash,
+      role: createdUser.role,
+      created_at: createdUser.created_at,
+    });
+
+    return res.status(201).json({
+      status: 'success',
+      user: {
+        id: createdUser.id,
+        username: createdUser.username,
+        created_at: createdUser.created_at,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to create user.' });
+  }
+});
+
+// GET /api/auth/users - List all users (admin required)
+app.get('/api/auth/users', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    try {
+      const dbRes = await query(`SELECT id, username, role, created_at FROM users ORDER BY id ASC;`);
+      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+        return res.json({
+          status: 'success',
+          users: dbRes.rows,
+        });
+      }
+    } catch {
+      // safe fallback
+    }
+
+    const safeUsers = memoryUsers.map(({ id, username, role, created_at }) => ({
+      id,
+      username,
+      role,
+      created_at,
+    }));
+    return res.json({
+      status: 'success',
+      users: safeUsers,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to list users.' });
+  }
+});
+
+// DELETE /api/auth/users/:id - Delete user (admin required, self-deletion blocked)
+app.delete('/api/auth/users/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ error: 'Bad Request', message: 'User ID is required.' });
+    }
+
+    // Block deleting currently logged-in account
+    if (String(req.session.userId) === String(id)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Cannot delete your own currently logged-in account.',
+      });
+    }
+
+    const memoryMatch = memoryUsers.find((u) => String(u.id) === String(id));
+    if (memoryMatch && req.session.username && memoryMatch.username.toLowerCase() === req.session.username.toLowerCase()) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Cannot delete your own currently logged-in account.',
+      });
+    }
+
+    // Delete in PostgreSQL
+    try {
+      await query(`DELETE FROM users WHERE id = $1;`, [id]);
+    } catch {
+      // safe fallback
+    }
+
+    const idx = memoryUsers.findIndex((u) => String(u.id) === String(id));
+    if (idx !== -1) {
+      memoryUsers.splice(idx, 1);
+    }
+
+    return res.json({
+      status: 'success',
+      message: 'User deleted successfully.',
+      deletedId: id,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to delete user.' });
+  }
+});
+
+// ==========================================
+// SYSTEM SETTINGS API ENDPOINTS
+// ==========================================
+
+// GET /api/settings/snmp-poll-cron: returns { cron: string }, reading from the settings table. Requires requireAdmin.
+app.get('/api/settings/snmp-poll-cron', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    let cronStr = await getSetting('snmp_poll_cron');
+    if (!cronStr || typeof cronStr !== 'string' || !cronStr.trim()) {
+      cronStr = process.env.SNMP_POLL_CRON || '*/1 * * * *';
+    }
+    return res.json({ cron: cronStr.trim() });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to retrieve SNMP polling cron interval.',
+    });
+  }
+});
+
+// PUT /api/settings/snmp-poll-cron: body { cron: string }. Requires requireAdmin.
+app.put('/api/settings/snmp-poll-cron', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { cron: newCron } = req.body || {};
+    const cleanCron = (newCron ? String(newCron) : '').trim();
+
+    if (!cleanCron) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Cron expression cannot be empty. Please provide a valid 5-field cron expression.',
+      });
+    }
+
+    // Validate using node-cron's cron.validate(cron)
+    const isValid = cron.validate(cleanCron);
+    if (!isValid) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `"${cleanCron}" is not a valid cron expression. Please provide a plausible 5-field cron expression (e.g. "*/1 * * * *", "*/5 * * * *", "0 * * * *").`,
+      });
+    }
+
+    // Update settings table (with in-memory fallback)
+    await setSetting('snmp_poll_cron', cleanCron);
+
+    // Immediately reschedule the running SNMP polling job to use the new interval
+    rescheduleSnmpPolling(cleanCron);
+
+    return res.json({
+      status: 'success',
+      cron: cleanCron,
+      message: `SNMP polling interval updated to "${cleanCron}".`,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to update SNMP polling cron interval.',
+    });
+  }
+});
+
+// ==========================================
 // 1. DATACENTER API ENDPOINTS
 // ==========================================
 
@@ -147,7 +550,7 @@ app.get('/api/datacenters', async (_req: Request, res: Response) => {
 });
 
 // POST /api/datacenters
-app.post('/api/datacenters', async (req: Request, res: Response) => {
+app.post('/api/datacenters', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { name, location } = req.body || {};
 
@@ -263,8 +666,8 @@ const deleteDatacenterHandler = async (req: Request, res: Response) => {
   }
 };
 
-app.delete('/api/datacenters/:id', deleteDatacenterHandler);
-app.delete('/api/datacenters', deleteDatacenterHandler);
+app.delete('/api/datacenters/:id', requireAdmin, deleteDatacenterHandler);
+app.delete('/api/datacenters', requireAdmin, deleteDatacenterHandler);
 
 // PUT /api/datacenters/:id and /api/datacenters - Update existing datacenter
 const updateDatacenterHandler = async (req: Request, res: Response) => {
@@ -332,8 +735,8 @@ const updateDatacenterHandler = async (req: Request, res: Response) => {
   }
 };
 
-app.put('/api/datacenters/:id', updateDatacenterHandler);
-app.put('/api/datacenters', updateDatacenterHandler);
+app.put('/api/datacenters/:id', requireAdmin, updateDatacenterHandler);
+app.put('/api/datacenters', requireAdmin, updateDatacenterHandler);
 
 // ==========================================
 // 2. TELEMETRY API ENDPOINT
@@ -543,7 +946,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/devices
-app.post('/api/devices', async (req: Request, res: Response) => {
+app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { ip_address, hostname, device_type, brand, snmp_community, location, rack_number, datacenter_id, datacenter_name } = req.body || {};
 
@@ -823,8 +1226,8 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
   }
 };
 
-app.put('/api/devices/:id', updateDeviceHandler);
-app.put('/api/devices', updateDeviceHandler);
+app.put('/api/devices/:id', requireAdmin, updateDeviceHandler);
+app.put('/api/devices', requireAdmin, updateDeviceHandler);
 
 // DELETE /api/devices/:id - Delete device from fleet
 const deleteDeviceHandler = async (req: Request, res: Response) => {
@@ -871,11 +1274,11 @@ const deleteDeviceHandler = async (req: Request, res: Response) => {
   }
 };
 
-app.delete('/api/devices/:id', deleteDeviceHandler);
-app.delete('/api/devices', deleteDeviceHandler);
+app.delete('/api/devices/:id', requireAdmin, deleteDeviceHandler);
+app.delete('/api/devices', requireAdmin, deleteDeviceHandler);
 
 // POST /api/servers (alias compatibility)
-app.post('/api/servers', async (req: Request, res: Response) => {
+app.post('/api/servers', requireAdmin, async (req: Request, res: Response) => {
   const { ip_address, device_type, snmp_community, location, rack_number, datacenter_id } = req.body || {};
   req.body.hostname = req.body.hostname || `${(device_type || 'srv').toLowerCase()}-${(ip_address || '').replace(/\./g, '-')}`;
   const cleanIp = (ip_address || '').trim();
@@ -922,13 +1325,14 @@ async function startServer() {
   // Initialize and verify database tables and snmp_community column
   try {
     await ensureTablesExist();
+    await seedAdminUser();
   } catch (err: any) {
     console.warn('[server.ts] Database schema initialization warning:', err?.message);
   }
 
   // Start background SNMP poller scheduler
   try {
-    startSnmpScheduler();
+    await startSnmpScheduler();
   } catch (err: any) {
     console.warn('[server.ts] SNMP poller scheduler initialization warning:', err?.message);
   }
@@ -949,6 +1353,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[AI Studio] Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`[AI Studio] Reverse-proxy configuration: trust proxy = 1, session cookies = SameSite: none, Secure: true (proxy: true)`);
   });
 }
 

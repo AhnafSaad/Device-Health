@@ -67,6 +67,7 @@ export const DatacenterPageView: React.FC<DatacenterPageViewProps> = ({
       const res = await fetch('/api/datacenters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
 
@@ -141,6 +142,7 @@ export const DatacenterPageView: React.FC<DatacenterPageViewProps> = ({
       const res = await fetch(`/api/datacenters/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
 
@@ -184,7 +186,7 @@ export const DatacenterPageView: React.FC<DatacenterPageViewProps> = ({
     setAlert(null);
 
     try {
-      await fetch(`/api/datacenters/${id}`, { method: 'DELETE' });
+      await fetch(`/api/datacenters/${id}`, { method: 'DELETE', credentials: 'include' });
       onDeleteDatacenter(id);
       setAlert({ type: 'success', message: `Data Center "${dcName}" deleted successfully.` });
     } catch {

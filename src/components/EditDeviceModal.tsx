@@ -135,6 +135,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       const response = await fetch(`/api/devices/${encodeURIComponent(device.id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 

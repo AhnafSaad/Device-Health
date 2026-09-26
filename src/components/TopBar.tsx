@@ -4,10 +4,10 @@ import {
   RefreshCw, 
   PlusCircle, 
   LayoutDashboard, 
-  ShieldCheck, 
-  UserCheck, 
-  Activity, 
   Building2,
+  Users,
+  Sliders,
+  LogOut,
   Sun,
   Moon
 } from 'lucide-react';
@@ -21,6 +21,9 @@ interface TopBarProps {
   onNavigate: (view: 'dashboard' | 'add-device') => void;
   onOpenDcModal?: () => void;
   datacenterCount?: number;
+  onOpenUsersModal?: () => void;
+  currentUsername?: string;
+  onLogout?: () => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
 }
@@ -34,6 +37,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onNavigate,
   onOpenDcModal,
   datacenterCount,
+  onOpenUsersModal,
+  currentUsername = 'admin',
+  onLogout,
   theme = 'dark',
   onToggleTheme,
 }) => {
@@ -111,10 +117,21 @@ export const TopBar: React.FC<TopBarProps> = ({
               )}
             </button>
           )}
+
+          {onOpenUsersModal && (
+            <button
+              onClick={onOpenUsersModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-base-content/70 hover:text-primary hover:bg-base-100/60 transition-all duration-200 cursor-pointer"
+              title="Manage NOC Users"
+            >
+              <Users className="w-3.5 h-3.5 text-primary" />
+              <span>Users</span>
+            </button>
+          )}
         </div>
 
         {/* Right Section: Telemetry Pulse, Cluster Health & Operator Status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           
           {/* Live Telemetry Glowing Beacon */}
           <div 
@@ -165,19 +182,31 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Operator Profile / Status Indicator */}
           <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-base-content/10">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-xs shadow-xs">
-              SRE
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-xs shadow-xs uppercase">
+              {currentUsername.charAt(0) || 'U'}
             </div>
             <div className="text-left">
               <div className="text-xs font-semibold leading-tight flex items-center gap-1">
-                <span>NOC Ops</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                <span className="max-w-[90px] truncate">{currentUsername}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
               </div>
               <div className="text-[10px] text-base-content/50 font-mono leading-tight">
                 {clusterHealthPercent}% SLA
               </div>
             </div>
           </div>
+
+          {/* Logout Button */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="btn btn-ghost btn-sm text-xs text-base-content/70 hover:text-error hover:bg-error/10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all"
+              title="Log out of session"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline font-semibold">Logout</span>
+            </button>
+          )}
 
         </div>
 

@@ -126,6 +126,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       const response = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           ip_address: cleanIp,
           hostname: generatedHostname,
