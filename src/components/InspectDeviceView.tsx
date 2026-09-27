@@ -136,7 +136,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             onClick={onBack}
             className="hover:text-primary transition-colors font-semibold"
           >
-            Fleet Nodes
+            Fleet Devices
           </button>
           <ChevronRight className="w-3.5 h-3.5 text-base-content/40" />
           <span className="text-base-content font-mono font-bold truncate max-w-xs">
@@ -521,26 +521,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold border border-primary/30 text-primary hover:bg-primary hover:text-primary-content transition-all flex items-center justify-center gap-2 shadow-xs"
               >
                 <Activity className={`w-4 h-4 ${isPinging ? 'animate-spin' : ''}`} />
-                <span>{isPinging ? 'Pinging Node...' : 'Run ICMP Ping Test'}</span>
+                <span>{isPinging ? 'Pinging Device...' : 'Run ICMP Ping Test'}</span>
               </button>
-
-              <button
-                onClick={handleCopySsh}
-                className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold border border-base-content/20 text-base-content hover:bg-base-200 transition-all flex items-center justify-center gap-2 shadow-xs"
-              >
-                {copiedSsh ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedSsh ? 'SSH Command Copied!' : `Copy: ssh admin@${server.ip}`}</span>
-              </button>
-
-              {onRebootServer && (
-                <button
-                  onClick={() => onRebootServer(server.id)}
-                  className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold border border-warning/30 text-warning hover:bg-warning hover:text-warning-content transition-all flex items-center justify-center gap-2 shadow-xs"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Simulate Remote Reboot</span>
-                </button>
-              )}
             </div>
 
             {pingResult && (

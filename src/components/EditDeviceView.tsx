@@ -363,7 +363,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
   };
 
   const deviceTypes: { type: DeviceType; label: string; desc: string; icon: any }[] = [
-    { type: 'Server', label: 'Compute Server', desc: 'Bare-metal, VM, or Hypervisor node', icon: ServerIcon },
+    { type: 'Server', label: 'Compute Server', desc: 'Bare-metal, VM, or Hypervisor device', icon: ServerIcon },
     { type: 'Router', label: 'Router / Gateway', desc: 'Edge, BGP border, or core router', icon: Radio },
     { type: 'Switch', label: 'Managed Switch', desc: 'Spine, leaf, or Top-of-Rack Layer 2/3', icon: Layers },
     { type: 'OLT', label: 'Fiber GPON OLT', desc: 'Optical Line Terminal chassis / PON', icon: HardDrive },
@@ -437,7 +437,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 Edit Device Configuration
               </h1>
               <p className="text-xs text-base-content/60 font-mono mt-0.5">
-                Target Node: <span className="font-bold text-base-content">{device?.hostname}</span> ({device?.ip}) • UID: {deviceId}
+                Target Device: <span className="font-bold text-base-content">{device?.hostname}</span> ({device?.ip}) • UID: {deviceId}
               </p>
             </div>
           </div>
@@ -766,7 +766,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
             <div className="flex items-center justify-between border-b border-base-content/10 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-primary" />
-                Live Node Preview
+                Live Device Preview
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
                 {device?.status || 'ONLINE'}
@@ -786,7 +786,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
 
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-base-content block truncate font-mono">
-                  {formData.hostname || 'unnamed-node'}
+                  {formData.hostname || 'unnamed-device'}
                 </span>
                 <span className="text-[11px] text-base-content/60 block truncate">
                   {formData.location || 'Unassigned Location'}

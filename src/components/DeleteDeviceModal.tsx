@@ -102,7 +102,7 @@ export const DeleteDeviceModal: React.FC<DeleteDeviceModalProps> = ({
                   </button>
                 </div>
                 <p className="text-xs text-base-content/60 mt-1">
-                  You are about to permanently decommission this node from the active monitoring cluster.
+                  You are about to permanently decommission this device from the active monitoring cluster.
                 </p>
               </div>
             </div>
@@ -142,19 +142,6 @@ export const DeleteDeviceModal: React.FC<DeleteDeviceModalProps> = ({
                     {device.datacenterName || device.location}
                   </span>
                 </div>
-              </div>
-            </div>
-
-            {/* Critical Warning Description */}
-            <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/20 text-xs text-base-content/80 flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-warning-content dark:text-warning">
-                  Irreversible Cluster Action
-                </p>
-                <p className="text-base-content/70 leading-relaxed text-[11px]">
-                  Deleting this node will delete its registry record in <code className="font-mono text-xs bg-base-300/80 px-1 py-0.5 rounded">servers_info</code> and terminate live telemetry ingestion. Any historical metric aggregates for IP <span className="font-mono font-semibold">{device.ip}</span> will be unlinked.
-                </p>
               </div>
             </div>
 

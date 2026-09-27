@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
@@ -6,13 +8,14 @@ import cron from 'node-cron';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { query, ensureTablesExist, getSetting, setSetting } from './lib/db.js';
+import { query, ensureTablesExist, getSetting, setSetting, isDbConnected } from './lib/db.js';
 import { pollDevice } from './lib/snmp/poller.js';
 import { 
   startSnmpScheduler, 
   rescheduleSnmpPolling, 
   registerMemoryDevicesProvider, 
-  getLatestTelemetryMap 
+  getLatestTelemetryMap,
+  runSnmpPollCycle
 } from './lib/snmp/scheduler.js';
 
 declare module 'express-session' {
@@ -627,6 +630,14 @@ app.get('/api/datacenters', async (_req: Request, res: Response) => {
       ORDER BY d.name ASC;
     `);
 
+    if (isDbConnected()) {
+      return res.json({
+        status: 'success',
+        source: 'database',
+        datacenters: (dbRes && dbRes.rows) || [],
+      });
+    }
+
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
       return res.json({
         status: 'success',
@@ -674,6 +685,29 @@ app.post('/api/datacenters', requireAdmin, async (req: Request, res: Response) =
 
     const cleanName = name.trim();
     const cleanLocation = location.trim();
+
+    if (isDbConnected()) {
+      const checkRes = await query(
+        `SELECT id FROM datacenters WHERE LOWER(name) = LOWER($1) LIMIT 1;`,
+        [cleanName]
+      );
+      if (checkRes && checkRes.rows && checkRes.rows.length > 0) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: `A Data Center named "${cleanName}" already exists.`,
+        });
+      }
+      const dbInsert = await query(
+        `INSERT INTO datacenters (name, location) VALUES ($1, $2) RETURNING id, name, location, created_at;`,
+        [cleanName, cleanLocation]
+      );
+      const row = dbInsert.rows[0];
+      return res.status(201).json({
+        status: 'success',
+        message: `Data Center "${cleanName}" created successfully.`,
+        datacenter: { ...row, node_count: 0 },
+      });
+    }
 
     // Check duplicate in memory
     const existing = memoryDatacenters.some(
@@ -740,6 +774,16 @@ const deleteDatacenterHandler = async (req: Request, res: Response) => {
       });
     }
 
+    if (isDbConnected()) {
+      const delRes = await query(`DELETE FROM datacenters WHERE id::text = $1 RETURNING id, name;`, [String(id)]);
+      const deletedName = delRes?.rows?.[0]?.name || id;
+      return res.json({
+        status: 'success',
+        message: `Data Center ${deletedName} deleted successfully.`,
+        deletedId: id,
+      });
+    }
+
     // Try DB delete if available
     try {
       await query(`DELETE FROM datacenters WHERE id = $1;`, [id]);
@@ -795,6 +839,29 @@ const updateDatacenterHandler = async (req: Request, res: Response) => {
 
     if (!cleanName && !cleanLocation) {
       return res.status(400).json({ error: 'Bad Request', message: 'Name or Location is required.' });
+    }
+
+    if (isDbConnected()) {
+      const updRes = await query(
+        `UPDATE datacenters
+         SET name = COALESCE(NULLIF($1, ''), name),
+             location = COALESCE(NULLIF($2, ''), location),
+             updated_at = NOW()
+         WHERE id::text = $3
+         RETURNING id, name, location, created_at;`,
+        [cleanName || null, cleanLocation || null, String(id)]
+      );
+      if (updRes && updRes.rows && updRes.rows[0]) {
+        return res.json({
+          status: 'success',
+          message: `Data Center "${updRes.rows[0].name}" updated successfully.`,
+          datacenter: updRes.rows[0],
+        });
+      }
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Datacenter with ID ${id} was not found.`,
+      });
     }
 
     // Try DB update if available
@@ -854,8 +921,16 @@ app.put('/api/datacenters', requireAdmin, updateDatacenterHandler);
 // ==========================================
 
 // GET /api/telemetry
-app.get('/api/telemetry', async (_req: Request, res: Response) => {
+app.get('/api/telemetry', async (req: Request, res: Response) => {
   try {
+    if (req.query.refresh === 'true' || req.query.force === 'true') {
+      try {
+        await runSnmpPollCycle();
+      } catch (pollErr: any) {
+        console.warn('[server.ts] Manual SNMP poll cycle warning:', pollErr?.message);
+      }
+    }
+
     // If PostgreSQL is connected and has rows, return latest telemetry row per device from DB
     const dbRes = await query(`
       SELECT DISTINCT ON (s.ip_address)
@@ -881,6 +956,16 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
       ORDER BY s.ip_address, t.recorded_at DESC NULLS LAST;
     `);
+
+    if (isDbConnected()) {
+      return res.json({
+        status: 'success',
+        source: 'postgresql',
+        database: 'noc_db',
+        total_nodes: (dbRes && dbRes.rowCount) || 0,
+        telemetry: (dbRes && dbRes.rows) || [],
+      });
+    }
 
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
       return res.json({
@@ -961,7 +1046,7 @@ app.get('/api/telemetry', async (_req: Request, res: Response) => {
 app.get('/api/devices', async (_req: Request, res: Response) => {
   try {
     const dbRes = await query(`
-      SELECT 
+      SELECT DISTINCT ON (s.ip_address)
         s.id, 
         s.ip_address, 
         s.hostname, 
@@ -972,11 +1057,27 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         COALESCE(s.location, d.location) AS location, 
         s.rack_number, 
         s.snmp_community, 
-        s.created_at
+        s.created_at,
+        ROUND(COALESCE(t.cpu_usage, 0)::numeric, 1) AS cpu_usage,
+        ROUND(COALESCE(t.ram_usage, 0)::numeric, 1) AS ram_usage,
+        ROUND(COALESCE(t.disk_usage, 0)::numeric, 1) AS disk_usage,
+        COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
+        COALESCE(t.status, 'offline') AS status,
+        COALESCE(t.health, 'Critical') AS health,
+        COALESCE(t.load_average, '0.00, 0.00, 0.00') AS load_average
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
-      ORDER BY s.created_at DESC;
+      LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
+      ORDER BY s.ip_address, t.recorded_at DESC NULLS LAST;
     `);
+
+    if (isDbConnected()) {
+      return res.json({
+        status: 'success',
+        total: (dbRes && dbRes.rowCount) || 0,
+        devices: (dbRes && dbRes.rows) || [],
+      });
+    }
 
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
       return res.json({
@@ -986,10 +1087,26 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
       });
     }
 
+    const latestMap = getLatestTelemetryMap() as Map<string, NormalizedTelemetry>;
+    const enrichedDevices = memoryDevices.map((d) => {
+      const latest = latestMap.get(d.ip_address);
+      if (!latest) return d;
+      return {
+        ...d,
+        cpu_usage: latest.cpu_usage,
+        ram_usage: latest.ram_usage,
+        disk_usage: latest.disk_usage,
+        uptime: latest.uptime,
+        status: latest.status,
+        health: latest.health,
+        load_average: latest.load_average,
+      };
+    });
+
     return res.json({
       status: 'success',
-      total: memoryDevices.length,
-      devices: memoryDevices,
+      total: enrichedDevices.length,
+      devices: enrichedDevices,
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -1032,6 +1149,13 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
       return res.json({
         status: 'success',
         device: dbRes.rows[0],
+      });
+    }
+
+    if (isDbConnected()) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Device with ID ${id} was not found.`,
       });
     }
 
@@ -1086,17 +1210,55 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
     }
 
     // Check conflict
-    const exists = memoryDevices.some((d) => d.ip_address === cleanIp);
-    if (exists) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: `A device with IP ${cleanIp} already exists in servers_info.`,
-      });
+    if (isDbConnected()) {
+      const dbExists = await query(
+        `SELECT id FROM servers_info WHERE ip_address = $1 LIMIT 1;`,
+        [cleanIp]
+      );
+      if (dbExists && dbExists.rows && dbExists.rows.length > 0) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: `A device with IP ${cleanIp} already exists in servers_info.`,
+        });
+      }
+    } else {
+      const exists = memoryDevices.some((d) => d.ip_address === cleanIp);
+      if (exists) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: `A device with IP ${cleanIp} already exists in servers_info.`,
+        });
+      }
     }
 
-    // Resolve datacenter name if ID provided
+    // Resolve datacenter ID and name
     let resolvedDcName = datacenter_name;
-    if (datacenter_id && !resolvedDcName) {
+    let numericDcId: number | null =
+      datacenter_id !== undefined && datacenter_id !== null && /^\d+$/.test(String(datacenter_id))
+        ? Number(datacenter_id)
+        : null;
+
+    if (isDbConnected()) {
+      if (numericDcId !== null && !resolvedDcName) {
+        try {
+          const dcRes = await query(`SELECT name FROM datacenters WHERE id = $1 LIMIT 1;`, [numericDcId]);
+          if (dcRes && dcRes.rows && dcRes.rows[0]) {
+            resolvedDcName = dcRes.rows[0].name;
+          }
+        } catch {
+          // ignore
+        }
+      } else if (numericDcId === null && resolvedDcName) {
+        try {
+          const dcRes = await query(`SELECT id FROM datacenters WHERE LOWER(name) = LOWER($1) LIMIT 1;`, [resolvedDcName]);
+          if (dcRes && dcRes.rows && dcRes.rows[0]) {
+            numericDcId = Number(dcRes.rows[0].id);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } else if (datacenter_id && !resolvedDcName) {
       const match = memoryDatacenters.find((d) => String(d.id) === String(datacenter_id));
       if (match) resolvedDcName = match.name;
     }
@@ -1107,7 +1269,7 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
       hostname: cleanHost,
       device_type: cleanType,
       brand: cleanBrand,
-      datacenter_id: datacenter_id || undefined,
+      datacenter_id: isDbConnected() ? (numericDcId ?? undefined) : (datacenter_id || undefined),
       datacenter_name: resolvedDcName || undefined,
       snmp_community: cleanCommunity,
       location: cleanLocation,
@@ -1122,13 +1284,16 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
     };
 
     // Try PostgreSQL insert if connection available
-    try {
-      await query(`
+    if (isDbConnected()) {
+      const insertRes = await query(`
         INSERT INTO servers_info (ip_address, hostname, device_type, brand, datacenter_id, snmp_community, location, rack_number, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW());
-      `, [cleanIp, cleanHost, cleanType, cleanBrand || null, datacenter_id || null, cleanCommunity, cleanLocation, cleanRack]);
-    } catch {
-      // safe fallback
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        RETURNING id, created_at;
+      `, [cleanIp, cleanHost, cleanType, cleanBrand || null, numericDcId, cleanCommunity, cleanLocation, cleanRack]);
+      if (insertRes && insertRes.rows && insertRes.rows[0]) {
+        newRecord.id = String(insertRes.rows[0].id);
+        newRecord.created_at = insertRes.rows[0].created_at;
+      }
     }
 
     // Execute real one-time SNMP poll against new node to verify connectivity
@@ -1167,7 +1332,9 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
       // safe fallback
     }
 
-    memoryDevices.unshift(newRecord);
+    if (!isDbConnected()) {
+      memoryDevices.unshift(newRecord);
+    }
     getLatestTelemetryMap().set(cleanIp, pollResult);
 
     return res.status(201).json({
@@ -1237,27 +1404,50 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
         });
       }
 
-      const conflict = memoryDevices.some(
-        (d, idx) => idx !== devIndex && d.ip_address === cleanIp
-      );
-      if (conflict) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: `Another device with IP address ${cleanIp} already exists.`,
-        });
+      if (isDbConnected()) {
+        const conflictRes = await query(
+          `SELECT id FROM servers_info WHERE ip_address = $1 AND id::text != $2 AND ip_address != $2 LIMIT 1;`,
+          [cleanIp, String(id)]
+        );
+        if (conflictRes && conflictRes.rows && conflictRes.rows.length > 0) {
+          return res.status(409).json({
+            error: 'Conflict',
+            message: `Another device with IP address ${cleanIp} already exists.`,
+          });
+        }
+      } else {
+        const conflict = memoryDevices.some(
+          (d, idx) => idx !== devIndex && d.ip_address === cleanIp
+        );
+        if (conflict) {
+          return res.status(409).json({
+            error: 'Conflict',
+            message: `Another device with IP address ${cleanIp} already exists.`,
+          });
+        }
       }
     }
 
-    // Resolve datacenter name
+    // Resolve datacenter name and numeric ID
     let resolvedDcName = datacenter_name || datacenterName;
-    if (cleanDcId && !resolvedDcName) {
-      const dcMatch = memoryDatacenters.find((d) => String(d.id) === String(cleanDcId));
-      if (dcMatch) resolvedDcName = dcMatch.name;
-    }
+    const numericDcId: number | null =
+      cleanDcId !== undefined && cleanDcId !== null && /^\d+$/.test(String(cleanDcId))
+        ? Number(cleanDcId)
+        : null;
 
-    // Try PostgreSQL update if connected
-    try {
-      await query(
+    if (isDbConnected()) {
+      if (numericDcId !== null && !resolvedDcName) {
+        try {
+          const dcRes = await query(`SELECT name FROM datacenters WHERE id = $1 LIMIT 1;`, [numericDcId]);
+          if (dcRes && dcRes.rows && dcRes.rows[0]) {
+            resolvedDcName = dcRes.rows[0].name;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const updRes = await query(
         `UPDATE servers_info
          SET ip_address = COALESCE(NULLIF($1, ''), ip_address),
              hostname = COALESCE(NULLIF($2, ''), hostname),
@@ -1268,21 +1458,42 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
              rack_number = COALESCE(NULLIF($7, ''), rack_number),
              snmp_community = COALESCE(NULLIF($8, ''), snmp_community),
              updated_at = NOW()
-         WHERE id::text = $9 OR ip_address = $9;`,
+         WHERE id::text = $9 OR ip_address = $9
+         RETURNING id, ip_address, hostname, device_type, brand, datacenter_id, location, rack_number, snmp_community, created_at;`,
         [
           cleanIp || null,
           cleanHost || null,
           cleanType || null,
           cleanBrand !== undefined ? cleanBrand : null,
-          cleanDcId || null,
+          numericDcId,
           cleanLocation || null,
           cleanRack || null,
           cleanCommunity || null,
-          id,
+          String(id),
         ]
       );
-    } catch {
-      // Safe fallback
+
+      if (updRes && updRes.rows && updRes.rows[0]) {
+        const updatedRow = {
+          ...updRes.rows[0],
+          datacenter_name: resolvedDcName,
+        };
+        return res.json({
+          status: 'success',
+          message: `Device "${updatedRow.hostname}" (${updatedRow.ip_address}) updated successfully.`,
+          device: updatedRow,
+        });
+      }
+
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Device with ID ${id} was not found.`,
+      });
+    }
+
+    if (cleanDcId && !resolvedDcName) {
+      const dcMatch = memoryDatacenters.find((d) => String(d.id) === String(cleanDcId));
+      if (dcMatch) resolvedDcName = dcMatch.name;
     }
 
     if (devIndex !== -1) {
@@ -1348,17 +1559,24 @@ const deleteDeviceHandler = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Bad Request', message: 'Device ID is required.' });
     }
 
-    // Try PostgreSQL delete if connected
-    try {
-      await query(
-        `DELETE FROM telemetry_data WHERE ip_address IN (
-           SELECT ip_address FROM servers_info WHERE id::text = $1 OR ip_address = $1
-         );
-         DELETE FROM servers_info WHERE id::text = $1 OR ip_address = $1;`,
-        [id]
+    if (isDbConnected()) {
+      const targetRes = await query(
+        `SELECT id, ip_address, hostname FROM servers_info WHERE id::text = $1 OR ip_address = $1 LIMIT 1;`,
+        [String(id)]
       );
-    } catch {
-      // Safe fallback
+      const targetRow = targetRes?.rows?.[0];
+      if (targetRow?.ip_address) {
+        await query(`DELETE FROM telemetry_data WHERE ip_address = $1;`, [targetRow.ip_address]);
+        getLatestTelemetryMap().delete(targetRow.ip_address);
+      }
+      await query(`DELETE FROM servers_info WHERE id::text = $1 OR ip_address = $1;`, [String(id)]);
+
+      const deletedName = targetRow?.hostname || targetRow?.ip_address || String(id);
+      return res.json({
+        status: 'success',
+        message: `Device "${deletedName}" was successfully removed from HealthStream fleet.`,
+        deletedId: id,
+      });
     }
 
     // Remove from in-memory store

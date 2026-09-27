@@ -169,7 +169,7 @@ export const DatacenterDropdown: React.FC<DatacenterDropdownProps> = ({
                           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                             isSelected ? 'bg-primary-content/20 text-primary-content' : 'bg-base-200 text-base-content/60'
                           }`}>
-                            {dc.nodeCount} nodes
+                            {dc.nodeCount} devices
                           </span>
                         )}
                       </div>

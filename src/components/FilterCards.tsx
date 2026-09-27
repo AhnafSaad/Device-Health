@@ -38,7 +38,7 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
   totalCount,
   onlineCount,
   offlineCount,
-  mockEstimatedTotal = '10,482',
+  mockEstimatedTotal,
   deviceFilter = 'all',
   onSelectDeviceFilter,
   healthFilter = 'all',
@@ -85,7 +85,7 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                   Fleet Capacity
                 </div>
                 <div className="text-xs font-bold text-base-content truncate">
-                  Total (10k+)
+                  Total Devices
                 </div>
               </div>
             </div>
@@ -102,11 +102,11 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
           <div className="mt-2 flex items-baseline justify-between">
             <div>
               <div className="text-xl font-black tracking-tight font-mono text-base-content">
-                {mockEstimatedTotal}
+                {mockEstimatedTotal ?? totalCount.toLocaleString()}
               </div>
               <p className="text-[10px] text-base-content/50 mt-0.5 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"></span>
-                <span className="truncate">{totalCount} telemetry nodes</span>
+                <span className="truncate">{totalCount} telemetry devices</span>
               </p>
             </div>
             
@@ -328,7 +328,7 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
         {/* Filter 1: Status Scope */}
         <div className="space-y-1">
           <label className="text-[10px] font-medium text-base-content/60">
-            Node Status
+            Device Status
           </label>
           <div className="grid grid-cols-3 gap-1 bg-base-200/60 p-0.5 rounded-lg border border-base-content/10">
             <button

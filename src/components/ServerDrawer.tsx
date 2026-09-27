@@ -156,7 +156,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                 <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)] flex items-start gap-3">
                   <AlertOctagon className="w-5 h-5 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-bold text-sm">Node Status: OFFLINE</div>
+                    <div className="font-bold text-sm">Device Status: OFFLINE</div>
                     <div className="text-xs opacity-90 mt-0.5 leading-relaxed text-base-content/80">
                       Heartbeat dropped out. Host unreachable at IP {server.ip}. Check IPMI power status or Top-of-Rack switch port.
                     </div>
@@ -396,26 +396,8 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-primary/30 text-primary hover:bg-primary hover:text-primary-content transition-all flex items-center gap-1.5"
                 >
                   <Activity className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
-                  {isPinging ? 'Pinging Node...' : 'ICMP Ping'}
+                  {isPinging ? 'Pinging Device...' : 'ICMP Ping'}
                 </button>
-
-                <button
-                  onClick={handleCopySsh}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-base-content/20 text-base-content hover:bg-base-200 transition-all flex items-center gap-1.5"
-                >
-                  {copiedSsh ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copiedSsh ? 'Copied SSH!' : 'Copy SSH Command'}
-                </button>
-
-                {onRebootServer && (
-                  <button
-                    onClick={() => onRebootServer(server.id)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-warning/30 text-warning hover:bg-warning hover:text-warning-content transition-all flex items-center gap-1.5 ml-auto"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Simulate Reboot
-                  </button>
-                )}
               </div>
 
               {pingResult && (

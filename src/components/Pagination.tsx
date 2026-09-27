@@ -18,7 +18,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   pageSize,
   onPageSizeChange,
   totalItems,
-  virtualTotalEstimate = 10482,
+  virtualTotalEstimate,
 }) => {
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
@@ -65,10 +65,10 @@ export const Pagination: React.FC<PaginationProps> = ({
         <span className="font-mono">
           Showing <span className="font-bold text-base-content">{startItem}</span>–
           <span className="font-bold text-base-content">{endItem}</span> of{' '}
-          <span className="font-bold text-primary">{totalItems}</span> matching nodes
+          <span className="font-bold text-primary">{totalItems}</span> matching devices
         </span>
         <span className="px-2 py-0.5 rounded-full bg-base-200 border border-base-content/10 text-[10px] font-mono text-base-content/60 hidden md:inline-flex">
-          Cluster Total: {virtualTotalEstimate.toLocaleString()}
+          Total Devices: {(virtualTotalEstimate ?? totalItems).toLocaleString()}
         </span>
       </div>
 

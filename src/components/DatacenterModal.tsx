@@ -47,6 +47,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   const [editName, setEditName] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [confirmDeleteDc, setConfirmDeleteDc] = useState<Datacenter | null>(null);
 
   if (!isOpen) return null;
 
@@ -194,19 +195,20 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   };
 
   const handleDelete = async (id: string | number, dcName: string) => {
-    if (!window.confirm(`Are you sure you want to delete Data Center "${dcName}"? Devices assigned to this DC will be unassigned.`)) {
-      return;
-    }
-
     setDeletingId(id);
     setAlert(null);
 
     try {
-      const res = await fetchWithAuth(`/api/datacenters/${id}`, { method: 'DELETE' });
+      const res = await fetchWithAuth(`/api/datacenters/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
       if (res.status === 401) {
         clearAuth();
         onClose();
         onUnauthorized?.();
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAlert({ type: 'error', message: err.message || `Failed to delete Data Center "${dcName}".` });
         return;
       }
       onDeleteDatacenter(id);
@@ -216,6 +218,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
       setAlert({ type: 'success', message: `Data Center "${dcName}" deleted.` });
     } finally {
       setDeletingId(null);
+      setConfirmDeleteDc(null);
     }
   };
 
@@ -483,7 +486,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
 
                         {/* Delete Action (Trash) */}
                         <button
-                          onClick={() => handleDelete(dc.id, dc.name)}
+                          onClick={() => setConfirmDeleteDc(dc)}
                           disabled={deletingId === dc.id || isSavingEdit}
                           className="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10 transition-colors"
                           title="Delete Data Center"
@@ -516,6 +519,60 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
             Close
           </button>
         </div>
+
+        {/* Confirm Delete Sub-Modal */}
+        {confirmDeleteDc && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-2xl bg-base-100 border border-error/30 shadow-2xl overflow-hidden">
+              <div className="h-1.5 w-full bg-linear-to-r from-error via-rose-500 to-amber-500" />
+              <div className="p-6 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-error/15 text-error border border-error/25 shrink-0">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-base-content">
+                        Confirm Data Center Deletion
+                      </h4>
+                      <p className="text-xs text-base-content/60 mt-0.5">
+                        Are you sure you want to delete <span className="font-mono font-bold text-base-content">{confirmDeleteDc.name}</span> ({confirmDeleteDc.location})?
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteDc(null)}
+                    disabled={deletingId !== null}
+                    className="p-1 rounded-lg text-base-content/50 hover:text-base-content hover:bg-base-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteDc(null)}
+                    disabled={deletingId !== null}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold border border-base-content/20 text-base-content hover:bg-base-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(confirmDeleteDc.id, confirmDeleteDc.name)}
+                    disabled={deletingId !== null}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-error text-error-content hover:bg-error/90 flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Data Center</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

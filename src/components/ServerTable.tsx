@@ -130,7 +130,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               id="server-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search 10,482 devices by IP address, hostname, device type (Server, Router, Switch, OLT), rack..."
+              placeholder="Search devices by IP address, hostname, device type (Server, Router, Switch, OLT), rack..."
               className="w-full pl-10 pr-24 py-2 text-xs sm:text-sm rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/25 text-base-content placeholder:text-base-content/40 transition-all outline-none shadow-inner"
             />
             
@@ -261,7 +261,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
           {/* Sticky Table Header with exactly the 6 requested columns */}
           <thead className="sticky top-0 z-10 bg-base-200/95 backdrop-blur-md shadow-xs">
             <tr className="border-b border-base-content/10 text-[11px] font-bold uppercase tracking-wider text-base-content/60 select-none">
-              <th className="py-2.5 px-3.5">Node &amp; Identity</th>
+              <th className="py-2.5 px-3.5">Device &amp; Identity</th>
               <th className="py-2.5 px-3.5 text-center">Status</th>
               <th className="py-2.5 px-3.5">Health Telemetry</th>
               <th className="py-2.5 px-3.5 hidden md:table-cell">Core Resources</th>
@@ -279,7 +279,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </div>
                     <p className="font-bold text-base-content text-sm">No devices match criteria</p>
                     <p className="text-xs text-base-content/60 text-center">
-                      Try adjusting or clearing your search query or device filter to inspect other nodes in the fleet.
+                      Try adjusting or clearing your search query or device filter to inspect other devices in the fleet.
                     </p>
                     {hasAnyFilterActive && onClearAllFilters && (
                       <button

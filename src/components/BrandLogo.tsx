@@ -10,9 +10,8 @@ export const BRAND_DOMAINS: Record<string, string> = {
   'BDCOM': 'bdcom.cn',
   'V-SOL': 'vsolcn.com',
   'TP-Link': 'tp-link.com',
-  'Ubiquiti': 'ui.com',
-  'D-Link': 'dlink.com',
-  'Cambium': 'cambiumnetworks.com',
+  'Dell': 'dell.com',
+  'HP': 'hp.com',
 };
 
 interface BrandLogoProps {

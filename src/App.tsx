@@ -16,6 +16,22 @@ import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { fetchWithAuth, clearAuth } from './utils/auth';
 import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
 
+function cronToMs(cron: string): number {
+  if (!cron || typeof cron !== 'string') return 60000;
+  const trimmed = cron.trim();
+  if (trimmed === '* * * * *' || trimmed === '*/1 * * * *') return 60000;
+  if (trimmed === '0 * * * *' || trimmed === '0 */1 * * *') return 60 * 60000;
+  if (trimmed === '0 0 * * *') return 1440 * 60000;
+
+  const minMatch = trimmed.match(/^\*\/(\d+)\s+\*\s+\*\s+\*\s+\*$/);
+  if (minMatch) return parseInt(minMatch[1], 10) * 60000;
+
+  const hourMatch = trimmed.match(/^0\s+\*\/(\d+)\s+\*\s+\*\s+\*$/);
+  if (hourMatch) return parseInt(hourMatch[1], 10) * 60 * 60000;
+
+  return 60000;
+}
+
 export default function App() {
   // Main data state
   const [servers, setServers] = useState<Server[]>(INITIAL_SERVERS);
@@ -187,6 +203,8 @@ export default function App() {
 
   // Live simulation telemetry state
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pollIntervalMs, setPollIntervalMs] = useState<number>(60000);
 
   // Fetch initial datacenters from API
   useEffect(() => {
@@ -205,6 +223,71 @@ export default function App() {
     }
     fetchDatacenters();
   }, []);
+
+  // Fetch initial devices from API
+  useEffect(() => {
+    async function fetchDevices() {
+      try {
+        const res = await fetchWithAuth('/api/devices', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.devices)) {
+            const mapped: Server[] = data.devices.map((d: any) => ({
+              id: String(d.id),
+              ip: d.ip_address || d.ip || '',
+              hostname: d.hostname || '',
+              deviceType: d.device_type || d.deviceType || 'Server',
+              brand: d.brand || 'Other',
+              datacenterId: d.datacenter_id ?? d.datacenterId,
+              datacenterName: d.datacenter_name ?? d.datacenterName,
+              location: d.location || 'Local Datacenter',
+              rackNumber: d.rack_number || d.rackNumber || 'Unassigned',
+              snmpCommunity: d.snmp_community || d.snmpCommunity || 'public',
+              cpuUsage: Number(d.cpu_usage ?? d.cpuUsage ?? 0),
+              ramUsage: Number(d.ram_usage ?? d.ramUsage ?? 0),
+              diskUsage: Number(d.disk_usage ?? d.diskUsage ?? 0),
+              status: (d.status as any) || 'offline',
+              health: (d.health as any) || 'Critical',
+              uptime: d.uptime || '0d 0h',
+              loadAverage: d.load_average || d.loadAverage || '0.00, 0.00, 0.00',
+            }));
+            setServers(mapped);
+          }
+        }
+      } catch {
+        // Fallback to initial seed
+      }
+    }
+    fetchDevices();
+  }, []);
+
+  // Fetch active SNMP polling interval and subscribe to changes
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    async function fetchPollInterval() {
+      try {
+        const res = await fetchWithAuth('/api/settings/snmp-poll-cron', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.cron) {
+            setPollIntervalMs(cronToMs(data.cron));
+          }
+        }
+      } catch {
+        // Keep default interval
+      }
+    }
+    fetchPollInterval();
+
+    const handleIntervalChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ cron?: string }>;
+      if (customEvent.detail?.cron) {
+        setPollIntervalMs(cronToMs(customEvent.detail.cron));
+      }
+    };
+    window.addEventListener('healthstream:poll-interval-changed', handleIntervalChange);
+    return () => window.removeEventListener('healthstream:poll-interval-changed', handleIntervalChange);
+  }, [authStatus]);
 
   // Compute node count dynamically for datacenters
   const enrichedDatacenters = useMemo(() => {
@@ -415,59 +498,78 @@ export default function App() {
     }
   };
 
-  // Live telemetry polling (every 10s from /api/telemetry or simulated fallback)
-  const handleRefresh = useCallback(async () => {
+  // Live telemetry polling from /api/telemetry (with on-demand SNMP sweep when manual = true)
+  const handleRefresh = useCallback(async (manual = false) => {
+    if (manual) {
+      setIsRefreshing(true);
+    }
     try {
-      const res = await fetch('/api/telemetry', { credentials: 'include' });
+      const endpoint = manual ? '/api/telemetry?refresh=true' : '/api/telemetry';
+      const [res, dcRes] = await Promise.all([
+        fetchWithAuth(endpoint, { credentials: 'include' }),
+        manual ? fetch('/api/datacenters', { credentials: 'include' }).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      if (dcRes && dcRes.ok) {
+        const dcData = await dcRes.json();
+        if (dcData && Array.isArray(dcData.datacenters) && dcData.datacenters.length > 0) {
+          setDatacenters(dcData.datacenters);
+        }
+      }
+
       if (res.ok) {
         const data = await res.json();
-        if (data && Array.isArray(data.telemetry) && data.telemetry.length > 0) {
+        if (data && Array.isArray(data.telemetry)) {
           const liveList = data.telemetry;
-          setServers((prev) =>
-            prev.map((s) => {
-              const live = liveList.find((item: any) => (item.ip_address || item.ip) === s.ip);
-              if (!live) return s;
+          setServers((prev) => {
+            const prevByIp = new Map<string, Server>(prev.map((s) => [s.ip, s]));
+            return liveList.map((live: any): Server => {
+              const ip = live.ip_address || live.ip || '';
+              const existing = prevByIp.get(ip);
               return {
-                ...s,
-                cpuUsage: Number(live.cpu_usage ?? live.cpuUsage ?? s.cpuUsage),
-                ramUsage: Number(live.ram_usage ?? live.ramUsage ?? s.ramUsage),
-                status: (live.status as any) || s.status,
-                health: (live.health as any) || s.health,
-                uptime: live.uptime || s.uptime,
-                datacenterId: live.datacenter_id ?? s.datacenterId,
-                datacenterName: live.datacenter_name ?? s.datacenterName,
+                id: String(live.id ?? existing?.id ?? `dev-${ip.replace(/\./g, '-')}`),
+                ip,
+                hostname: live.hostname || existing?.hostname || '',
+                deviceType: live.device_type || live.deviceType || existing?.deviceType || 'Server',
+                brand: live.brand || existing?.brand || 'Other',
+                datacenterId: live.datacenter_id ?? live.datacenterId ?? existing?.datacenterId,
+                datacenterName: live.datacenter_name ?? live.datacenterName ?? existing?.datacenterName,
+                location: live.location || existing?.location || 'Local Datacenter',
+                rackNumber: live.rack_number || live.rackNumber || existing?.rackNumber || 'Unassigned',
+                snmpCommunity: live.snmp_community || live.snmpCommunity || existing?.snmpCommunity || 'public',
+                cpuUsage: Number(live.cpu_usage ?? live.cpuUsage ?? existing?.cpuUsage ?? 0),
+                ramUsage: Number(live.ram_usage ?? live.ramUsage ?? existing?.ramUsage ?? 0),
+                diskUsage: Number(live.disk_usage ?? live.diskUsage ?? existing?.diskUsage ?? 0),
+                status: (live.status as any) || existing?.status || 'offline',
+                health: (live.health as any) || existing?.health || 'Critical',
+                uptime: live.uptime || existing?.uptime || '0d 0h',
+                loadAverage: live.load_average || live.loadAverage || existing?.loadAverage || '0.00, 0.00, 0.00',
               };
-            })
-          );
+            });
+          });
+
+          if (manual) {
+            const upCount = liveList.filter((item: any) => item.status === 'online').length;
+            setToast({
+              type: 'success',
+              message: `Telemetry refreshed — ${upCount} of ${liveList.length} devices online.`,
+            });
+          }
           return;
         }
       }
     } catch {
-      // Local development or simulated fallback
+      if (manual) {
+        setToast({
+          type: 'error',
+          message: 'Failed to refresh telemetry from server.',
+        });
+      }
+    } finally {
+      if (manual) {
+        setIsRefreshing(false);
+      }
     }
-
-    setServers((prev) =>
-      prev.map((s) => {
-        if (s.status === 'offline') return s;
-        // Apply slight realistic delta to CPU, RAM, Disk
-        const cpuDelta = Math.floor(Math.random() * 9) - 4;
-        const ramDelta = Math.floor(Math.random() * 5) - 2;
-        const newCpu = Math.min(99, Math.max(10, s.cpuUsage + cpuDelta));
-        const newRam = Math.min(99, Math.max(20, s.ramUsage + ramDelta));
-        
-        let newHealth = s.health;
-        if (newCpu > 85) newHealth = 'High CPU';
-        else if (s.diskUsage > 85 || newRam > 90) newHealth = 'Critical';
-        else newHealth = 'Normal';
-
-        return {
-          ...s,
-          cpuUsage: newCpu,
-          ramUsage: newRam,
-          health: newHealth,
-        };
-      })
-    );
   }, []);
 
   // Sync selectedServer if metrics update in the background
@@ -480,14 +582,14 @@ export default function App() {
     }
   }, [servers, selectedServer]);
 
-  // Auto-refresh interval (every 10 seconds)
+  // Auto-refresh interval synced with SNMP polling cron setting
   useEffect(() => {
     if (!isAutoRefresh || currentView !== 'dashboard') return;
     const interval = setInterval(() => {
       handleRefresh();
-    }, 10000);
+    }, pollIntervalMs);
     return () => clearInterval(interval);
-  }, [isAutoRefresh, currentView, handleRefresh]);
+  }, [isAutoRefresh, currentView, handleRefresh, pollIntervalMs]);
 
   // Keyboard shortcut: Pressing "/" or "Cmd+K" focuses the search bar
   useEffect(() => {
@@ -547,7 +649,8 @@ export default function App() {
     <div className="min-h-screen bg-base-200/40 text-base-content flex flex-col font-sans selection:bg-primary/20 selection:text-primary">
       {/* Top Navigation Bar */}
       <TopBar
-        onRefresh={handleRefresh}
+        onRefresh={() => handleRefresh(true)}
+        isRefreshing={isRefreshing}
         isAutoRefresh={isAutoRefresh}
         setIsAutoRefresh={setIsAutoRefresh}
         clusterHealthPercent={clusterHealthPercent}
@@ -558,6 +661,7 @@ export default function App() {
         }}
         onOpenDcModal={() => router.push('/admin/data-centers')}
         datacenterCount={enrichedDatacenters.length}
+        deviceCount={servers.length}
         onOpenUsersModal={() => router.push('/admin/users')}
         currentUsername={currentUsername}
         onLogout={handleLogout}
@@ -581,7 +685,7 @@ export default function App() {
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="max-w-md p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4">
                 <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-                <h2 className="text-lg font-bold">Node Not Found</h2>
+                <h2 className="text-lg font-bold">Device Not Found</h2>
                 <p className="text-xs text-base-content/70">
                   The specified device ({inspectDeviceId}) could not be located in fleet inventory.
                 </p>
@@ -636,7 +740,7 @@ export default function App() {
                 totalCount={servers.length}
                 onlineCount={onlineCount}
                 offlineCount={offlineCount}
-                mockEstimatedTotal="10,482"
+                mockEstimatedTotal={servers.length.toLocaleString()}
                 deviceFilter={deviceFilter}
                 onSelectDeviceFilter={handleDeviceFilterChange}
                 healthFilter={healthFilter}
@@ -686,7 +790,7 @@ export default function App() {
                     setCurrentPage(1);
                   }}
                   totalItems={filteredServers.length}
-                  virtualTotalEstimate={10482}
+                  virtualTotalEstimate={servers.length}
                 />
               </ServerTable>
             </section>

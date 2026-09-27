@@ -14,9 +14,8 @@ export type DeviceBrand =
   | 'V-SOL' 
   | 'DBC' 
   | 'TP-Link'
-  | 'Ubiquiti'
-  | 'D-Link'
-  | 'Cambium'
+  | 'Dell'
+  | 'HP'
   | 'Other';
 
 export const BRAND_OPTIONS: DeviceBrand[] = [
@@ -29,9 +28,8 @@ export const BRAND_OPTIONS: DeviceBrand[] = [
   'V-SOL',
   'DBC',
   'TP-Link',
-  'Ubiquiti',
-  'D-Link',
-  'Cambium',
+  'Dell',
+  'HP',
   'Other',
 ];
 

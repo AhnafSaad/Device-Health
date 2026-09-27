@@ -14,6 +14,7 @@ import {
 
 interface TopBarProps {
   onRefresh: () => void;
+  isRefreshing?: boolean;
   isAutoRefresh: boolean;
   setIsAutoRefresh: (val: boolean) => void;
   clusterHealthPercent: number;
@@ -21,6 +22,7 @@ interface TopBarProps {
   onNavigate: (view: 'dashboard' | 'add-device') => void;
   onOpenDcModal?: () => void;
   datacenterCount?: number;
+  deviceCount?: number;
   onOpenUsersModal?: () => void;
   currentUsername?: string;
   onLogout?: () => void;
@@ -30,6 +32,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   onRefresh,
+  isRefreshing = false,
   isAutoRefresh,
   setIsAutoRefresh,
   clusterHealthPercent,
@@ -37,6 +40,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onNavigate,
   onOpenDcModal,
   datacenterCount,
+  deviceCount = 0,
   onOpenUsersModal,
   currentUsername = 'admin',
   onLogout,
@@ -67,7 +71,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 HealthStream
               </span>
               <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider uppercase rounded-full bg-base-200 border border-base-content/10 text-base-content/80">
-                10k+ Nodes
+                {deviceCount} {deviceCount === 1 ? 'Device' : 'Devices'}
               </span>
             </div>
             <p className="text-[11px] text-base-content/50 font-medium hidden sm:block">
@@ -157,11 +161,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Quick Telemetry Poll Button */}
           <button
             onClick={onRefresh}
-            className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-primary transition-colors"
+            disabled={isRefreshing}
+            className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-primary transition-colors cursor-pointer"
             title="Poll telemetry snapshot now"
             aria-label="Refresh telemetry"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
           </button>
 
           {/* Light / Dark Mode Toggle Button */}

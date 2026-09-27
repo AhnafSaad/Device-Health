@@ -226,7 +226,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
                   </span>
                 </h3>
                 <p className="text-xs text-base-content/60 mt-0.5">
-                  Update node telemetry identity, datacenter allocation, and hardware metadata.
+                  Update device telemetry identity, datacenter allocation, and hardware metadata.
                 </p>
               </div>
             </div>
@@ -367,7 +367,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-base-content/50 mt-1">Facility hosting this hardware node.</p>
+                <p className="text-[10px] text-base-content/50 mt-1">Facility hosting this hardware device.</p>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">

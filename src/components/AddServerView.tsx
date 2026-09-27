@@ -122,6 +122,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
     let pollReachable: boolean | undefined = undefined;
     let polledTelemetry: any = null;
+    let createdDeviceId: string | undefined = undefined;
 
     try {
       const response = await fetchWithAuth('/api/devices', {
@@ -154,7 +155,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
         setIsLoading(false);
         setAlert({
           type: 'error',
-          message: '409 Conflict: Duplicate Node IP',
+          message: '409 Conflict: Duplicate Device IP',
           submessage: `A device with IP ${cleanIp} already exists in servers_info.`,
         });
         return;
@@ -165,6 +166,9 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
           const resJson = await response.json();
           pollReachable = resJson.snmp_reachable;
           polledTelemetry = resJson.telemetry;
+          if (resJson.device?.id !== undefined) {
+            createdDeviceId = String(resJson.device.id);
+          }
         } catch {
           // ignore
         }
@@ -179,7 +183,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
     // 3. Success: Create new Server model reflecting real polled status
     const newServer: Server = {
-      id: `dev-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: createdDeviceId || `dev-${Math.floor(1000 + Math.random() * 9000)}`,
       ip: cleanIp,
       hostname: generatedHostname,
       status: isOnline ? 'online' : 'offline',
@@ -217,7 +221,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     setAlert({
       type: pollReachable === false ? 'warning' : 'success',
       message: pollReachable === false ? 'Device Registered (SNMP Unreachable)' : 'Device Provisioned Successfully (201 Created)',
-      submessage: `Device node ${cleanIp} (${formData.brand} ${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation}. ${reachabilityText}.`,
+      submessage: `Device ${cleanIp} (${formData.brand} ${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation}. ${reachabilityText}.`,
     });
 
     // Reset IP input

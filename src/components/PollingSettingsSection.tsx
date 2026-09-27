@@ -296,6 +296,9 @@ export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
         applyFetchedCron(data.cron);
         const plain = formatCronToPlainLanguage(data.cron);
         setSuccessMsg(data.message || `SNMP polling interval successfully updated to ${plain}.`);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('healthstream:poll-interval-changed', { detail: { cron: data.cron } }));
+        }
         if (onIntervalChanged) {
           onIntervalChanged(data.cron, plain);
         }
