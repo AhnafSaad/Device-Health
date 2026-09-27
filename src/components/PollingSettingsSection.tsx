@@ -10,8 +10,10 @@ import {
   Zap,
   Info,
   ArrowLeft,
-  Timer
+  Timer,
+  LogIn
 } from 'lucide-react';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 export interface PollingPreset {
   label: string;
@@ -117,12 +119,14 @@ interface PollingSettingsSectionProps {
   onIntervalChanged?: (newCron: string, plainLabel: string) => void;
   onBackToUsers?: () => void;
   parentAuthStatus?: 'checking' | 'authenticated' | 'unauthenticated';
+  onUnauthorized?: () => void;
 }
 
 export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
   onIntervalChanged,
   onBackToUsers,
   parentAuthStatus,
+  onUnauthorized,
 }) => {
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>(
     parentAuthStatus === 'authenticated' ? 'authenticated' : 'checking'
@@ -158,7 +162,7 @@ export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
     setErrorMsg(null);
     try {
       // 1. Verify session with GET /api/auth/me
-      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const authRes = await fetchWithAuth('/api/auth/me');
       const authData = await authRes.json();
       if (!authRes.ok || !authData.authenticated) {
         setAuthStatus('unauthenticated');
@@ -169,11 +173,9 @@ export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
       setAuthStatus('authenticated');
       setErrorMsg(null);
 
-      // 2. Fetch active polling settings with credentials: 'include'
+      // 2. Fetch active polling settings with fetchWithAuth
       setLoading(true);
-      const res = await fetch('/api/settings/snmp-poll-cron', {
-        credentials: 'include',
-      });
+      const res = await fetchWithAuth('/api/settings/snmp-poll-cron');
       const data = await res.json();
       if (res.ok && data.cron) {
         applyFetchedCron(data.cron);
@@ -277,13 +279,17 @@ export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
     const cronToSend = validation.targetCron.trim();
 
     try {
-      const res = await fetch('/api/settings/snmp-poll-cron', {
+      const res = await fetchWithAuth('/api/settings/snmp-poll-cron', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ cron: cronToSend }),
       });
       const data = await res.json();
+
+      if (res.status === 401) {
+        setAuthStatus('unauthenticated');
+        setErrorMsg(data.message || 'Admin authentication required. Please log in.');
+        return;
+      }
 
       if (res.ok && data.cron) {
         setCurrentCron(data.cron);
@@ -321,14 +327,29 @@ export const PollingSettingsSection: React.FC<PollingSettingsSectionProps> = ({
   if (authStatus === 'unauthenticated') {
     return (
       <div className="bg-base-200/60 p-4 sm:p-5 rounded-xl border border-base-content/10 space-y-4 animate-fadeIn">
-        <div className="p-3.5 rounded-xl bg-error/10 border border-error/20 flex items-center gap-3 text-xs text-error font-medium">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <div>
-            <span className="font-bold block">Admin authentication required. Please log in.</span>
-            <span className="text-[11px] opacity-80">
-              Only authenticated administrators can view or modify SNMP polling intervals.
-            </span>
+        <div className="p-3.5 rounded-xl bg-error/10 border border-error/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-error font-medium">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <div>
+              <span className="font-bold block">Admin authentication required. Please log in.</span>
+              <span className="text-[11px] opacity-80">
+                Only authenticated administrators can view or modify SNMP polling intervals.
+              </span>
+            </div>
           </div>
+          {onUnauthorized && (
+            <button
+              type="button"
+              onClick={() => {
+                clearAuth();
+                onUnauthorized();
+              }}
+              className="btn btn-error btn-sm gap-1.5 text-xs font-bold shrink-0"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </button>
+          )}
         </div>
         {onBackToUsers && (
           <button

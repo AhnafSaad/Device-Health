@@ -24,6 +24,7 @@ import {
 import { Server, DeviceType, Datacenter, DeviceBrand, BRAND_OPTIONS } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { BrandLogo } from './BrandLogo';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 interface EditDeviceViewProps {
   deviceId: string;
@@ -285,12 +286,21 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         snmp_community: formData.snmp_community.trim() || 'public',
       };
 
-      const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`, {
+      const res = await fetchWithAuth(`/api/devices/${encodeURIComponent(deviceId)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
+
+      if (res.status === 401) {
+        clearAuth();
+        setIsLoading(false);
+        setAlert({
+          type: 'error',
+          message: 'Admin authentication required — please log in again',
+          submessage: 'Your administrator session has expired or is missing.',
+        });
+        return;
+      }
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));

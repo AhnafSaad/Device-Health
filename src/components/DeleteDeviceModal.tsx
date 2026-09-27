@@ -10,6 +10,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { Server } from '../types';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 interface DeleteDeviceModalProps {
   isOpen: boolean;
@@ -34,12 +35,17 @@ export const DeleteDeviceModal: React.FC<DeleteDeviceModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const response = await fetch(`/api/devices/${encodeURIComponent(device.id)}`, {
+      const response = await fetchWithAuth(`/api/devices/${encodeURIComponent(device.id)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ id: device.id, ip_address: device.ip }),
       });
+
+      if (response.status === 401) {
+        clearAuth();
+        setErrorMessage('Admin authentication required — please log in again.');
+        setIsDeleting(false);
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

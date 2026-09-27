@@ -12,7 +12,8 @@ import { EditDeviceModal } from './components/EditDeviceModal';
 import { DeleteDeviceModal } from './components/DeleteDeviceModal';
 import { InspectDeviceView } from './components/InspectDeviceView';
 import { LoginView } from './components/LoginView';
-import { ManageUsersModal } from './components/ManageUsersModal';
+import { ManageUsersPageView } from './components/ManageUsersPageView';
+import { fetchWithAuth, clearAuth } from './utils/auth';
 import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
 
 export default function App() {
@@ -21,9 +22,8 @@ export default function App() {
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
-  const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
   const [usersModalTab, setUsersModalTab] = useState<'users' | 'polling'>('users');
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
   // Three-state authentication lifecycle: 'checking' | 'authenticated' | 'unauthenticated'
@@ -34,7 +34,7 @@ export default function App() {
   const checkAuth = useCallback(async () => {
     setAuthStatus('checking');
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const res = await fetchWithAuth('/api/auth/me');
       const data = await res.json();
       if (res.ok && data.authenticated) {
         setAuthStatus('authenticated');
@@ -61,13 +61,19 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetchWithAuth('/api/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout error:', err);
     }
+    clearAuth();
     setAuthStatus('unauthenticated');
     setToast({ type: 'info', message: 'Logged out of session.' });
   };
+
+  const handleUnauthorized = useCallback(() => {
+    clearAuth();
+    setAuthStatus('unauthenticated');
+  }, []);
 
   // Synchronize route with browser URL for App Router and direct links
   const syncRouteFromUrl = useCallback(() => {
@@ -93,15 +99,13 @@ export default function App() {
     }
     if (path === '/admin/polling' || path === '/polling' || path === '/settings' || path === '/admin/settings') {
       setUsersModalTab('polling');
-      setIsUsersModalOpen(true);
-      setCurrentView('dashboard');
+      setCurrentView('admin-polling');
       setInspectDeviceId(null);
       return;
     }
     if (path === '/admin/users' || path === '/users') {
       setUsersModalTab('users');
-      setIsUsersModalOpen(true);
-      setCurrentView('dashboard');
+      setCurrentView('admin-users');
       setInspectDeviceId(null);
       return;
     }
@@ -554,10 +558,7 @@ export default function App() {
         }}
         onOpenDcModal={() => router.push('/admin/data-centers')}
         datacenterCount={enrichedDatacenters.length}
-        onOpenUsersModal={() => {
-          setUsersModalTab('users');
-          setIsUsersModalOpen(true);
-        }}
+        onOpenUsersModal={() => router.push('/admin/users')}
         currentUsername={currentUsername}
         onLogout={handleLogout}
         theme={theme}
@@ -609,6 +610,16 @@ export default function App() {
             onAddDatacenter={handleAddDatacenter}
             onDeleteDatacenter={handleDeleteDatacenter}
             onUpdateDatacenter={handleUpdateDatacenter}
+            onUnauthorized={handleUnauthorized}
+          />
+        ) : currentView === 'admin-users' || currentView === 'admin-polling' ? (
+          <ManageUsersPageView
+            onBack={() => router.push('/')}
+            currentUsername={currentUsername}
+            currentUserId={currentUserId}
+            initialTab={currentView === 'admin-polling' ? 'polling' : usersModalTab}
+            authStatus={authStatus}
+            onUnauthorized={handleUnauthorized}
           />
         ) : (
           /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
@@ -705,16 +716,6 @@ export default function App() {
         onAddDatacenter={handleAddDatacenter}
         onDeleteDatacenter={handleDeleteDatacenter}
         onUpdateDatacenter={handleUpdateDatacenter}
-      />
-
-      {/* User Management Modal */}
-      <ManageUsersModal
-        isOpen={isUsersModalOpen}
-        onClose={() => setIsUsersModalOpen(false)}
-        currentUsername={currentUsername}
-        currentUserId={currentUserId}
-        initialTab={usersModalTab}
-        authStatus={authStatus}
       />
 
       {/* Edit Device Modal */}

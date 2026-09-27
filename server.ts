@@ -51,7 +51,7 @@ app.use(
       sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000,
     },
-  })
+  }) as unknown as express.RequestHandler
 );
 
 export interface UserRecord {

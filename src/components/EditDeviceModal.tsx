@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Server, Datacenter, DeviceType, DeviceBrand, BRAND_OPTIONS } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 interface EditDeviceModalProps {
   isOpen: boolean;
@@ -132,12 +133,17 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
     };
 
     try {
-      const response = await fetch(`/api/devices/${encodeURIComponent(device.id)}`, {
+      const response = await fetchWithAuth(`/api/devices/${encodeURIComponent(device.id)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
+
+      if (response.status === 401) {
+        clearAuth();
+        setErrorMessage('Admin authentication required — please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

@@ -18,6 +18,7 @@ import {
 import { Server, DeviceType, Datacenter, DeviceBrand, BRAND_OPTIONS } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { BrandLogo } from './BrandLogo';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 interface AddServerViewProps {
   onBack: () => void;
@@ -123,10 +124,8 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     let polledTelemetry: any = null;
 
     try {
-      const response = await fetch('/api/devices', {
+      const response = await fetchWithAuth('/api/devices', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           ip_address: cleanIp,
           hostname: generatedHostname,
@@ -139,6 +138,17 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
           rack_number: formData.rack_number.trim() || 'Rack TBD',
         }),
       });
+
+      if (response.status === 401) {
+        clearAuth();
+        setIsLoading(false);
+        setAlert({
+          type: 'error',
+          message: 'Admin authentication required — please log in again',
+          submessage: 'Your administrator session has expired or is missing.',
+        });
+        return;
+      }
 
       if (response.status === 409) {
         setIsLoading(false);

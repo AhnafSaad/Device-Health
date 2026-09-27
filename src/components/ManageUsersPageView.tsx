@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Users, 
-  UserPlus, 
-  Trash2, 
-  Shield, 
-  X as CloseIcon, 
-  KeyRound, 
-  AlertCircle, 
-  CheckCircle2, 
-  RefreshCw, 
-  ShieldAlert, 
+import {
+  Users,
+  UserPlus,
+  Trash2,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
   Lock,
   User,
-  Calendar,
   Sliders,
-  Clock
+  ArrowLeft,
+  LogIn,
 } from 'lucide-react';
 import { PollingSettingsSection } from './PollingSettingsSection';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 export interface UserItem {
   id: number | string;
@@ -25,26 +23,26 @@ export interface UserItem {
   created_at: string;
 }
 
-interface ManageUsersModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface ManageUsersPageViewProps {
+  onBack: () => void;
   currentUsername: string;
   currentUserId?: string | number;
   initialTab?: 'users' | 'polling';
   authStatus?: 'checking' | 'authenticated' | 'unauthenticated';
+  onUnauthorized?: () => void;
 }
 
-export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
-  isOpen,
-  onClose,
+export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
+  onBack,
   currentUsername,
   currentUserId,
   initialTab = 'users',
   authStatus: propAuthStatus,
+  onUnauthorized,
 }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'polling'>(initialTab);
-  const [modalAuthStatus, setModalAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>(
-    propAuthStatus || 'checking'
+  const [pageAuthStatus, setPageAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>(
+    propAuthStatus === 'authenticated' ? 'authenticated' : 'checking'
   );
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,16 +55,23 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/users', { credentials: 'include' });
+      const res = await fetchWithAuth('/api/auth/users');
       const data = await res.json();
       if (res.ok && data.users) {
         setUsers(data.users);
+        setPageAuthStatus('authenticated');
       } else if (res.status === 401) {
-        setModalAuthStatus('unauthenticated');
+        setPageAuthStatus('unauthenticated');
         setError('Admin authentication required. Please log in.');
       } else {
         setError(data.message || 'Failed to fetch user list.');
@@ -79,43 +84,41 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
   }, []);
 
   const checkAuthAndFetchUsers = useCallback(async () => {
-    setModalAuthStatus('checking');
+    setPageAuthStatus('checking');
     setError(null);
     try {
-      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const authRes = await fetchWithAuth('/api/auth/me');
       const authData = await authRes.json();
       if (!authRes.ok || !authData.authenticated) {
-        setModalAuthStatus('unauthenticated');
+        setPageAuthStatus('unauthenticated');
         setError('Admin authentication required. Please log in.');
         return;
       }
-      setModalAuthStatus('authenticated');
+      setPageAuthStatus('authenticated');
       setError(null);
       await fetchUsers();
     } catch {
-      setModalAuthStatus('unauthenticated');
+      setPageAuthStatus('unauthenticated');
       setError('Admin authentication required. Please log in.');
     }
   }, [fetchUsers]);
 
   useEffect(() => {
-    if (isOpen) {
-      checkAuthAndFetchUsers();
-      setNewUsername('');
-      setNewPassword('');
-      setError(null);
-      setSuccessMsg(null);
-      if (initialTab) {
-        setActiveTab(initialTab);
-      }
-    }
-  }, [isOpen, checkAuthAndFetchUsers, initialTab]);
+    checkAuthAndFetchUsers();
+  }, [checkAuthAndFetchUsers]);
 
   useEffect(() => {
-    if (propAuthStatus) {
-      setModalAuthStatus(propAuthStatus);
+    if (propAuthStatus && propAuthStatus !== 'checking') {
+      setPageAuthStatus(propAuthStatus);
     }
   }, [propAuthStatus]);
+
+  const handleLoginRedirect = () => {
+    clearAuth();
+    if (onUnauthorized) {
+      onUnauthorized();
+    }
+  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,13 +137,17 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
     setSuccessMsg(null);
 
     try {
-      const res = await fetch('/api/auth/users', {
+      const res = await fetchWithAuth('/api/auth/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ username: cleanUser, password: newPassword }),
       });
       const data = await res.json();
+
+      if (res.status === 401) {
+        setPageAuthStatus('unauthenticated');
+        setError('Admin authentication required. Please log in.');
+        return;
+      }
 
       if (res.ok) {
         setSuccessMsg(`User "${cleanUser}" registered successfully!`);
@@ -166,19 +173,24 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
       return;
     }
 
-    const confirm = window.confirm(`Are you sure you want to delete user "${user.username}"?`);
-    if (!confirm) return;
+    const confirmDelete = window.confirm(`Are you sure you want to delete user "${user.username}"?`);
+    if (!confirmDelete) return;
 
     setDeletingId(user.id);
     setError(null);
     setSuccessMsg(null);
 
     try {
-      const res = await fetch(`/api/auth/users/${user.id}`, {
+      const res = await fetchWithAuth(`/api/auth/users/${user.id}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
       const data = await res.json();
+
+      if (res.status === 401) {
+        setPageAuthStatus('unauthenticated');
+        setError('Admin authentication required. Please log in.');
+        return;
+      }
 
       if (res.ok) {
         setSuccessMsg(`User "${user.username}" removed successfully.`);
@@ -193,112 +205,171 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-3xl bg-base-100 rounded-2xl shadow-2xl border border-base-content/10 flex flex-col max-h-[90vh] overflow-hidden">
-        
-        {/* Modal Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-base-content/10 bg-base-200/50 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-              {activeTab === 'users' ? <Users className="w-5 h-5" /> : <Sliders className="w-5 h-5" />}
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-base-content flex items-center gap-2">
-                <span>{activeTab === 'users' ? 'Manage HealthStream Users' : 'SNMP Polling Settings'}</span>
-                {activeTab === 'users' && (
-                  <span className="badge badge-sm badge-primary badge-outline font-mono">
-                    {users.length} {users.length === 1 ? 'user' : 'users'}
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-base-content/60">
-                {activeTab === 'users'
-                  ? 'Control operator credentials, database-backed authentication, and access roles.'
-                  : 'Configure background SNMP sweep cadence and scheduler presets in real-time.'}
-              </p>
-            </div>
+    <div className="w-full max-w-6xl mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-6 animate-fadeIn">
+      {/* Top Breadcrumb Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="group flex items-center gap-2 text-xs font-semibold text-base-content/70 hover:text-primary transition-colors cursor-pointer"
+        >
+          <div className="w-7 h-7 rounded-lg bg-base-200 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+            <ArrowLeft className="w-4 h-4" />
           </div>
+          <span>Back to Fleet Dashboard</span>
+        </button>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-center">
-            {/* View Switcher Tabs */}
-            <div className="flex items-center bg-base-300/60 p-1 rounded-xl border border-base-content/10">
-              <button
-                type="button"
-                onClick={() => { setActiveTab('users'); setError(null); setSuccessMsg(null); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'users'
-                    ? 'bg-base-100 text-primary shadow-sm font-bold'
-                    : 'text-base-content/60 hover:text-base-content'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Users</span>
-              </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-base-content/60">
+            Logged in as: <strong className="text-base-content font-mono">{currentUsername}</strong>
+          </span>
+        </div>
+      </div>
 
-              <button
-                type="button"
-                onClick={() => { setActiveTab('polling'); setError(null); setSuccessMsg(null); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'polling'
-                    ? 'bg-base-100 text-primary shadow-sm font-bold'
-                    : 'text-base-content/60 hover:text-base-content'
-                }`}
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Polling Settings</span>
-              </button>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="btn btn-ghost btn-sm btn-circle text-base-content/60 hover:text-base-content"
-              title="Close modal"
-            >
-              <CloseIcon className="w-4 h-4" />
-            </button>
+      {/* Main Page Header & View Switcher */}
+      <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-2xl bg-primary/10 text-primary shadow-xs">
+            {activeTab === 'users' ? <Users className="w-7 h-7" /> : <Sliders className="w-7 h-7" />}
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-base-content flex items-center gap-3">
+              <span>{activeTab === 'users' ? 'Manage HealthStream Users' : 'SNMP Polling Settings'}</span>
+              {activeTab === 'users' && pageAuthStatus === 'authenticated' && (
+                <span className="badge badge-sm badge-primary badge-outline font-mono">
+                  {users.length} {users.length === 1 ? 'user' : 'users'}
+                </span>
+              )}
+            </h1>
+            <p className="text-xs sm:text-sm text-base-content/60 mt-1">
+              {activeTab === 'users'
+                ? 'Control operator credentials, database-backed authentication, and access roles.'
+                : 'Configure background SNMP sweep cadence and scheduler presets in real-time.'}
+            </p>
           </div>
         </div>
 
-        {/* Alerts / Feedback Banners (shown for User management) */}
-        {activeTab === 'users' && error && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-error/10 border border-error/20 flex items-center gap-2.5 text-xs text-error font-medium">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        {/* View Switcher Tabs */}
+        <div className="flex items-center bg-base-200/80 p-1 rounded-xl border border-base-content/10 self-start sm:self-center">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('users');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'users'
+                ? 'bg-base-100 text-primary shadow-sm font-bold'
+                : 'text-base-content/60 hover:text-base-content'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Users</span>
+          </button>
 
-        {activeTab === 'users' && successMsg && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-success/10 border border-success/20 flex items-center gap-2.5 text-xs text-success font-medium">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{successMsg}</span>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('polling');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'polling'
+                ? 'bg-base-100 text-primary shadow-sm font-bold'
+                : 'text-base-content/60 hover:text-base-content'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Polling Settings</span>
+          </button>
+        </div>
+      </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          {activeTab === 'polling' ? (
-            <PollingSettingsSection 
-              parentAuthStatus={modalAuthStatus}
-              onBackToUsers={() => { setActiveTab('users'); setError(null); }} 
-            />
-          ) : (
-            <>
-              {/* Add User Form Section */}
-              <div className="bg-base-200/60 p-4 sm:p-5 rounded-xl border border-base-content/10">
-            <div className="flex items-center gap-2 mb-3">
+      {/* Main Content */}
+      {activeTab === 'polling' ? (
+        <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
+          <PollingSettingsSection
+            parentAuthStatus={pageAuthStatus}
+            onBackToUsers={() => {
+              setActiveTab('users');
+              setError(null);
+            }}
+            onUnauthorized={handleLoginRedirect}
+          />
+        </div>
+      ) : pageAuthStatus === 'checking' ? (
+        <div className="rounded-2xl border border-base-content/10 bg-base-100 p-12 shadow-sm flex flex-col items-center justify-center gap-3 text-center">
+          <span className="loading loading-spinner loading-md text-primary" />
+          <span className="text-xs font-semibold text-base-content/70">
+            Verifying administrator authorization &amp; loading user directory...
+          </span>
+        </div>
+      ) : pageAuthStatus === 'unauthenticated' ? (
+        <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm space-y-4">
+          <div className="p-4 rounded-xl bg-error/10 border border-error/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-error font-medium">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <div>
+                <span className="font-bold block">Admin authentication required. Please log in.</span>
+                <span className="text-[11px] opacity-80">
+                  Your session has expired or is not authorized. Please sign in to manage users.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLoginRedirect}
+              className="btn btn-error btn-sm gap-1.5 text-xs font-bold shrink-0"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Alerts / Feedback Banners */}
+          {error && (
+            <div className="p-4 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between gap-3 text-xs text-error font-medium">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+              {error.toLowerCase().includes('log in') && (
+                <button
+                  type="button"
+                  onClick={handleLoginRedirect}
+                  className="btn btn-error btn-xs gap-1 font-bold"
+                >
+                  <LogIn className="w-3 h-3" />
+                  <span>Log In</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-4 rounded-xl bg-success/10 border border-success/20 flex items-center gap-2.5 text-xs text-success font-medium">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          {/* Add User Form Section */}
+          <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
               <UserPlus className="w-4 h-4 text-primary" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/80">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-base-content/80">
                 Add New HealthStream User
-              </h3>
+              </h2>
             </div>
 
-            <form onSubmit={handleAddUser} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <form onSubmit={handleAddUser} className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
               <div className="sm:col-span-5">
-                <label className="block text-[11px] font-semibold text-base-content/70 mb-1 flex items-center gap-1">
-                  <User className="w-3 h-3 text-primary" />
+                <label className="block text-xs font-semibold text-base-content/70 mb-1.5 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary" />
                   <span>Username</span>
                 </label>
                 <input
@@ -307,13 +378,13 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
                   required
-                  className="input input-bordered input-sm w-full text-xs bg-base-100"
+                  className="input input-bordered w-full text-xs rounded-xl bg-base-200/50 focus:bg-base-100"
                 />
               </div>
 
               <div className="sm:col-span-4">
-                <label className="block text-[11px] font-semibold text-base-content/70 mb-1 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-primary" />
+                <label className="block text-xs font-semibold text-base-content/70 mb-1.5 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
                   <span>Password (min 8 chars)</span>
                 </label>
                 <input
@@ -323,7 +394,7 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
                   onChange={(e) => setNewPassword(e.target.value)}
                   minLength={8}
                   required
-                  className="input input-bordered input-sm w-full text-xs bg-base-100"
+                  className="input input-bordered w-full text-xs rounded-xl bg-base-200/50 focus:bg-base-100"
                 />
               </div>
 
@@ -331,38 +402,38 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting || !newUsername.trim() || newPassword.length < 8}
-                  className="btn btn-primary btn-sm w-full flex items-center justify-center gap-1.5 shadow-sm"
+                  className="btn btn-primary w-full flex items-center justify-center gap-2 text-xs font-bold rounded-xl shadow-sm"
                 >
                   {isSubmitting ? (
                     <span className="loading loading-spinner loading-xs" />
                   ) : (
                     <>
-                      <UserPlus className="w-3.5 h-3.5" />
+                      <UserPlus className="w-4 h-4" />
                       <span>Create User</span>
                     </>
                   )}
                 </button>
               </div>
             </form>
-            <p className="text-[10px] text-base-content/50 mt-2">
+            <p className="text-[11px] text-base-content/50 mt-3">
               All passwords are encrypted with bcrypt (cost factor 10) before storage. Plaintext passwords are never saved.
             </p>
           </div>
 
           {/* User List Table */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+          <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-base-content/80 flex items-center gap-2">
                 <Shield className="w-4 h-4 text-primary" />
-                <span>Existing Authorized Users</span>
-              </h3>
+                <span>Existing Authorized Users ({users.length})</span>
+              </h2>
               <button
                 onClick={fetchUsers}
                 disabled={loading}
                 className="btn btn-ghost btn-xs text-base-content/60 hover:text-primary flex items-center gap-1"
                 title="Refresh user list"
               >
-                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </button>
             </div>
@@ -380,14 +451,14 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
                 <tbody className="divide-y divide-base-content/5 text-xs">
                   {loading && users.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="text-center py-8 text-base-content/50">
+                      <td colSpan={4} className="text-center py-10 text-base-content/50">
                         <span className="loading loading-spinner loading-sm mr-2" />
                         Loading users...
                       </td>
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="text-center py-8 text-base-content/50">
+                      <td colSpan={4} className="text-center py-10 text-base-content/50">
                         No registered users found.
                       </td>
                     </tr>
@@ -401,7 +472,7 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
                         <tr key={user.id} className="hover:bg-base-200/30 transition-colors">
                           <td>
                             <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary/20 to-indigo-500/20 text-primary font-bold flex items-center justify-center text-xs border border-primary/20">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary/20 to-indigo-500/20 text-primary font-bold flex items-center justify-center text-xs border border-primary/20">
                                 {user.username.charAt(0).toUpperCase()}
                               </div>
                               <div>
@@ -462,9 +533,9 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
           </div>
 
           {/* Quick Status / Navigation to Polling Settings */}
-          <div className="p-3.5 rounded-xl bg-base-200/50 border border-base-content/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+          <div className="p-4 rounded-2xl bg-base-100 border border-base-content/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
                 <Sliders className="w-4 h-4" />
               </div>
               <div>
@@ -479,24 +550,13 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('polling')}
-              className="btn btn-xs btn-outline btn-primary shrink-0 self-start sm:self-auto"
+              className="btn btn-sm btn-outline btn-primary rounded-xl shrink-0 self-start sm:self-auto"
             >
               Configure Polling
             </button>
           </div>
-        </>
-      )}
-    </div>
-
-        {/* Modal Footer */}
-        <div className="px-6 py-3.5 border-t border-base-content/10 bg-base-200/50 flex items-center justify-between text-xs text-base-content/60">
-          <span>Logged in as: <strong className="text-base-content font-mono">{currentUsername}</strong></span>
-          <button onClick={onClose} className="btn btn-sm btn-ghost">
-            Close
-          </button>
         </div>
-
-      </div>
+      )}
     </div>
   );
 };
