@@ -52,7 +52,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div 
             onClick={() => onNavigate('dashboard')}
             className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-content shadow-lg shadow-primary/25 cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95"
-            title="NOC Fleet Monitor"
+            title="HealthStream - Infrastructure Telemetry"
           >
             <ServerIcon className="w-5 h-5 transition-transform duration-300 group-hover:rotate-6" />
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success ring-2 ring-base-100" />
@@ -64,14 +64,14 @@ export const TopBar: React.FC<TopBarProps> = ({
                 onClick={() => onNavigate('dashboard')}
                 className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-base-content via-base-content/90 to-base-content/70 bg-clip-text text-transparent cursor-pointer"
               >
-                NOC Fleet Monitor
+                HealthStream
               </span>
               <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider uppercase rounded-full bg-base-200 border border-base-content/10 text-base-content/80">
                 10k+ Nodes
               </span>
             </div>
             <p className="text-[11px] text-base-content/50 font-medium hidden sm:block">
-              Mission-Critical Infrastructure Telemetry &amp; SRE Control
+              Infrastructure Telemetry
             </p>
           </div>
         </div>
@@ -122,7 +122,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               onClick={onOpenUsersModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-base-content/70 hover:text-primary hover:bg-base-100/60 transition-all duration-200 cursor-pointer"
-              title="Manage NOC Users"
+              title="Manage HealthStream Users"
             >
               <Users className="w-3.5 h-3.5 text-primary" />
               <span>Users</span>

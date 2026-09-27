@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Server as ServerIcon, ShieldCheck, Lock, User, AlertCircle, ArrowRight, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Server as ServerIcon, ShieldCheck, Lock, User, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { setAuthToken } from '../utils/auth';
 
 interface LoginViewProps {
-  onLoginSuccess: (username: string, userId?: string | number) => void;
+  onLoginSuccess: (username: string, userId?: string | number, token?: string) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
@@ -34,7 +35,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       const data = await res.json();
 
       if (res.ok && data.authenticated) {
-        onLoginSuccess(data.username || cleanUser, data.userId);
+        if (data.token) {
+          setAuthToken(data.token, {
+            username: data.username || cleanUser,
+            userId: data.userId,
+            role: data.role || 'admin',
+          });
+        }
+        onLoginSuccess(data.username || cleanUser, data.userId, data.token);
       } else {
         setErrorMessage(data.message || 'Invalid username or password. Access denied.');
       }
@@ -53,20 +61,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md bg-base-100/90 backdrop-blur-xl border border-base-content/10 shadow-2xl rounded-2xl p-6 sm:p-8 z-10 transition-all">
+      <div className="relative w-full max-w-md bg-base-100/90 backdrop-blur-xl border border-base-content/10 shadow-2xl rounded-2xl p-8 z-10 transition-all">
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-primary-content shadow-xl shadow-primary/30 mb-3.5 transform hover:scale-105 transition-transform">
-            <ServerIcon className="w-7 h-7" />
+        <div className="flex flex-col items-center text-center mb-6">
+          <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-primary-content shadow-lg shadow-primary/25 mb-3 transform hover:scale-105 transition-transform">
+            <ServerIcon className="w-6 h-6" />
           </div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-black tracking-tight text-base-content">
-              NOC Fleet Monitor
-            </h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider uppercase rounded-full bg-primary/15 text-primary border border-primary/20">
-              v2.4
-            </span>
-          </div>
+          <h1 className="text-2xl font-black tracking-tight text-base-content mb-1">
+            HealthStream
+          </h1>
+          <p className="text-[11px] font-semibold text-primary tracking-widest uppercase font-mono mb-2">
+            Infrastructure Telemetry
+          </p>
           <p className="text-xs text-base-content/60 max-w-xs">
             Authenticate to access mission-critical telemetry, SNMP nodes, and infrastructure controls.
           </p>
@@ -131,7 +137,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary w-full shadow-lg shadow-primary/25 mt-2 flex items-center justify-center gap-2 font-bold tracking-wide"
+            className="btn btn-primary w-full shadow-lg shadow-primary/25 mt-2 h-11 flex items-center justify-center gap-2 font-bold tracking-wide"
           >
             {loading ? (
               <>
@@ -141,23 +147,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             ) : (
               <>
                 <ShieldCheck className="w-4 h-4" />
-                <span>Sign In to NOC Console</span>
+                <span>Sign In to HealthStream</span>
                 <ArrowRight className="w-4 h-4 ml-1 opacity-70" />
               </>
             )}
           </button>
         </form>
-
-        {/* First-time seed notice hint */}
-        <div className="mt-6 pt-5 border-t border-base-content/10 flex items-start gap-2.5 text-[11px] text-base-content/50 bg-base-200/40 p-3 rounded-xl">
-          <KeyRound className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-          <div>
-            <span className="font-semibold text-base-content/80">Fresh Install Seed Account:</span>
-            <p className="mt-0.5 text-base-content/60">
-              Default administrator user is seeded on first startup from <code className="px-1 py-0.5 rounded bg-base-300 font-mono text-[10px]">ADMIN_USERNAME</code> / <code className="px-1 py-0.5 rounded bg-base-300 font-mono text-[10px]">ADMIN_PASSWORD</code> (e.g. <span className="font-mono text-base-content/80">admin</span> / <span className="font-mono text-base-content/80">adminpassword123</span>).
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );

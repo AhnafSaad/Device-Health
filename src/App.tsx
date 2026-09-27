@@ -529,7 +529,7 @@ export default function App() {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-base-100 gap-3">
         <span className="loading loading-spinner loading-lg text-primary" />
-        <span className="text-xs font-semibold text-base-content/70">Connecting to NOC Fleet Telemetry...</span>
+        <span className="text-xs font-semibold text-base-content/70">Connecting to HealthStream Telemetry...</span>
       </div>
     );
   }
@@ -688,7 +688,7 @@ export default function App() {
         <aside className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 font-medium">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Enterprise NOC Platform • Telemetry Engine v4.8
+            HealthStream Platform • Infrastructure Telemetry Engine v4.8
           </span>
           <span className="hidden sm:inline text-base-content/30">•</span>
           <span>High-Availability Tier IV • SLA 99.999%</span>

@@ -1,5 +1,6 @@
 {
-  "name": "react-example",
+  "name": "healthstream",
+  "description": "HealthStream - Infrastructure Telemetry",
   "private": true,
   "version": "0.0.0",
   "type": "module",

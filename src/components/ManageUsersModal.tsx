@@ -207,7 +207,7 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-base-content flex items-center gap-2">
-                <span>{activeTab === 'users' ? 'Manage NOC Users' : 'SNMP Polling Settings'}</span>
+                <span>{activeTab === 'users' ? 'Manage HealthStream Users' : 'SNMP Polling Settings'}</span>
                 {activeTab === 'users' && (
                   <span className="badge badge-sm badge-primary badge-outline font-mono">
                     {users.length} {users.length === 1 ? 'user' : 'users'}
@@ -291,7 +291,7 @@ export const ManageUsersModal: React.FC<ManageUsersModalProps> = ({
             <div className="flex items-center gap-2 mb-3">
               <UserPlus className="w-4 h-4 text-primary" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/80">
-                Add New NOC User
+                Add New HealthStream User
               </h3>
             </div>
 

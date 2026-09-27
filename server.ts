@@ -4,6 +4,7 @@ import session from 'express-session';
 import bcrypt from 'bcryptjs';
 import cron from 'node-cron';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { query, ensureTablesExist, getSetting, setSetting } from './lib/db.js';
 import { pollDevice } from './lib/snmp/poller.js';
@@ -63,13 +64,86 @@ export interface UserRecord {
 
 const memoryUsers: UserRecord[] = [];
 
+const AUTH_SECRET = process.env.SESSION_SECRET || 'healthstream-noc-session-secret-key-32chars';
+const activeTokens = new Map<string, { userId: number | string; username: string; role: string; expiresAt: number }>();
+
 /**
- * requireAdmin middleware checking req.session.isAdmin
+ * Generate a cryptographically signed authentication bearer token for iframe and API usage
+ */
+export function generateAuthToken(user: { id: number | string; username: string; role?: string }): string {
+  const payload = {
+    userId: user.id,
+    username: user.username,
+    role: user.role || 'admin',
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  };
+  const payloadStr = JSON.stringify(payload);
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payloadStr).digest('hex');
+  const token = Buffer.from(`${payloadStr}:::${signature}`).toString('base64');
+  activeTokens.set(token, {
+    userId: user.id,
+    username: user.username,
+    role: user.role || 'admin',
+    expiresAt: payload.exp,
+  });
+  return token;
+}
+
+/**
+ * Verify an authentication bearer token
+ */
+export function verifyAuthToken(token: string): { userId: number | string; username: string; role: string } | null {
+  if (!token) return null;
+  const cached = activeTokens.get(token);
+  if (cached) {
+    if (Date.now() > cached.expiresAt) {
+      activeTokens.delete(token);
+      return null;
+    }
+    return cached;
+  }
+  try {
+    const raw = Buffer.from(token, 'base64').toString('utf-8');
+    const [payloadStr, signature] = raw.split(':::');
+    if (!payloadStr || !signature) return null;
+    const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(payloadStr).digest('hex');
+    if (expectedSig !== signature) return null;
+    const payload = JSON.parse(payloadStr);
+    if (!payload || Date.now() > payload.exp) return null;
+    return {
+      userId: payload.userId,
+      username: payload.username,
+      role: payload.role || 'admin',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * requireAdmin middleware checking express session and/or Authorization: Bearer <token>
  */
 export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+  // 1. Check active express session
   if (req.session && req.session.isAdmin) {
     return next();
   }
+
+  // 2. Check Authorization Bearer header (critical for cross-site iframes with third-party cookie restrictions)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    const tokenUser = verifyAuthToken(token);
+    if (tokenUser && tokenUser.role === 'admin') {
+      if (req.session) {
+        req.session.isAdmin = true;
+        req.session.userId = tokenUser.userId;
+        req.session.username = tokenUser.username;
+      }
+      return next();
+    }
+  }
+
   return res.status(401).json({
     error: 'Unauthorized',
     message: 'Admin authentication required. Please log in.',
@@ -246,11 +320,21 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     req.session.isAdmin = true;
     req.session.username = user.username;
 
-    return res.json({
-      status: 'success',
-      authenticated: true,
-      username: user.username,
-      role: user.role || 'admin',
+    const token = generateAuthToken(user);
+
+    // Explicitly persist session to storage to prevent race condition with subsequent client API requests
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save warning:', err);
+      }
+      return res.json({
+        status: 'success',
+        authenticated: true,
+        token,
+        username: user.username,
+        role: user.role || 'admin',
+        userId: user.id,
+      });
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -262,6 +346,12 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
 // POST /api/auth/logout
 app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    activeTokens.delete(token);
+  }
+
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to destroy session.' });
@@ -273,6 +363,7 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 
 // GET /api/auth/me
 app.get('/api/auth/me', (req: Request, res: Response) => {
+  // 1. Session check
   if (req.session && req.session.isAdmin) {
     return res.json({
       authenticated: true,
@@ -280,6 +371,26 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
       userId: req.session.userId,
     });
   }
+
+  // 2. Bearer token check
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    const tokenUser = verifyAuthToken(token);
+    if (tokenUser && tokenUser.role === 'admin') {
+      if (req.session) {
+        req.session.isAdmin = true;
+        req.session.userId = tokenUser.userId;
+        req.session.username = tokenUser.username;
+      }
+      return res.json({
+        authenticated: true,
+        username: tokenUser.username,
+        userId: tokenUser.userId,
+      });
+    }
+  }
+
   return res.json({ authenticated: false });
 });
 

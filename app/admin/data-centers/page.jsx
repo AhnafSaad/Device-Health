@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Building2, 
@@ -36,12 +36,59 @@ export default function AdminDataCentersPage() {
   const [editLocation, setEditLocation] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Helper to retrieve auth token
+  const getAuthToken = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem('healthstream_auth_token') || sessionStorage.getItem('healthstream_auth_token') || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper to handle 401 Unauthorized
+  const handleUnauthorized = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('healthstream_auth_token');
+        sessionStorage.removeItem('healthstream_auth_token');
+        localStorage.removeItem('healthstream_user');
+      } catch {}
+      window.dispatchEvent(new CustomEvent('healthstream:unauthorized'));
+    }
+    router.push('/');
+  }, [router]);
+
+  // Authenticated fetch helper
+  const apiFetch = useCallback(async (url, options = {}) => {
+    const token = getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    };
+
+    const res = await fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers,
+    });
+
+    if (res.status === 401) {
+      handleUnauthorized();
+      return null;
+    }
+
+    return res;
+  }, [handleUnauthorized]);
+
   // Fetch initial datacenters
   useEffect(() => {
     async function fetchDatacenters() {
       try {
         setLoading(true);
-        const res = await fetch('/api/datacenters');
+        const res = await apiFetch('/api/datacenters');
+        if (!res) return;
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.datacenters)) {
@@ -56,7 +103,7 @@ export default function AdminDataCentersPage() {
     }
 
     fetchDatacenters();
-  }, []);
+  }, [apiFetch]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -78,11 +125,12 @@ export default function AdminDataCentersPage() {
     setAlert(null);
 
     try {
-      const res = await fetch('/api/datacenters', {
+      const res = await apiFetch('/api/datacenters', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
+
+      if (!res) return; // 401 redirected
 
       if (res.ok) {
         const data = await res.json();
@@ -153,11 +201,12 @@ export default function AdminDataCentersPage() {
     setAlert(null);
 
     try {
-      const res = await fetch(`/api/datacenters/${editingId}`, {
+      const res = await apiFetch(`/api/datacenters/${editingId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
+
+      if (!res) return; // 401 redirected
 
       let updated = {
         id: editingId,
@@ -200,7 +249,9 @@ export default function AdminDataCentersPage() {
     setAlert(null);
 
     try {
-      await fetch(`/api/datacenters/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/datacenters/${id}`, { method: 'DELETE' });
+      if (!res) return; // 401 redirected
+
       setDatacenters((prev) => prev.filter((d) => String(d.id) !== String(id)));
       setAlert({ type: 'success', message: `Data Center "${dcName}" deleted successfully.` });
     } catch {

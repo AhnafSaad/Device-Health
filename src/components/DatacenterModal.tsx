@@ -14,6 +14,7 @@ import {
   Check
 } from 'lucide-react';
 import { Datacenter } from '../types';
+import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 interface DatacenterModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface DatacenterModalProps {
   onAddDatacenter: (dc: Datacenter) => void;
   onDeleteDatacenter: (id: string | number) => void;
   onUpdateDatacenter?: (dc: Datacenter) => void;
+  onUnauthorized?: () => void;
 }
 
 export const DatacenterModal: React.FC<DatacenterModalProps> = ({
@@ -31,6 +33,7 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   onAddDatacenter,
   onDeleteDatacenter,
   onUpdateDatacenter,
+  onUnauthorized,
 }) => {
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -67,12 +70,17 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
     setAlert(null);
 
     try {
-      const res = await fetch('/api/datacenters', {
+      const res = await fetchWithAuth('/api/datacenters', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
+
+      if (res.status === 401) {
+        clearAuth();
+        onClose();
+        onUnauthorized?.();
+        return;
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -142,12 +150,17 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
     setAlert(null);
 
     try {
-      const res = await fetch(`/api/datacenters/${editingId}`, {
+      const res = await fetchWithAuth(`/api/datacenters/${editingId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name: cleanName, location: cleanLoc }),
       });
+
+      if (res.status === 401) {
+        clearAuth();
+        onClose();
+        onUnauthorized?.();
+        return;
+      }
 
       const updatedDc: Datacenter = {
         id: editingId,
@@ -189,7 +202,13 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
     setAlert(null);
 
     try {
-      await fetch(`/api/datacenters/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetchWithAuth(`/api/datacenters/${id}`, { method: 'DELETE' });
+      if (res.status === 401) {
+        clearAuth();
+        onClose();
+        onUnauthorized?.();
+        return;
+      }
       onDeleteDatacenter(id);
       setAlert({ type: 'success', message: `Data Center "${dcName}" deleted successfully.` });
     } catch {
