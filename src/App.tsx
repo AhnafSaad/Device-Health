@@ -252,6 +252,20 @@ export default function App() {
               temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (d.temperature ?? null),
               powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (Array.isArray(d.powerSupplies) ? d.powerSupplies : null),
               fans: Array.isArray(d.fans) ? d.fans : null,
+              deviceModel: d.device_model ?? d.deviceModel ?? null,
+              sysDescr: d.sys_descr ?? d.sysDescr ?? null,
+              storage: Array.isArray(d.storage)
+                ? d.storage
+                : typeof d.storage === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.storage);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : null,
               opticalTx: d.optical_tx !== undefined && d.optical_tx !== null ? Number(d.optical_tx) : (d.opticalTx ?? null),
               opticalRx: d.optical_rx !== undefined && d.optical_rx !== null ? Number(d.optical_rx) : (d.opticalRx ?? null),
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
@@ -559,6 +573,20 @@ export default function App() {
                 temperature: live.temperature !== undefined && live.temperature !== null ? Number(live.temperature) : (live.temperature ?? existing?.temperature ?? null),
                 powerSupplies: Array.isArray(live.power_supplies) ? live.power_supplies : (Array.isArray(live.powerSupplies) ? live.powerSupplies : (existing?.powerSupplies ?? null)),
                 fans: Array.isArray(live.fans) ? live.fans : (existing?.fans ?? null),
+                deviceModel: live.device_model ?? live.deviceModel ?? existing?.deviceModel ?? null,
+                sysDescr: live.sys_descr ?? live.sysDescr ?? existing?.sysDescr ?? null,
+                storage: Array.isArray(live.storage)
+                  ? live.storage
+                  : typeof live.storage === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.storage);
+                        return Array.isArray(parsed) ? parsed : (existing?.storage ?? null);
+                      } catch {
+                        return existing?.storage ?? null;
+                      }
+                    })()
+                  : (existing?.storage ?? null),
                 opticalTx: live.optical_tx !== undefined && live.optical_tx !== null ? Number(live.optical_tx) : (live.opticalTx ?? existing?.opticalTx ?? null),
                 opticalRx: live.optical_rx !== undefined && live.optical_rx !== null ? Number(live.optical_rx) : (live.opticalRx ?? existing?.opticalRx ?? null),
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,

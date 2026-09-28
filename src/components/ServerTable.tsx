@@ -2,6 +2,7 @@ import React from 'react';
 import { Server, StatusFilter, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { BrandLogo } from './BrandLogo';
+import { formatRack } from '../utils/rack';
 import { 
   Search, 
   ChevronRight, 
@@ -501,7 +502,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       <div className="flex items-center gap-1 text-[10px] font-mono text-base-content/50 ml-5">
                         <span className="truncate max-w-[110px]">{server.location}</span>
                         <span>•</span>
-                        <span>{server.rackNumber}</span>
+                        <span>{formatRack(server.rackNumber) || 'Unassigned'}</span>
                       </div>
                     </td>
 

@@ -21,10 +21,10 @@ import {
   Activity,
   Tag
 } from 'lucide-react';
-import { Server, DeviceType, Datacenter, DeviceBrand, BRAND_OPTIONS } from '../types';
+import { Server, DeviceType, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
-import { BrandLogo } from './BrandLogo';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
+import { formatRack } from '../utils/rack';
 
 interface EditDeviceViewProps {
   deviceId: string;
@@ -56,7 +56,6 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
     ip_address: '',
     hostname: '',
     device_type: 'Server' as DeviceType,
-    brand: 'Other' as DeviceBrand,
     snmp_community: 'public',
     datacenter_id: '',
     location: '',
@@ -86,11 +85,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
           ip_address: initialDevice.ip,
           hostname: initialDevice.hostname,
           device_type: (initialDevice.deviceType as DeviceType) || 'Server',
-          brand: (initialDevice.brand as DeviceBrand) || 'Other',
           snmp_community: initialDevice.snmpCommunity || 'public',
           datacenter_id: initialDevice.datacenterId ? String(initialDevice.datacenterId) : '',
           location: initialDevice.location,
-          rack_number: initialDevice.rackNumber,
+          rack_number: formatRack(initialDevice.rackNumber),
         });
         setIsFetching(false);
         return;
@@ -133,11 +131,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 ip_address: mapped.ip,
                 hostname: mapped.hostname,
                 device_type: (mapped.deviceType as DeviceType) || 'Server',
-                brand: (mapped.brand as DeviceBrand) || 'Other',
                 snmp_community: mapped.snmpCommunity || 'public',
                 datacenter_id: mapped.datacenterId ? String(mapped.datacenterId) : '',
                 location: mapped.location,
-                rack_number: mapped.rackNumber,
+                rack_number: formatRack(mapped.rackNumber),
               });
               setIsFetching(false);
               return;
@@ -172,11 +169,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
             ip_address: mapped.ip,
             hostname: mapped.hostname,
             device_type: (mapped.deviceType as DeviceType) || 'Server',
-            brand: (mapped.brand as DeviceBrand) || 'Other',
             snmp_community: mapped.snmpCommunity || 'public',
             datacenter_id: mapped.datacenterId ? String(mapped.datacenterId) : '',
             location: mapped.location,
-            rack_number: mapped.rackNumber,
+            rack_number: formatRack(mapped.rackNumber),
           });
         }
       } catch (err: any) {
@@ -204,7 +200,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         ...prev,
         datacenter_id: value,
         location: selectedDc ? selectedDc.location : prev.location,
-        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? selectedDc.racks[0] : prev.rack_number,
+        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? formatRack(selectedDc.racks[0]) : prev.rack_number,
       }));
     } else {
       setFormData((prev) => ({
@@ -224,11 +220,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
         ip_address: device.ip,
         hostname: device.hostname,
         device_type: (device.deviceType as DeviceType) || 'Server',
-        brand: (device.brand as DeviceBrand) || 'Other',
         snmp_community: device.snmpCommunity || 'public',
         datacenter_id: device.datacenterId ? String(device.datacenterId) : '',
         location: device.location,
-        rack_number: device.rackNumber,
+        rack_number: formatRack(device.rackNumber),
       });
       setAlert(null);
     }
@@ -273,16 +268,17 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
     const resolvedDcName = matchedDc ? matchedDc.name : (device?.datacenterName || 'Local Datacenter');
 
     try {
+      const existingHost = device?.hostname || formData.hostname;
+      const cleanRack = formatRack(formData.rack_number) || 'Rack 01';
       const payload = {
         id: deviceId,
         ip_address: cleanIp,
-        hostname: formData.hostname.trim() || `${formData.device_type.toLowerCase()}-${cleanIp.replace(/\./g, '-')}`,
+        hostname: existingHost,
         device_type: formData.device_type,
-        brand: formData.brand,
         datacenter_id: formData.datacenter_id || undefined,
         datacenter_name: resolvedDcName,
         location: formData.location.trim() || (matchedDc ? matchedDc.location : 'Primary Datacenter'),
-        rack_number: formData.rack_number.trim() || 'Rack 01 (U10)',
+        rack_number: cleanRack,
         snmp_community: formData.snmp_community.trim() || 'public',
       };
 
@@ -321,13 +317,13 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
       const normalizedServer: Server = {
         id: updatedServerData.id || deviceId,
         ip: updatedServerData.ip_address || cleanIp,
-        hostname: updatedServerData.hostname || payload.hostname,
+        hostname: existingHost,
         deviceType: (updatedServerData.device_type || formData.device_type) as DeviceType,
-        brand: updatedServerData.brand || formData.brand,
+        brand: device?.brand || updatedServerData.brand,
         datacenterId: updatedServerData.datacenter_id || formData.datacenter_id,
         datacenterName: updatedServerData.datacenter_name || resolvedDcName,
         location: updatedServerData.location || payload.location,
-        rackNumber: updatedServerData.rack_number || payload.rack_number,
+        rackNumber: formatRack(updatedServerData.rack_number) || cleanRack,
         snmpCommunity: updatedServerData.snmp_community || payload.snmp_community,
         cpuUsage: updatedServerData.cpu_usage ?? device?.cpuUsage ?? 30,
         ramUsage: updatedServerData.ram_usage ?? device?.ramUsage ?? 45,
@@ -496,45 +492,23 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* IP Address */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-base-content flex items-center justify-between">
-                    <span>IPv4 Management Address *</span>
-                    <span className="text-[10px] font-normal text-base-content/50">Required</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="ip_address"
-                    required
-                    placeholder="e.g. 10.0.1.15"
-                    value={formData.ip_address}
-                    onChange={handleChange}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-mono text-xs text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  />
-                  <p className="text-[10px] text-base-content/50">
-                    Static IP used for ICMP echo and telemetry polling.
-                  </p>
-                </div>
-
-                {/* Hostname */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-base-content flex items-center justify-between">
-                    <span>Cluster Hostname</span>
-                    <span className="text-[10px] font-normal text-base-content/50">Optional</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="hostname"
-                    placeholder="e.g. srv-app-prod-01"
-                    value={formData.hostname}
-                    onChange={handleChange}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-mono text-xs text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  />
-                  <p className="text-[10px] text-base-content/50">
-                    Unique human-readable network label.
-                  </p>
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-base-content flex items-center justify-between">
+                  <span>IPv4 Management Address *</span>
+                  <span className="text-[10px] font-normal text-base-content/50">Required</span>
+                </label>
+                <input
+                  type="text"
+                  name="ip_address"
+                  required
+                  placeholder="e.g. 10.0.1.15"
+                  value={formData.ip_address}
+                  onChange={handleChange}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-mono text-xs text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                />
+                <p className="text-[10px] text-base-content/50">
+                  Static IP used for ICMP echo and telemetry polling.
+                </p>
               </div>
 
               {/* Device Type Selection Cards */}
@@ -570,37 +544,6 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Device Brand / Vendor Dropdown */}
-              <div className="space-y-2 pt-2 border-t border-base-content/10">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-accent" />
-                    <span>Device Brand / Vendor *</span>
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <BrandLogo brand={formData.brand} size="xs" />
-                    <span className="text-[10px] text-base-content/50 font-mono">{formData.brand}</span>
-                  </div>
-                </div>
-                <div className="relative flex items-center">
-                  <select
-                    name="brand"
-                    value={formData.brand}
-                    onChange={handleChange}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-semibold text-xs text-base-content focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all pr-10"
-                  >
-                    {BRAND_OPTIONS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 pointer-events-none flex items-center">
-                    <BrandLogo brand={formData.brand} size="sm" />
-                  </div>
                 </div>
               </div>
             </div>
@@ -643,7 +586,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                         ...prev,
                         datacenter_id: dcId,
                         location: selectedDc ? selectedDc.location : prev.location,
-                        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? selectedDc.racks[0] : prev.rack_number,
+                        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? formatRack(selectedDc.racks[0]) : prev.rack_number,
                       }));
                     }}
                     onOpenDcModal={onOpenDcModal}
@@ -669,12 +612,12 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 {/* Rack Number */}
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-bold text-base-content">
-                    Rack Unit Position
+                    Rack
                   </label>
                   <input
                     type="text"
                     name="rack_number"
-                    placeholder="e.g. Rack A-01 (U12)"
+                    placeholder="e.g. Rack A-01"
                     value={formData.rack_number}
                     onChange={handleChange}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-mono text-xs text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -786,7 +729,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
 
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-base-content block truncate font-mono">
-                  {formData.hostname || 'unnamed-device'}
+                  {device?.hostname || formData.hostname || 'unnamed-device'}
                 </span>
                 <span className="text-[11px] text-base-content/60 block truncate">
                   {formData.location || 'Unassigned Location'}
@@ -796,7 +739,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
               <div className="pt-2 border-t border-base-content/10 grid grid-cols-2 gap-2 text-[11px]">
                 <div>
                   <span className="text-[9px] uppercase font-bold text-base-content/40 block">Rack Position</span>
-                  <span className="font-mono text-base-content/80 truncate block">{formData.rack_number || 'Rack 01'}</span>
+                  <span className="font-mono text-base-content/80 truncate block">{formatRack(formData.rack_number) || 'Rack 01'}</span>
                 </div>
                 <div>
                   <span className="text-[9px] uppercase font-bold text-base-content/40 block">SNMP Community</span>

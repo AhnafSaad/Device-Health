@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Server } from '../types';
+import { formatRack } from '../utils/rack';
 import { 
   X, 
   Server as ServerIcon, 
@@ -368,9 +369,11 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                 <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                   <div className="text-[11px] text-base-content/50 flex items-center gap-1 mb-1">
                     <Layers className="w-3 h-3 text-accent" />
-                    Rack Unit
+                    Rack
                   </div>
-                  <div className="font-semibold font-mono text-base-content">{server.rackNumber}</div>
+                  <div className="font-semibold font-mono text-base-content">
+                    {formatRack(server.rackNumber) || 'Unassigned'}
+                  </div>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">

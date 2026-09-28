@@ -14,9 +14,9 @@ import {
   Edit3,
   Tag
 } from 'lucide-react';
-import { Server, Datacenter, DeviceType, DeviceBrand, BRAND_OPTIONS } from '../types';
-import { BrandLogo } from './BrandLogo';
+import { Server, Datacenter, DeviceType } from '../types';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
+import { formatRack } from '../utils/rack';
 
 interface EditDeviceModalProps {
   isOpen: boolean;
@@ -36,9 +36,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
   existingIps,
 }) => {
   const [ip, setIp] = useState('');
-  const [hostname, setHostname] = useState('');
   const [deviceType, setDeviceType] = useState<DeviceType>('Server');
-  const [brand, setBrand] = useState<string>('Other');
   const [datacenterId, setDatacenterId] = useState<string>('');
   const [location, setLocation] = useState('');
   const [rackNumber, setRackNumber] = useState('');
@@ -51,12 +49,10 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
   useEffect(() => {
     if (device && isOpen) {
       setIp(device.ip || '');
-      setHostname(device.hostname || '');
       setDeviceType((device.deviceType as DeviceType) || 'Server');
-      setBrand((device.brand as string) || 'Other');
       setDatacenterId(device.datacenterId ? String(device.datacenterId) : '');
       setLocation(device.location || '');
-      setRackNumber(device.rackNumber || '');
+      setRackNumber(formatRack(device.rackNumber));
       setSnmpCommunity(device.snmpCommunity || 'public');
       setErrorMessage(null);
     }
@@ -81,9 +77,9 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
 
     // Validation
     const cleanIp = ip.trim();
-    const cleanHost = hostname.trim();
+    const existingHost = device.hostname;
     const cleanLocation = location.trim();
-    const cleanRack = rackNumber.trim();
+    const cleanRack = formatRack(rackNumber) || 'Unassigned';
     const cleanCommunity = snmpCommunity.trim();
 
     if (!cleanIp) {
@@ -103,11 +99,6 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       return;
     }
 
-    if (!cleanHost) {
-      setErrorMessage('Hostname is required.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     const selectedDc = datacenters.find((d) => String(d.id) === String(datacenterId));
@@ -117,16 +108,15 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       id: device.id,
       ip_address: cleanIp,
       ip: cleanIp,
-      hostname: cleanHost,
+      hostname: existingHost,
       device_type: deviceType,
       deviceType,
-      brand,
       datacenter_id: datacenterId || undefined,
       datacenterId: datacenterId || undefined,
       datacenter_name: resolvedDcName,
       datacenterName: resolvedDcName,
       location: cleanLocation || (selectedDc?.location ?? 'Local Datacenter'),
-      rack_number: cleanRack || 'Unassigned',
+      rack_number: cleanRack,
       snmp_community: cleanCommunity || 'public',
       status: device.status,
       health: device.health,
@@ -156,23 +146,23 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       const mergedServer: Server = {
         ...device,
         ip: cleanIp,
-        hostname: cleanHost,
+        hostname: existingHost,
         deviceType,
-        brand,
+        brand: device.brand,
         datacenterId: datacenterId || undefined,
         datacenterName: resolvedDcName,
         location: cleanLocation || (selectedDc?.location ?? device.location),
-        rackNumber: cleanRack || device.rackNumber,
+        rackNumber: cleanRack,
         snmpCommunity: cleanCommunity,
         ...(updatedFromServer ? {
           ip: updatedFromServer.ip_address || updatedFromServer.ip || cleanIp,
-          hostname: updatedFromServer.hostname || cleanHost,
+          hostname: existingHost,
           deviceType: updatedFromServer.device_type || updatedFromServer.deviceType || deviceType,
-          brand: updatedFromServer.brand !== undefined ? updatedFromServer.brand : brand,
+          brand: device.brand,
           datacenterId: updatedFromServer.datacenter_id || updatedFromServer.datacenterId || datacenterId,
           datacenterName: updatedFromServer.datacenter_name || updatedFromServer.datacenterName || resolvedDcName,
           location: updatedFromServer.location || cleanLocation,
-          rackNumber: updatedFromServer.rack_number || updatedFromServer.rackNumber || cleanRack,
+          rackNumber: formatRack(updatedFromServer.rack_number || updatedFromServer.rackNumber) || cleanRack,
           snmpCommunity: updatedFromServer.snmp_community || updatedFromServer.snmpCommunity || cleanCommunity,
         } : {}),
       };
@@ -184,13 +174,13 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       const localUpdated: Server = {
         ...device,
         ip: cleanIp,
-        hostname: cleanHost,
+        hostname: existingHost,
         deviceType,
-        brand,
+        brand: device.brand,
         datacenterId: datacenterId || undefined,
         datacenterName: resolvedDcName,
         location: cleanLocation || (selectedDc?.location ?? device.location),
-        rackNumber: cleanRack || device.rackNumber,
+        rackNumber: cleanRack,
         snmpCommunity: cleanCommunity,
       };
       onDeviceUpdated(localUpdated);
@@ -253,96 +243,42 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
               </div>
             )}
 
-            {/* Row 1: IP Address and Hostname */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                  IP Address <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={ip}
-                    onChange={(e) => setIp(e.target.value)}
-                    placeholder="e.g. 192.168.1.10"
-                    disabled={isSubmitting}
-                    className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
-                  />
-                </div>
-                <p className="text-[10px] text-base-content/50 mt-1">Must be a valid IPv4 address.</p>
+            {/* Row 1: IP Address (full width) */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
+                IP Address <span className="text-error">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={ip}
+                  onChange={(e) => setIp(e.target.value)}
+                  placeholder="e.g. 192.168.1.10"
+                  disabled={isSubmitting}
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
+                />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                  Hostname <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={hostname}
-                    onChange={(e) => setHostname(e.target.value)}
-                    placeholder="e.g. srv-app-core-01"
-                    disabled={isSubmitting}
-                    className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
-                  />
-                </div>
-                <p className="text-[10px] text-base-content/50 mt-1">Unique cluster DNS/FQDN moniker.</p>
-              </div>
+              <p className="text-[10px] text-base-content/50 mt-1">Must be a valid IPv4 address.</p>
             </div>
 
-            {/* Row 2: Device Type and Brand */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                  Device Architecture Type
-                </label>
-                <select
-                  value={deviceType}
-                  onChange={(e) => setDeviceType(e.target.value as DeviceType)}
-                  disabled={isSubmitting}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
-                >
-                  <option value="Server">Server (Compute / Database)</option>
-                  <option value="Router">Router (Gateway / BGP / Firewall)</option>
-                  <option value="Switch">Switch (Spine / Leaf / ToR)</option>
-                  <option value="OLT">OLT (Fiber Access Chassis)</option>
-                </select>
-                <p className="text-[10px] text-base-content/50 mt-1">Hardware telemetry profile category.</p>
-              </div>
-
-              {/* Device Brand / Vendor Dropdown */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-accent" />
-                    <span>Device Brand / Vendor</span>
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <BrandLogo brand={brand} size="xs" />
-                    <span className="text-[10px] text-base-content/50 font-mono">{brand}</span>
-                  </div>
-                </div>
-                <div className="relative flex items-center">
-                  <select
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none pr-9 font-semibold"
-                  >
-                    {BRAND_OPTIONS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2.5 pointer-events-none flex items-center">
-                    <BrandLogo brand={brand} size="sm" />
-                  </div>
-                </div>
-                <p className="text-[10px] text-base-content/50 mt-1">Manual hardware vendor assignment.</p>
-              </div>
+            {/* Row 2: Device Type (full width) */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
+                Device Architecture Type
+              </label>
+              <select
+                value={deviceType}
+                onChange={(e) => setDeviceType(e.target.value as DeviceType)}
+                disabled={isSubmitting}
+                className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
+              >
+                <option value="Server">Server</option>
+                <option value="Router">Router</option>
+                <option value="Switch">Switch</option>
+                <option value="OLT">OLT</option>
+              </select>
+              <p className="text-[10px] text-base-content/50 mt-1">Hardware telemetry profile category.</p>
             </div>
 
             {/* Row 3: Assigned Datacenter and Location */}
@@ -390,7 +326,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                  Rack &amp; Elevation
+                  Rack
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40">
@@ -400,7 +336,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
                     type="text"
                     value={rackNumber}
                     onChange={(e) => setRackNumber(e.target.value)}
-                    placeholder="e.g. Rack F-02 (U10)"
+                    placeholder="e.g. Rack A-01"
                     disabled={isSubmitting}
                     className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm font-mono rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
                   />

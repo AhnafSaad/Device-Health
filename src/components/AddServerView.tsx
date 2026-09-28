@@ -15,10 +15,10 @@ import {
   Plus,
   Tag
 } from 'lucide-react';
-import { Server, DeviceType, Datacenter, DeviceBrand, BRAND_OPTIONS } from '../types';
+import { Server, DeviceType, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
-import { BrandLogo } from './BrandLogo';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
+import { formatRack } from '../utils/rack';
 
 interface AddServerViewProps {
   onBack: () => void;
@@ -49,11 +49,10 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
   const [formData, setFormData] = useState({
     ip_address: '',
     device_type: 'Server' as DeviceType,
-    brand: 'MikroTik' as DeviceBrand,
     snmp_community: 'public',
     datacenter_id: datacenters.length > 0 ? String(datacenters[0].id) : '',
     location: datacenters.length > 0 ? datacenters[0].location : '',
-    rack_number: 'Rack 01 (U10)',
+    rack_number: 'Rack 01',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -67,7 +66,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
         ...prev,
         datacenter_id: value,
         location: selectedDc ? selectedDc.location : prev.location,
-        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? selectedDc.racks[0] : prev.rack_number,
+        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? formatRack(selectedDc.racks[0]) : prev.rack_number,
       }));
     } else {
       setFormData((prev) => ({
@@ -110,7 +109,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     const prefix = formData.device_type === 'Server'
       ? 'srv'
       : formData.device_type === 'Router'
-      ? (formData.brand === 'MikroTik' ? 'mtik' : 'rtr')
+      ? 'rtr'
       : formData.device_type === 'Switch'
       ? 'sw'
       : 'olt';
@@ -131,12 +130,12 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
           ip_address: cleanIp,
           hostname: generatedHostname,
           device_type: formData.device_type,
-          brand: formData.brand,
+          brand: 'Auto',
           datacenter_id: formData.datacenter_id || null,
           datacenter_name: finalDcName,
           snmp_community: formData.snmp_community.trim() || 'public',
           location: finalLocation,
-          rack_number: formData.rack_number.trim() || 'Rack TBD',
+          rack_number: formatRack(formData.rack_number) || 'Rack TBD',
         }),
       });
 
@@ -200,12 +199,12 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       location: finalLocation,
       datacenterId: formData.datacenter_id || undefined,
       datacenterName: finalDcName,
-      rackNumber: formData.rack_number.trim() || 'Rack TBD',
+      rackNumber: formatRack(formData.rack_number) || 'Rack TBD',
       deviceType: formData.device_type,
-      brand: formData.brand,
+      brand: polledTelemetry?.detected_brand || 'Auto',
       snmpCommunity: formData.snmp_community.trim() || 'public',
       os: formData.device_type === 'Router'
-        ? (formData.brand === 'MikroTik' ? 'MikroTik RouterOS 7.14' : formData.brand === 'Cisco' ? 'Cisco IOS-XE 17.9' : formData.brand === 'Juniper' ? 'Junos OS 23.2' : `${formData.brand} RouterOS`)
+        ? 'RouterOS'
         : formData.device_type === 'Switch'
         ? 'JunOS / EOS 4.28'
         : formData.device_type === 'OLT'
@@ -226,7 +225,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     setAlert({
       type: pollReachable === false ? 'warning' : 'success',
       message: pollReachable === false ? 'Device Registered (SNMP Unreachable)' : 'Device Provisioned Successfully (201 Created)',
-      submessage: `Device ${cleanIp} (${formData.brand} ${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation}. ${reachabilityText}.`,
+      submessage: `Device ${cleanIp} (${formData.device_type}) assigned to Data Center ${finalDcName || finalLocation}. ${reachabilityText}.`,
     });
 
     // Reset IP input
@@ -242,11 +241,10 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     setFormData({
       ip_address: '',
       device_type: 'Server' as DeviceType,
-      brand: 'MikroTik' as DeviceBrand,
       snmp_community: 'public',
       datacenter_id: datacenters.length > 0 ? String(datacenters[0].id) : '',
       location: datacenters.length > 0 ? datacenters[0].location : '',
-      rack_number: 'Rack 01 (U10)',
+      rack_number: 'Rack 01',
     });
     setAlert(null);
   };
@@ -359,10 +357,10 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                 onChange={handleChange}
                 className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-semibold text-base-content outline-none transition-all"
               >
-                <option value="Server">Server (Compute / Database)</option>
-                <option value="Router">Router (Gateway / BGP / Core Router)</option>
-                <option value="Switch">Switch (Spine / Leaf ToR)</option>
-                <option value="OLT">OLT (Fiber Chassis GPON/XGS-PON)</option>
+                <option value="Server">Server</option>
+                <option value="Router">Router</option>
+                <option value="Switch">Switch</option>
+                <option value="OLT">OLT</option>
               </select>
               <p className="text-[11px] text-base-content/40 font-mono">
                 Selects automated SNMP OID telemetry probe
@@ -371,84 +369,44 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
 
           </div>
 
-          {/* Row 2: Device Brand / Vendor & Data Center Dropdown */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Row 2: Data Center Dropdown */}
+          <div className="space-y-1.5 relative z-20">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
+                <span>Data Center (Dynamic Dropdown)</span>
+                <span className="text-error">*</span>
+              </label>
+              <a
+                href="/admin/data-centers"
+                onClick={handleManageDcs}
+                className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>New DC</span>
+              </a>
+            </div>
+
+            <DatacenterDropdown
+              datacenters={datacenters}
+              selectedId={formData.datacenter_id}
+              onSelect={(dcId) => {
+                const selected = datacenters.find((d) => String(d.id) === String(dcId));
+                setFormData((prev) => ({
+                  ...prev,
+                  datacenter_id: dcId,
+                  location: selected ? selected.location : prev.location,
+                  rack_number: selected && selected.racks && selected.racks.length > 0 ? formatRack(selected.racks[0]) : prev.rack_number,
+                }));
+              }}
+              onOpenDcModal={handleManageDcs}
+              size="md"
+            />
             
-            {/* Device Brand / Vendor Dropdown */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-accent" />
-                  <span>Device Brand / Vendor</span>
-                  <span className="text-error">*</span>
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <BrandLogo brand={formData.brand} size="xs" />
-                  <span className="text-[10px] text-base-content/50 font-mono">{formData.brand}</span>
-                </div>
-              </div>
-              <div className="relative flex items-center">
-                <select
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-semibold text-base-content outline-none transition-all pr-10"
-                >
-                  {BRAND_OPTIONS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none flex items-center">
-                  <BrandLogo brand={formData.brand} size="sm" />
-                </div>
-              </div>
-              <p className="text-[11px] text-base-content/40 font-mono">
-                Manual hardware vendor (unlocked across all device types)
-              </p>
-            </div>
-
-            {/* Dynamic Datacenter Dropdown with solid opaque container & z-50 */}
-            <div className="space-y-1.5 relative z-20">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-primary" />
-                  <span>Data Center (Dynamic Dropdown)</span>
-                  <span className="text-error">*</span>
-                </label>
-                <a
-                  href="/admin/data-centers"
-                  onClick={handleManageDcs}
-                  className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>New DC</span>
-                </a>
-              </div>
-
-              <DatacenterDropdown
-                datacenters={datacenters}
-                selectedId={formData.datacenter_id}
-                onSelect={(dcId) => {
-                  const selected = datacenters.find((d) => String(d.id) === String(dcId));
-                  setFormData((prev) => ({
-                    ...prev,
-                    datacenter_id: dcId,
-                    location: selected ? selected.location : prev.location,
-                    rack_number: selected && selected.racks && selected.racks.length > 0 ? selected.racks[0] : prev.rack_number,
-                  }));
-                }}
-                onOpenDcModal={handleManageDcs}
-                size="md"
-              />
-              
-              <p className="text-[11px] text-base-content/50 flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-primary shrink-0" />
-                <span>Facility: {selectedDc?.location || formData.location || 'Unassigned'}</span>
-              </p>
-            </div>
-
+            <p className="text-[11px] text-base-content/50 flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-primary shrink-0" />
+              <span>Facility: {selectedDc?.location || formData.location || 'Unassigned'}</span>
+            </p>
           </div>
 
           {/* Row 3: Rack Cabinet & SNMP Community String */}
@@ -484,13 +442,13 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                   name="rack_number"
                   value={formData.rack_number}
                   onChange={handleChange}
-                  placeholder="e.g. Rack A-01 (U12)"
+                  placeholder="e.g. Rack A-01"
                   className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-mono text-base-content placeholder:text-base-content/30 outline-none transition-all"
                 />
               )}
               
               <p className="text-[11px] text-base-content/40 font-mono">
-                Cabinet location &amp; U-position
+                Cabinet location
               </p>
             </div>
 

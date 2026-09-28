@@ -962,6 +962,9 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.sys_name,
         t.power_supplies,
         t.fans,
+        t.device_model,
+        t.sys_descr,
+        t.storage,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1092,6 +1095,9 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         t.sys_name,
         t.power_supplies,
         t.fans,
+        t.device_model,
+        t.sys_descr,
+        t.storage,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1184,7 +1190,10 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         s.created_at,
         t.sys_name,
         t.power_supplies,
-        t.fans
+        t.fans,
+        t.device_model,
+        t.sys_descr,
+        t.storage
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address

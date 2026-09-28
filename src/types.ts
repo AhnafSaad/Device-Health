@@ -71,6 +71,15 @@ export interface Server {
   sysName?: string | null;
   powerSupplies?: { name: string; status: string }[] | null;
   fans?: { name: string; status: string; rpm?: number | null }[] | null;
+  deviceModel?: string | null;
+  sysDescr?: string | null;
+  storage?: {
+    name: string;
+    kind: string;
+    total_bytes: number;
+    used_bytes: number;
+    used_pct: number;
+  }[] | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

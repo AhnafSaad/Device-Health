@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Server } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { formatRack } from '../utils/rack';
 import { 
   ArrowLeft,
   Server as ServerIcon, 
@@ -101,12 +102,23 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
     }, 550);
   };
 
-  // Mock partition breakdown derived from server disk data
-  const partitions = [
-    { mount: '/', filesystem: '/dev/nvme0n1p2', total: '250 GB', usedPct: server.diskUsage, role: 'Root Filesystem' },
-    { mount: '/var/log', filesystem: '/dev/nvme0n1p3', total: '120 GB', usedPct: Math.min(98, Math.round(server.diskUsage * 1.08)), role: 'System Audit Logs' },
-    { mount: '/data', filesystem: '/dev/nvme1n1p1', total: '1.6 TB', usedPct: Math.max(12, Math.round(server.diskUsage * 0.85)), role: 'Primary Data Volume' },
-  ];
+  const formatStorageBytes = (bytes: number): string => {
+    const tib = 1024 ** 4;
+    const gib = 1024 ** 3;
+    const mib = 1024 ** 2;
+    if (bytes >= tib) return `${(bytes / tib).toFixed(2)} TiB`;
+    if (bytes >= gib) return `${(bytes / gib).toFixed(1)} GiB`;
+    return `${(bytes / mib).toFixed(1)} MiB`;
+  };
+
+  const formatStorageKind = (kind: string): string => {
+    const lower = (kind || '').toLowerCase();
+    if (lower === 'ram') return 'RAM';
+    if (lower === 'disk') return 'Disk';
+    if (lower === 'flash') return 'Flash';
+    if (lower === 'swap') return 'Swap';
+    return kind;
+  };
 
   const renderDeviceBadge = (type?: string) => {
     switch (type) {
@@ -645,47 +657,59 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
           </div>
 
-          {/* Individual Disk Partitions Breakdown (Server only) */}
-          {deviceType === 'Server' && (
-            <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
-                  <Database className="w-4 h-4 text-secondary" />
-                  Physical Disk Partitions &amp; File Systems
-                </h3>
-                <span className="text-[11px] font-mono text-base-content/50">ext4 / XFS</span>
-              </div>
-
-              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10">
-                {partitions.map((part) => (
-                  <div key={part.mount} className="p-4 text-xs">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <span className="font-mono font-bold text-base-content text-sm">{part.mount}</span>
-                        <span className="text-base-content/60 text-xs ml-2">({part.role})</span>
-                      </div>
-                      <div className="font-mono text-xs">
-                        <span className={`font-bold ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(part.usedPct)}`}>
-                          {isMetricsUnavailable ? 'N/A' : `${part.usedPct}%`}
-                        </span>
-                        <span className="text-base-content/50 ml-1">/ {part.total}</span>
-                      </div>
-                    </div>
-                    <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(part.usedPct)}`}
-                        style={{ width: isMetricsUnavailable ? '0%' : `${part.usedPct}%` }}
-                      />
-                    </div>
-                    <div className="text-[11px] font-mono text-base-content/50 mt-1.5 flex justify-between">
-                      <span>{part.filesystem}</span>
-                      <span>ext4 (rw,noatime,nodiratime)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Storage & Memory (All Device Types) */}
+          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                <Database className="w-4 h-4 text-secondary" />
+                Storage &amp; Memory
+              </h3>
+              <span className="text-[11px] font-mono text-base-content/50">
+                &lt;70% OK • 70-85% WARN • &gt;85% CRIT
+              </span>
             </div>
-          )}
+
+            {Array.isArray(server.storage) && server.storage.length > 0 ? (
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10">
+                {server.storage.map((item, idx) => {
+                  const pct = Number(item.used_pct ?? 0);
+                  const kindLabel = formatStorageKind(item.kind);
+                  return (
+                    <div key={`${item.name}-${idx}`} className="p-4 text-xs">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono font-bold text-base-content text-sm truncate">
+                            {item.name}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
+                            {kindLabel}
+                          </span>
+                        </div>
+                        <div className="font-mono text-xs shrink-0">
+                          <span className="text-base-content/70">
+                            {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
+                          </span>
+                          <span className={`font-bold ml-2 ${getMetricColor(pct)}`}>
+                            ({pct}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
+                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40">
+                Not reported by this device
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column (4 cols): Hardware Specs & SRE Diagnostics */}
@@ -715,6 +739,24 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
               <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
+                  <Cpu className="w-3.5 h-3.5 text-primary" />
+                  Device Model
+                </div>
+                <div className="font-semibold text-base-content font-mono">
+                  {server.deviceModel || 'Not reported'}
+                </div>
+                {server.sysDescr && (
+                  <div
+                    className="text-[11px] text-base-content/50 font-mono mt-1 line-clamp-2"
+                    title={server.sysDescr}
+                  >
+                    {server.sysDescr}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+                <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Clock className="w-3.5 h-3.5 text-primary" />
                   System Uptime
                 </div>
@@ -735,9 +777,11 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Layers className="w-3.5 h-3.5 text-accent" />
-                  Rack Elevation Unit
+                  Rack
                 </div>
-                <div className="font-semibold font-mono text-base-content">{server.rackNumber}</div>
+                <div className="font-semibold font-mono text-base-content">
+                  {formatRack(server.rackNumber) || 'Unassigned'}
+                </div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">

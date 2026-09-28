@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   sys_name VARCHAR(255),
   power_supplies JSONB,
   fans JSONB,
+  device_model VARCHAR(255),
+  sys_descr TEXT,
+  storage JSONB,
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -67,6 +70,9 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS optical_rx NUMERIC;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS sys_name VARCHAR(255);
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS power_supplies JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS fans JSONB;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS device_model VARCHAR(255);
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS sys_descr TEXT;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS storage JSONB;
 
 -- Indexes on ip_address and recorded_at (descending)
 CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);

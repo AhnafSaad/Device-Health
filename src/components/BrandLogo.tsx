@@ -12,6 +12,8 @@ export const BRAND_DOMAINS: Record<string, string> = {
   'TP-Link': 'tp-link.com',
   'Dell': 'dell.com',
   'HP': 'hp.com',
+  'ZTE': 'zte.com.cn',
+  'Supermicro': 'supermicro.com',
 };
 
 interface BrandLogoProps {
@@ -35,16 +37,20 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   }, [brand]);
 
   const cleanBrand = (brand || '').trim();
-  const domain = cleanBrand ? BRAND_DOMAINS[cleanBrand] : null;
+  const isDetecting = !cleanBrand || cleanBrand.toLowerCase() === 'auto';
+  const displayLabel = isDetecting ? 'Detecting...' : cleanBrand;
+  const domain = !isDetecting ? BRAND_DOMAINS[cleanBrand] : null;
 
   // Explicit overrides for brands lacking configured favicons or custom styling
   let logoSrc: string | null = null;
-  if (cleanBrand.toUpperCase() === 'BDCOM') {
-    logoSrc = 'https://ui-avatars.com/api/?name=BDCOM&background=0284c7&color=fff&bold=true&font-size=0.33';
-  } else if (cleanBrand.toUpperCase() === 'DBC') {
-    logoSrc = 'https://ui-avatars.com/api/?name=DBC&background=059669&color=fff&bold=true&font-size=0.4';
-  } else if (domain) {
-    logoSrc = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  if (!isDetecting) {
+    if (cleanBrand.toUpperCase() === 'BDCOM') {
+      logoSrc = 'https://ui-avatars.com/api/?name=BDCOM&background=0284c7&color=fff&bold=true&font-size=0.33';
+    } else if (cleanBrand.toUpperCase() === 'DBC') {
+      logoSrc = 'https://ui-avatars.com/api/?name=DBC&background=059669&color=fff&bold=true&font-size=0.4';
+    } else if (domain) {
+      logoSrc = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+    }
   }
 
   // Size classes: default to w-6 h-6, with responsive variants if requested
@@ -62,14 +68,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     lg: 'w-4.5 h-4.5',
   }[size] || 'w-3.5 h-3.5';
 
-  // Robust fallback: display first letter monogram or fallback SVG icon (Server / Box)
+  // Robust fallback: display generic neutral icon for Auto/empty/Other, or first letter monogram
   const renderFallback = () => {
-    const isOther = !cleanBrand || cleanBrand.toLowerCase() === 'other';
+    const isNeutralFallback = isDetecting || cleanBrand.toLowerCase() === 'other';
 
-    if (isOther) {
+    if (isNeutralFallback) {
       return (
         <span
-          title={cleanBrand || 'Device Brand'}
+          title={displayLabel}
           className={`inline-flex items-center justify-center rounded-full bg-white object-contain p-[2px] shadow-sm border border-gray-200 text-gray-600 shrink-0 align-middle ${sizeClasses} ${className}`}
         >
           <Server className={iconSizes} />
@@ -111,7 +117,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   return (
     <span className="inline-flex items-center gap-1.5 align-middle">
       {logoElement}
-      {cleanBrand && <span className="text-xs font-semibold text-base-content/90">{cleanBrand}</span>}
+      <span className="text-xs font-semibold text-base-content/90">{displayLabel}</span>
     </span>
   );
 };
