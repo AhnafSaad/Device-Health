@@ -62,6 +62,13 @@ export interface Server {
   os?: string;
   kernel?: string;
   loadAverage?: string;
+  connectedUsers?: number | null;
+  temperature?: number | null;
+  opticalTx?: number | null;
+  opticalRx?: number | null;
+  metricsAvailable?: boolean;
+  lastPolledAt?: string;
+  sysName?: string | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

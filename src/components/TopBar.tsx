@@ -15,6 +15,7 @@ import {
 interface TopBarProps {
   onRefresh: () => void;
   isRefreshing?: boolean;
+  isAutoFetching?: boolean;
   isAutoRefresh: boolean;
   setIsAutoRefresh: (val: boolean) => void;
   clusterHealthPercent: number;
@@ -33,6 +34,7 @@ interface TopBarProps {
 export const TopBar: React.FC<TopBarProps> = ({
   onRefresh,
   isRefreshing = false,
+  isAutoFetching = false,
   isAutoRefresh,
   setIsAutoRefresh,
   clusterHealthPercent,
@@ -142,14 +144,16 @@ export const TopBar: React.FC<TopBarProps> = ({
             onClick={() => setIsAutoRefresh(!isAutoRefresh)}
             className={`cursor-pointer select-none flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
               isAutoRefresh
-                ? 'bg-success/10 border-success/30 text-success shadow-[0_0_15px_rgba(34,197,94,0.15)]'
+                ? isAutoFetching
+                  ? 'bg-success/20 border-success/60 text-success shadow-[0_0_20px_rgba(34,197,94,0.3)]'
+                  : 'bg-success/10 border-success/30 text-success shadow-[0_0_15px_rgba(34,197,94,0.15)]'
                 : 'bg-base-200/60 border-base-content/10 text-base-content/50'
             }`}
-            title="Toggle 3s live polling"
+            title="Toggle live polling"
           >
             <span className="relative flex h-2 w-2">
               {isAutoRefresh && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-80" />
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-success ${isAutoFetching ? 'opacity-100' : 'opacity-80'}`} />
               )}
               <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoRefresh ? 'bg-success' : 'bg-base-content/30'}`} />
             </span>
@@ -166,7 +170,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             title="Poll telemetry snapshot now"
             aria-label="Refresh telemetry"
           >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isRefreshing || isAutoFetching ? 'animate-spin text-primary' : ''}`} />
           </button>
 
           {/* Light / Dark Mode Toggle Button */}

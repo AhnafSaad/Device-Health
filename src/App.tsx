@@ -204,6 +204,7 @@ export default function App() {
   // Live simulation telemetry state
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [pollIntervalMs, setPollIntervalMs] = useState<number>(60000);
 
   // Fetch initial datacenters from API
@@ -235,7 +236,8 @@ export default function App() {
             const mapped: Server[] = data.devices.map((d: any) => ({
               id: String(d.id),
               ip: d.ip_address || d.ip || '',
-              hostname: d.hostname || '',
+              hostname: d.sys_name || d.hostname || '',
+              sysName: d.sys_name ?? d.sysName ?? null,
               deviceType: d.device_type || d.deviceType || 'Server',
               brand: d.brand || 'Other',
               datacenterId: d.datacenter_id ?? d.datacenterId,
@@ -246,6 +248,12 @@ export default function App() {
               cpuUsage: Number(d.cpu_usage ?? d.cpuUsage ?? 0),
               ramUsage: Number(d.ram_usage ?? d.ramUsage ?? 0),
               diskUsage: Number(d.disk_usage ?? d.diskUsage ?? 0),
+              connectedUsers: d.connected_users !== undefined && d.connected_users !== null ? Number(d.connected_users) : (d.connectedUsers ?? null),
+              temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (d.temperature ?? null),
+              opticalTx: d.optical_tx !== undefined && d.optical_tx !== null ? Number(d.optical_tx) : (d.opticalTx ?? null),
+              opticalRx: d.optical_rx !== undefined && d.optical_rx !== null ? Number(d.optical_rx) : (d.opticalRx ?? null),
+              metricsAvailable: d.metrics_available ?? d.metricsAvailable,
+              lastPolledAt: d.recorded_at ?? d.lastPolledAt,
               status: (d.status as any) || 'offline',
               health: (d.health as any) || 'Critical',
               uptime: d.uptime || '0d 0h',
@@ -500,8 +508,12 @@ export default function App() {
 
   // Live telemetry polling from /api/telemetry (with on-demand SNMP sweep when manual = true)
   const handleRefresh = useCallback(async (manual = false) => {
+    const startTime = Date.now();
+    let hadError = false;
     if (manual) {
       setIsRefreshing(true);
+    } else {
+      setIsAutoFetching(true);
     }
     try {
       const endpoint = manual ? '/api/telemetry?refresh=true' : '/api/telemetry';
@@ -529,7 +541,8 @@ export default function App() {
               return {
                 id: String(live.id ?? existing?.id ?? `dev-${ip.replace(/\./g, '-')}`),
                 ip,
-                hostname: live.hostname || existing?.hostname || '',
+                hostname: live.sys_name || live.hostname || existing?.hostname || '',
+                sysName: live.sys_name ?? live.sysName ?? existing?.sysName ?? null,
                 deviceType: live.device_type || live.deviceType || existing?.deviceType || 'Server',
                 brand: live.brand || existing?.brand || 'Other',
                 datacenterId: live.datacenter_id ?? live.datacenterId ?? existing?.datacenterId,
@@ -540,6 +553,12 @@ export default function App() {
                 cpuUsage: Number(live.cpu_usage ?? live.cpuUsage ?? existing?.cpuUsage ?? 0),
                 ramUsage: Number(live.ram_usage ?? live.ramUsage ?? existing?.ramUsage ?? 0),
                 diskUsage: Number(live.disk_usage ?? live.diskUsage ?? existing?.diskUsage ?? 0),
+                connectedUsers: live.connected_users !== undefined && live.connected_users !== null ? Number(live.connected_users) : (live.connectedUsers ?? existing?.connectedUsers ?? null),
+                temperature: live.temperature !== undefined && live.temperature !== null ? Number(live.temperature) : (live.temperature ?? existing?.temperature ?? null),
+                opticalTx: live.optical_tx !== undefined && live.optical_tx !== null ? Number(live.optical_tx) : (live.opticalTx ?? existing?.opticalTx ?? null),
+                opticalRx: live.optical_rx !== undefined && live.optical_rx !== null ? Number(live.optical_rx) : (live.opticalRx ?? existing?.opticalRx ?? null),
+                metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
+                lastPolledAt: live.recorded_at ?? live.lastPolledAt ?? existing?.lastPolledAt,
                 status: (live.status as any) || existing?.status || 'offline',
                 health: (live.health as any) || existing?.health || 'Critical',
                 uptime: live.uptime || existing?.uptime || '0d 0h',
@@ -559,15 +578,28 @@ export default function App() {
         }
       }
     } catch {
+      hadError = true;
       if (manual) {
         setToast({
           type: 'error',
           message: 'Failed to refresh telemetry from server.',
         });
+      } else {
+        setIsAutoFetching(false);
       }
     } finally {
       if (manual) {
         setIsRefreshing(false);
+      } else if (hadError) {
+        setIsAutoFetching(false);
+      } else {
+        const elapsed = Date.now() - startTime;
+        const remaining = 1200 - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => setIsAutoFetching(false), remaining);
+        } else {
+          setIsAutoFetching(false);
+        }
       }
     }
   }, []);
@@ -582,13 +614,30 @@ export default function App() {
     }
   }, [servers, selectedServer]);
 
-  // Auto-refresh interval synced with SNMP polling cron setting
+  // Immediate refresh when entering dashboard or inspect view
   useEffect(() => {
-    if (!isAutoRefresh || currentView !== 'dashboard') return;
-    const interval = setInterval(() => {
+    if (authStatus !== 'authenticated') return;
+    if (currentView === 'dashboard' || currentView === 'inspect') {
       handleRefresh();
-    }, pollIntervalMs);
-    return () => clearInterval(interval);
+    }
+  }, [currentView, authStatus, handleRefresh]);
+
+  // Auto-refresh interval synced with SNMP polling cron setting (wall-clock aligned + 5s)
+  useEffect(() => {
+    if (!isAutoRefresh || (currentView !== 'dashboard' && currentView !== 'inspect')) return;
+    const delay = pollIntervalMs - (Date.now() % pollIntervalMs) + 5000;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const timeout = setTimeout(() => {
+      handleRefresh();
+      interval = setInterval(() => {
+        handleRefresh();
+      }, pollIntervalMs);
+    }, delay);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
   }, [isAutoRefresh, currentView, handleRefresh, pollIntervalMs]);
 
   // Keyboard shortcut: Pressing "/" or "Cmd+K" focuses the search bar
@@ -651,6 +700,7 @@ export default function App() {
       <TopBar
         onRefresh={() => handleRefresh(true)}
         isRefreshing={isRefreshing}
+        isAutoFetching={isAutoFetching}
         isAutoRefresh={isAutoRefresh}
         setIsAutoRefresh={setIsAutoRefresh}
         clusterHealthPercent={clusterHealthPercent}

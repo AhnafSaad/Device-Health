@@ -26,7 +26,10 @@ import {
   ChevronRight,
   ShieldCheck,
   Zap,
-  ExternalLink
+  ExternalLink,
+  Users,
+  Thermometer,
+  Info
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -49,6 +52,21 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const [pingResult, setPingResult] = useState<string | null>(null);
 
   const isOnline = server.status === 'online';
+  const isMetricsUnavailable = server.metricsAvailable === false;
+  const deviceType = server.deviceType || 'Server';
+
+  const formatLastPolled = (iso?: string) => {
+    if (!iso) return 'Never polled';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Never polled';
+    const timeStr = d.toLocaleTimeString([], {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    return `Last polled: ${timeStr}`;
+  };
 
   const getMetricColor = (val: number) => {
     if (val < 70) return 'text-emerald-500';
@@ -205,6 +223,10 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               <span className="text-base-content/70">
                 {server.datacenterName || server.location}
               </span>
+              <span>•</span>
+              <span className="text-[11px] text-base-content/40 font-mono">
+                {formatLastPolled(server.lastPolledAt)}
+              </span>
             </div>
           </div>
         </div>
@@ -258,7 +280,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         )}
 
         {/* Elevated CPU Alert */}
-        {isOnline && server.cpuUsage > 85 && (
+        {isOnline && !isMetricsUnavailable && server.cpuUsage > 85 && (
           <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.12)] flex items-start gap-3.5">
             <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
             <div>
@@ -271,7 +293,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         )}
 
         {/* Elevated RAM Alert */}
-        {isOnline && server.ramUsage > 85 && (
+        {isOnline && !isMetricsUnavailable && deviceType === 'Server' && server.ramUsage > 85 && (
           <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.12)] flex items-start gap-3.5">
             <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
             <div>
@@ -284,7 +306,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         )}
 
         {/* Elevated Disk Alert */}
-        {isOnline && server.diskUsage > 85 && (
+        {isOnline && !isMetricsUnavailable && deviceType === 'Server' && server.diskUsage > 85 && (
           <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
             <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
             <div>
@@ -296,11 +318,23 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
         )}
 
+        {/* Neutral Banner when SNMP vendor metrics are unavailable */}
+        {isOnline && isMetricsUnavailable && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-200/70 border border-base-content/15 text-base-content/80 flex items-start gap-3.5">
+            <Info className="w-6 h-6 shrink-0 mt-0.5 text-base-content/60" />
+            <div>
+              <div className="font-bold text-sm sm:text-base text-base-content">
+                SNMP metrics unavailable — device is reachable but did not respond to vendor-specific telemetry OIDs.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* All Nominal Alert */}
         {isOnline &&
+          !isMetricsUnavailable &&
           server.cpuUsage <= 85 &&
-          server.ramUsage <= 85 &&
-          server.diskUsage <= 85 && (
+          (deviceType !== 'Server' || (server.ramUsage <= 85 && server.diskUsage <= 85)) && (
             <div className="p-4 sm:p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-start gap-3.5 shadow-[0_0_20px_rgba(16,185,129,0.12)]">
               <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
               <div>
@@ -332,114 +366,194 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
 
             <div className="space-y-5">
-              {/* CPU Bar */}
+              {/* CPU Bar (all device types) */}
               <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
                 <div className="flex justify-between items-center text-xs font-semibold mb-2">
                   <span className="flex items-center gap-2 text-base-content">
                     <Cpu className="w-4 h-4 text-base-content/70" />
                     <span>Compute CPU Cores</span>
                   </span>
-                  <span className={`font-mono text-sm font-black ${getMetricColor(server.cpuUsage)}`}>
-                    {isOnline ? `${server.cpuUsage}%` : 'Offline'}
+                  <span className={`font-mono text-sm font-black ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(server.cpuUsage)}`}>
+                    {!isOnline ? 'Offline' : isMetricsUnavailable ? 'N/A' : `${server.cpuUsage}%`}
                   </span>
                 </div>
                 <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.cpuUsage)}`}
-                    style={{ width: isOnline ? `${server.cpuUsage}%` : '0%' }}
+                    className={`h-full rounded-full transition-all duration-500 ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(server.cpuUsage)}`}
+                    style={{ width: isOnline && !isMetricsUnavailable ? `${server.cpuUsage}%` : '0%' }}
                   />
                 </div>
                 <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
                   <span>Target SLA: &lt;70%</span>
-                  <span>Load Average: {server.loadAverage || '0.78, 0.84, 0.91'}</span>
+                  <span>Load Average: {isMetricsUnavailable ? 'N/A' : (server.loadAverage || '0.78, 0.84, 0.91')}</span>
                 </div>
               </div>
 
-              {/* RAM Bar */}
-              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
-                <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                  <span className="flex items-center gap-2 text-base-content">
-                    <MemoryStick className="w-4 h-4 text-base-content/70" />
-                    <span>RAM Memory Pool</span>
-                  </span>
-                  <span className={`font-mono text-sm font-black ${getMetricColor(server.ramUsage)}`}>
-                    {isOnline ? `${server.ramUsage}%` : 'Offline'}
-                  </span>
-                </div>
-                <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.ramUsage)}`}
-                    style={{ width: isOnline ? `${server.ramUsage}%` : '0%' }}
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
-                  <span>Target SLA: &lt;80%</span>
-                  <span>Used: {isOnline ? `${Math.round(server.ramUsage * 0.64)} GB / 64 GB` : '0 GB'}</span>
-                </div>
-              </div>
+              {/* Server: RAM & Disk Bars */}
+              {deviceType === 'Server' && (
+                <>
+                  {/* RAM Bar */}
+                  <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                    <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                      <span className="flex items-center gap-2 text-base-content">
+                        <MemoryStick className="w-4 h-4 text-base-content/70" />
+                        <span>RAM Memory Pool</span>
+                      </span>
+                      <span className={`font-mono text-sm font-black ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(server.ramUsage)}`}>
+                        {!isOnline ? 'Offline' : isMetricsUnavailable ? 'N/A' : `${server.ramUsage}%`}
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(server.ramUsage)}`}
+                        style={{ width: isOnline && !isMetricsUnavailable ? `${server.ramUsage}%` : '0%' }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
+                      <span>Target SLA: &lt;80%</span>
+                      <span>Used: {!isOnline ? '0 GB' : isMetricsUnavailable ? 'N/A' : `${Math.round(server.ramUsage * 0.64)} GB / 64 GB`}</span>
+                    </div>
+                  </div>
 
-              {/* Disk Bar */}
-              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
-                <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                  <span className="flex items-center gap-2 text-base-content">
-                    <HardDrive className="w-4 h-4 text-base-content/70" />
-                    <span>NVMe Storage Array</span>
-                  </span>
-                  <span className={`font-mono text-sm font-black ${getMetricColor(server.diskUsage)}`}>
-                    {server.diskUsage}%
-                  </span>
+                  {/* Disk Bar */}
+                  <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                    <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                      <span className="flex items-center gap-2 text-base-content">
+                        <HardDrive className="w-4 h-4 text-base-content/70" />
+                        <span>NVMe Storage Array</span>
+                      </span>
+                      <span className={`font-mono text-sm font-black ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(server.diskUsage)}`}>
+                        {isMetricsUnavailable ? 'N/A' : `${server.diskUsage}%`}
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(server.diskUsage)}`}
+                        style={{ width: isMetricsUnavailable ? '0%' : `${server.diskUsage}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
+                      <span>Target SLA: &lt;85%</span>
+                      <span>Allocated: {isMetricsUnavailable ? 'N/A' : `${Math.round(server.diskUsage * 20)} GB / 2,000 GB`}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Router: Connected Users Card */}
+              {deviceType === 'Router' && (
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                  <div className="flex justify-between items-center text-xs font-semibold mb-1">
+                    <span className="flex items-center gap-2 text-base-content">
+                      <Users className="w-4 h-4 text-primary" />
+                      <span>Connected Users</span>
+                    </span>
+                    <span className="font-mono text-sm font-black text-base-content">
+                      {!isOnline || isMetricsUnavailable || server.connectedUsers === null || server.connectedUsers === undefined
+                        ? 'N/A'
+                        : server.connectedUsers}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-base-content/60 font-mono">
+                    Active PPP / Hotspot / DHCP Subscriber Sessions
+                  </div>
                 </div>
-                <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.diskUsage)}`}
-                    style={{ width: `${server.diskUsage}%` }}
-                  />
+              )}
+
+              {/* Switch & OLT: Temperature (°C) Card */}
+              {(deviceType === 'Switch' || deviceType === 'OLT') && (
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                  <div className="flex justify-between items-center text-xs font-semibold mb-1">
+                    <span className="flex items-center gap-2 text-base-content">
+                      <Thermometer className="w-4 h-4 text-amber-500" />
+                      <span>Temperature (°C)</span>
+                    </span>
+                    <span className="font-mono text-sm font-black text-base-content">
+                      {!isOnline || isMetricsUnavailable || server.temperature === null || server.temperature === undefined
+                        ? 'N/A'
+                        : `${server.temperature} °C`}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-base-content/60 font-mono">
+                    Chassis Thermal Sensor Telemetry
+                  </div>
                 </div>
-                <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
-                  <span>Target SLA: &lt;85%</span>
-                  <span>Allocated: {Math.round(server.diskUsage * 20)} GB / 2,000 GB</span>
+              )}
+
+              {/* Switch: Optical Power (TX/RX in dBm) Card */}
+              {deviceType === 'Switch' && (
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs font-semibold">
+                    <span className="flex items-center gap-2 text-base-content">
+                      <Zap className="w-4 h-4 text-cyan-500" />
+                      <span>Optical Power (DOM/DDM)</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-base-content/50">dBm</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10">
+                      <div className="text-[10px] uppercase font-bold text-base-content/50">Optical TX Power</div>
+                      <div className="font-mono text-sm font-black text-base-content mt-0.5">
+                        {!isOnline || isMetricsUnavailable || server.opticalTx === null || server.opticalTx === undefined
+                          ? 'N/A'
+                          : `${server.opticalTx} dBm`}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10">
+                      <div className="text-[10px] uppercase font-bold text-base-content/50">Optical RX Power</div>
+                      <div className="font-mono text-sm font-black text-base-content mt-0.5">
+                        {!isOnline || isMetricsUnavailable || server.opticalRx === null || server.opticalRx === undefined
+                          ? 'N/A'
+                          : `${server.opticalRx} dBm`}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Individual Disk Partitions Breakdown */}
-          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
-                <Database className="w-4 h-4 text-secondary" />
-                Physical Disk Partitions &amp; File Systems
-              </h3>
-              <span className="text-[11px] font-mono text-base-content/50">ext4 / XFS</span>
-            </div>
+          {/* Individual Disk Partitions Breakdown (Server only) */}
+          {deviceType === 'Server' && (
+            <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-secondary" />
+                  Physical Disk Partitions &amp; File Systems
+                </h3>
+                <span className="text-[11px] font-mono text-base-content/50">ext4 / XFS</span>
+              </div>
 
-            <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10">
-              {partitions.map((part) => (
-                <div key={part.mount} className="p-4 text-xs">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <span className="font-mono font-bold text-base-content text-sm">{part.mount}</span>
-                      <span className="text-base-content/60 text-xs ml-2">({part.role})</span>
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10">
+                {partitions.map((part) => (
+                  <div key={part.mount} className="p-4 text-xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="font-mono font-bold text-base-content text-sm">{part.mount}</span>
+                        <span className="text-base-content/60 text-xs ml-2">({part.role})</span>
+                      </div>
+                      <div className="font-mono text-xs">
+                        <span className={`font-bold ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(part.usedPct)}`}>
+                          {isMetricsUnavailable ? 'N/A' : `${part.usedPct}%`}
+                        </span>
+                        <span className="text-base-content/50 ml-1">/ {part.total}</span>
+                      </div>
                     </div>
-                    <div className="font-mono text-xs">
-                      <span className={`font-bold ${getMetricColor(part.usedPct)}`}>{part.usedPct}%</span>
-                      <span className="text-base-content/50 ml-1">/ {part.total}</span>
+                    <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(part.usedPct)}`}
+                        style={{ width: isMetricsUnavailable ? '0%' : `${part.usedPct}%` }}
+                      />
+                    </div>
+                    <div className="text-[11px] font-mono text-base-content/50 mt-1.5 flex justify-between">
+                      <span>{part.filesystem}</span>
+                      <span>ext4 (rw,noatime,nodiratime)</span>
                     </div>
                   </div>
-                  <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full ${getProgressColor(part.usedPct)}`}
-                      style={{ width: `${part.usedPct}%` }}
-                    />
-                  </div>
-                  <div className="text-[11px] font-mono text-base-content/50 mt-1.5 flex justify-between">
-                    <span>{part.filesystem}</span>
-                    <span>ext4 (rw,noatime,nodiratime)</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right Column (4 cols): Hardware Specs & SRE Diagnostics */}

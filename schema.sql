@@ -50,8 +50,19 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   health VARCHAR(50) DEFAULT 'Normal',
   uptime VARCHAR(100) DEFAULT '0d 0h',
   load_average VARCHAR(100) DEFAULT '0.00, 0.00, 0.00',
+  connected_users INTEGER,
+  temperature NUMERIC,
+  optical_tx NUMERIC,
+  optical_rx NUMERIC,
+  sys_name VARCHAR(255),
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS connected_users INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS temperature NUMERIC;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS optical_tx NUMERIC;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS optical_rx NUMERIC;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS sys_name VARCHAR(255);
 
 -- Indexes on ip_address and recorded_at (descending)
 CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);

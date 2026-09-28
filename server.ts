@@ -242,8 +242,12 @@ interface DeviceRecord {
   rack_number: string;
   created_at: string;
   cpu_usage?: number;
-  ram_usage?: number;
-  disk_usage?: number;
+  ram_usage?: number | null;
+  disk_usage?: number | null;
+  connected_users?: number | null;
+  temperature?: number | null;
+  optical_tx?: number | null;
+  optical_rx?: number | null;
   status?: string;
   health?: string;
   uptime?: string;
@@ -255,8 +259,13 @@ export interface NormalizedTelemetry {
   status: string;
   health: string;
   cpu_usage: number;
-  ram_usage: number;
-  disk_usage: number;
+  ram_usage: number | null;
+  disk_usage: number | null;
+  connected_users?: number | null;
+  temperature?: number | null;
+  optical_tx?: number | null;
+  optical_rx?: number | null;
+  metrics_available?: boolean;
   uptime: string;
   load_average: string;
   snmp_reachable: boolean;
@@ -946,6 +955,11 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         ROUND(COALESCE(t.cpu_usage, 0)::numeric, 1) AS cpu_usage,
         ROUND(COALESCE(t.ram_usage, 0)::numeric, 1) AS ram_usage,
         ROUND(COALESCE(t.disk_usage, 0)::numeric, 1) AS disk_usage,
+        t.connected_users,
+        t.temperature,
+        t.optical_tx,
+        t.optical_rx,
+        t.sys_name,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -995,6 +1009,10 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
           cpu_usage: latest.cpu_usage,
           ram_usage: latest.ram_usage,
           disk_usage: latest.disk_usage,
+          connected_users: latest.connected_users ?? null,
+          temperature: latest.temperature ?? null,
+          optical_tx: latest.optical_tx ?? null,
+          optical_rx: latest.optical_rx ?? null,
           uptime: latest.uptime,
           status: latest.status,
           health: latest.health,
@@ -1016,6 +1034,10 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         cpu_usage: d.cpu_usage ?? 0,
         ram_usage: d.ram_usage ?? 0,
         disk_usage: d.disk_usage ?? 0,
+        connected_users: d.connected_users ?? null,
+        temperature: d.temperature ?? null,
+        optical_tx: d.optical_tx ?? null,
+        optical_rx: d.optical_rx ?? null,
         uptime: d.uptime ?? '0d 0h (Offline)',
         status: d.status ?? 'offline',
         health: d.health ?? 'Critical',
@@ -1061,6 +1083,11 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         ROUND(COALESCE(t.cpu_usage, 0)::numeric, 1) AS cpu_usage,
         ROUND(COALESCE(t.ram_usage, 0)::numeric, 1) AS ram_usage,
         ROUND(COALESCE(t.disk_usage, 0)::numeric, 1) AS disk_usage,
+        t.connected_users,
+        t.temperature,
+        t.optical_tx,
+        t.optical_rx,
+        t.sys_name,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1090,12 +1117,24 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
     const latestMap = getLatestTelemetryMap() as Map<string, NormalizedTelemetry>;
     const enrichedDevices = memoryDevices.map((d) => {
       const latest = latestMap.get(d.ip_address);
-      if (!latest) return d;
+      if (!latest) {
+        return {
+          ...d,
+          connected_users: d.connected_users ?? null,
+          temperature: d.temperature ?? null,
+          optical_tx: d.optical_tx ?? null,
+          optical_rx: d.optical_rx ?? null,
+        };
+      }
       return {
         ...d,
         cpu_usage: latest.cpu_usage,
         ram_usage: latest.ram_usage,
         disk_usage: latest.disk_usage,
+        connected_users: latest.connected_users ?? null,
+        temperature: latest.temperature ?? null,
+        optical_tx: latest.optical_tx ?? null,
+        optical_rx: latest.optical_rx ?? null,
         uptime: latest.uptime,
         status: latest.status,
         health: latest.health,
@@ -1138,10 +1177,13 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         COALESCE(s.location, d.location) AS location, 
         s.rack_number, 
         s.snmp_community, 
-        s.created_at
+        s.created_at,
+        t.sys_name
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
+      LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
       WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
+      ORDER BY t.recorded_at DESC NULLS LAST
       LIMIT 1;
     `, [id]);
 
@@ -1311,13 +1353,17 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
     newRecord.cpu_usage = pollResult.cpu_usage;
     newRecord.ram_usage = pollResult.ram_usage;
     newRecord.disk_usage = pollResult.disk_usage;
+    newRecord.connected_users = pollResult.connected_users ?? null;
+    newRecord.temperature = pollResult.temperature ?? null;
+    newRecord.optical_tx = pollResult.optical_tx ?? null;
+    newRecord.optical_rx = pollResult.optical_rx ?? null;
     newRecord.uptime = pollResult.uptime;
 
     // Persist real telemetry in database if available
     try {
       await query(`
-        INSERT INTO telemetry_data (ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, recorded_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW());
+        INSERT INTO telemetry_data (ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, connected_users, temperature, optical_tx, optical_rx, recorded_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW());
       `, [
         cleanIp,
         pollResult.cpu_usage,
@@ -1327,6 +1373,10 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
         pollResult.status,
         pollResult.health,
         pollResult.load_average,
+        pollResult.connected_users ?? null,
+        pollResult.temperature ?? null,
+        pollResult.optical_tx ?? null,
+        pollResult.optical_rx ?? null,
       ]);
     } catch {
       // safe fallback

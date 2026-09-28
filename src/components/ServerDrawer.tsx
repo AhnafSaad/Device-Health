@@ -43,13 +43,15 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
 
   const isOnline = server.status === 'online';
 
-  const getMetricColor = (val: number) => {
+  const getMetricColor = (val: number | null) => {
+    if (val === null || val === undefined) return 'text-base-content/50';
     if (val < 70) return 'text-emerald-500';
     if (val <= 85) return 'text-amber-500';
     return 'text-rose-500';
   };
 
-  const getProgressColor = (val: number) => {
+  const getProgressColor = (val: number | null) => {
+    if (val === null || val === undefined) return 'bg-base-300';
     if (val < 70) return 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
     if (val <= 85) return 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]';
     return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
@@ -77,10 +79,11 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
   };
 
   // Mock partition breakdown derived from server disk data
+  const baseDisk = server.diskUsage ?? 0;
   const partitions = [
-    { mount: '/', filesystem: '/dev/nvme0n1p2', total: '250 GB', usedPct: server.diskUsage, role: 'Root Filesystem' },
-    { mount: '/var/log', filesystem: '/dev/nvme0n1p3', total: '120 GB', usedPct: Math.min(98, Math.round(server.diskUsage * 1.08)), role: 'System Audit Logs' },
-    { mount: '/data', filesystem: '/dev/nvme1n1p1', total: '1.6 TB', usedPct: Math.max(12, Math.round(server.diskUsage * 0.85)), role: 'Primary Data Volume' },
+    { mount: '/', filesystem: '/dev/nvme0n1p2', total: '250 GB', usedPct: baseDisk, role: 'Root Filesystem' },
+    { mount: '/var/log', filesystem: '/dev/nvme0n1p3', total: '120 GB', usedPct: Math.min(98, Math.round(baseDisk * 1.08)), role: 'System Audit Logs' },
+    { mount: '/data', filesystem: '/dev/nvme1n1p1', total: '1.6 TB', usedPct: Math.max(12, Math.round(baseDisk * 0.85)), role: 'Primary Data Volume' },
   ];
 
   return (
@@ -165,7 +168,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
               )}
 
               {/* Elevated CPU Alert */}
-              {isOnline && server.cpuUsage > 85 && (
+              {isOnline && server.cpuUsage !== null && server.cpuUsage > 85 && (
                 <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.1)] flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                   <div>
@@ -178,7 +181,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
               )}
 
               {/* Elevated RAM Alert */}
-              {isOnline && server.ramUsage > 85 && (
+              {isOnline && server.ramUsage !== null && server.ramUsage > 85 && (
                 <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.1)] flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                   <div>
@@ -191,7 +194,7 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
               )}
 
               {/* Elevated Disk Alert */}
-              {isOnline && server.diskUsage > 85 && (
+              {isOnline && server.diskUsage !== null && server.diskUsage > 85 && (
                 <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)] flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                   <div>
@@ -205,9 +208,9 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
 
               {/* All Nominal Alert */}
               {isOnline &&
-                server.cpuUsage <= 85 &&
-                server.ramUsage <= 85 &&
-                server.diskUsage <= 85 && (
+                (server.cpuUsage === null || server.cpuUsage <= 85) &&
+                (server.ramUsage === null || server.ramUsage <= 85) &&
+                (server.diskUsage === null || server.diskUsage <= 85) && (
                   <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-start gap-3 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
                     <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
                     <div>
@@ -240,18 +243,18 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                       Compute CPU
                     </span>
                     <span className={`font-mono font-bold ${getMetricColor(server.cpuUsage)}`}>
-                      {isOnline ? `${server.cpuUsage}%` : 'Offline'}
+                      {!isOnline ? 'Offline' : server.cpuUsage !== null ? `${server.cpuUsage}%` : 'N/A'}
                     </span>
                   </div>
                   <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.cpuUsage)}`}
-                      style={{ width: isOnline ? `${server.cpuUsage}%` : '0%' }}
+                      style={{ width: isOnline && server.cpuUsage !== null ? `${server.cpuUsage}%` : '0%' }}
                     />
                   </div>
                   <div className="flex justify-between text-[10px] text-base-content/50 mt-1 font-mono">
                     <span>Target: &lt;70%</span>
-                    <span>Load: {server.loadAverage || '0.78, 0.84, 0.91'}</span>
+                    <span>Load: {server.loadAverage || 'N/A'}</span>
                   </div>
                 </div>
 
@@ -263,18 +266,18 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                       RAM Memory
                     </span>
                     <span className={`font-mono font-bold ${getMetricColor(server.ramUsage)}`}>
-                      {isOnline ? `${server.ramUsage}%` : 'Offline'}
+                      {!isOnline ? 'Offline' : server.ramUsage !== null ? `${server.ramUsage}%` : 'N/A'}
                     </span>
                   </div>
                   <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.ramUsage)}`}
-                      style={{ width: isOnline ? `${server.ramUsage}%` : '0%' }}
+                      style={{ width: isOnline && server.ramUsage !== null ? `${server.ramUsage}%` : '0%' }}
                     />
                   </div>
                   <div className="flex justify-between text-[10px] text-base-content/50 mt-1 font-mono">
                     <span>Target: &lt;80%</span>
-                    <span>Used: {isOnline ? `${Math.round(server.ramUsage * 0.64)} GB / 64 GB` : '0 GB'}</span>
+                    <span>Used: {!isOnline ? '0 GB' : server.ramUsage !== null ? `${Math.round(server.ramUsage * 0.64)} GB / 64 GB` : 'N/A'}</span>
                   </div>
                 </div>
 
@@ -286,18 +289,18 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
                       NVMe Storage Pool
                     </span>
                     <span className={`font-mono font-bold ${getMetricColor(server.diskUsage)}`}>
-                      {server.diskUsage}%
+                      {server.diskUsage !== null ? `${server.diskUsage}%` : 'N/A'}
                     </span>
                   </div>
                   <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${getProgressColor(server.diskUsage)}`}
-                      style={{ width: `${server.diskUsage}%` }}
+                      style={{ width: server.diskUsage !== null ? `${server.diskUsage}%` : '0%' }}
                     />
                   </div>
                   <div className="flex justify-between text-[10px] text-base-content/50 mt-1 font-mono">
                     <span>Target: &lt;85%</span>
-                    <span>Allocated: {Math.round(server.diskUsage * 20)} GB / 2,000 GB</span>
+                    <span>Allocated: {server.diskUsage !== null ? `${Math.round(server.diskUsage * 20)} GB / 2,000 GB` : 'N/A'}</span>
                   </div>
                 </div>
               </div>

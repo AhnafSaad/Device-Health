@@ -387,44 +387,62 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       <div className="text-[10px] text-base-content/40 font-mono mt-0.5">
                         {isOnline ? `Up: ${server.uptime}` : 'Host Unreachable'}
                       </div>
+                      <div className="text-[10px] text-base-content/40 font-mono">
+                        {server.lastPolledAt && !isNaN(new Date(server.lastPolledAt).getTime())
+                          ? `Last polled: ${new Date(server.lastPolledAt).toLocaleTimeString([], {
+                              hour12: false,
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })}`
+                          : 'Never polled'}
+                      </div>
                     </td>
 
-                    {/* 4. Core Resources: CPU Usage (%) and RAM Usage (%) only (Disk removed) */}
+                    {/* 4. Core Resources: CPU Usage (%) for all device types, RAM Usage (%) only for Server */}
                     <td className="py-2.5 px-3.5 hidden md:table-cell whitespace-nowrap">
                       {isOnline ? (
-                        <div className="space-y-1.5 w-36 sm:w-44">
-                          {/* CPU Meter */}
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
-                              <span className="text-base-content/50">CPU</span>
-                              <span className={`font-bold ${getResourceColor(server.cpuUsage)}`}>
-                                {server.cpuUsage}%
-                              </span>
+                        server.metricsAvailable === false ? (
+                          <span className="text-xs font-mono text-base-content/40 font-semibold">
+                            N/A
+                          </span>
+                        ) : (
+                          <div className="space-y-1.5 w-36 sm:w-44">
+                            {/* CPU Meter */}
+                            <div>
+                              <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
+                                <span className="text-base-content/50">CPU</span>
+                                <span className={`font-bold ${getResourceColor(server.cpuUsage)}`}>
+                                  {server.cpuUsage}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full bg-base-200 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${getResourceBarColor(server.cpuUsage)}`}
+                                  style={{ width: `${server.cpuUsage}%` }}
+                                />
+                              </div>
                             </div>
-                            <div className="h-1.5 w-full bg-base-200 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-300 ${getResourceBarColor(server.cpuUsage)}`}
-                                style={{ width: `${server.cpuUsage}%` }}
-                              />
-                            </div>
-                          </div>
 
-                          {/* RAM Meter */}
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
-                              <span className="text-base-content/50">RAM</span>
-                              <span className={`font-bold ${getResourceColor(server.ramUsage)}`}>
-                                {server.ramUsage}%
-                              </span>
-                            </div>
-                            <div className="h-1.5 w-full bg-base-200 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-300 ${getResourceBarColor(server.ramUsage)}`}
-                                style={{ width: `${server.ramUsage}%` }}
-                              />
-                            </div>
+                            {/* RAM Meter (Server only) */}
+                            {server.deviceType === 'Server' && (
+                              <div>
+                                <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
+                                  <span className="text-base-content/50">RAM</span>
+                                  <span className={`font-bold ${getResourceColor(server.ramUsage)}`}>
+                                    {server.ramUsage}%
+                                  </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-base-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-300 ${getResourceBarColor(server.ramUsage)}`}
+                                    style={{ width: `${server.ramUsage}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
+                        )
                       ) : (
                         <div className="flex items-center gap-1.5 text-xs text-rose-500 font-mono">
                           <AlertTriangle className="w-3.5 h-3.5" />
