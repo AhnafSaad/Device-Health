@@ -330,11 +330,39 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
         )}
 
+        {/* Critical PSU / Fan Hardware Alert */}
+        {isOnline &&
+          (() => {
+            const failedPsus = (server.powerSupplies || [])
+              .filter((p) => p.status === 'critical')
+              .map((p) => p.name);
+            const failedFans = (server.fans || [])
+              .filter((f) => f.status === 'critical')
+              .map((f) => f.name);
+            const failedUnits = [...failedPsus, ...failedFans];
+            if (failedUnits.length === 0) return null;
+            return (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertOctagon className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">
+                    Hardware Unit Failure: {failedUnits.join(', ')}
+                  </div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    Critical hardware sensor status reported for: {failedUnits.join(', ')}. Inspect chassis power supply or cooling fan tray immediately.
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
         {/* All Nominal Alert */}
         {isOnline &&
           !isMetricsUnavailable &&
           server.cpuUsage <= 85 &&
-          (deviceType !== 'Server' || (server.ramUsage <= 85 && server.diskUsage <= 85)) && (
+          (deviceType !== 'Server' || (server.ramUsage <= 85 && server.diskUsage <= 85)) &&
+          !(server.powerSupplies || []).some((p) => p.status === 'critical') &&
+          !(server.fans || []).some((f) => f.status === 'critical') && (
             <div className="p-4 sm:p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-start gap-3.5 shadow-[0_0_20px_rgba(16,185,129,0.12)]">
               <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
               <div>
@@ -460,25 +488,129 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               )}
 
-              {/* Switch & OLT: Temperature (°C) Card */}
-              {(deviceType === 'Switch' || deviceType === 'OLT') && (
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
-                  <div className="flex justify-between items-center text-xs font-semibold mb-1">
+              {/* All Device Types: Power Supplies, Fans & Temperature Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Power Supplies Card */}
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                  <div className="flex justify-between items-center text-xs font-semibold">
+                    <span className="flex items-center gap-2 text-base-content">
+                      <Zap className="w-4 h-4 text-emerald-500" />
+                      <span>Power Supplies</span>
+                    </span>
+                  </div>
+                  {Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0 ? (
+                    <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                      {server.powerSupplies.map((psu, idx) => {
+                        const rawVal = (psu as { raw_value?: number | null }).raw_value;
+                        const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
+                        const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
+                        const statusBadge =
+                          psu.status === 'ok'
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                            : psu.status === 'warning'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                            : psu.status === 'critical'
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                            : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+                        return (
+                          <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-mono">
+                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                            <div className="flex items-center gap-1.5">
+                              {rawVal !== undefined && rawVal !== null && (
+                                <span className="text-[10px] text-base-content/40 whitespace-nowrap">
+                                  raw value {rawVal}
+                                </span>
+                              )}
+                              <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                                {psu.status}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs font-mono text-base-content/40">
+                      Not reported by this device
+                    </div>
+                  )}
+                </div>
+
+                {/* Fans Card */}
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                  <div className="flex justify-between items-center text-xs font-semibold">
+                    <span className="flex items-center gap-2 text-base-content">
+                      <Activity className="w-4 h-4 text-sky-500" />
+                      <span>Fans</span>
+                    </span>
+                  </div>
+                  {Array.isArray(server.fans) && server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state').length > 0 ? (
+                    <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                      {server.fans
+                        .filter((f) => f.name?.toLowerCase() !== 'fan-state')
+                        .map((fan, idx) => {
+                          const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
+                          const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
+                          const statusBadge =
+                            fan.status === 'ok'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : fan.status === 'warning'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              : fan.status === 'critical'
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+                          return (
+                            <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-mono">
+                              <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                              <div className="flex items-center gap-1.5">
+                                {fan.rpm !== undefined && fan.rpm !== null && (
+                                  <span className="text-base-content/60 whitespace-nowrap">{fan.rpm} RPM</span>
+                                )}
+                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                                  {fan.status}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <div className="text-xs font-mono text-base-content/40">
+                      Not reported by this device
+                    </div>
+                  )}
+                </div>
+
+                {/* Temperature (°C) Card */}
+                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs font-semibold mb-2">
                     <span className="flex items-center gap-2 text-base-content">
                       <Thermometer className="w-4 h-4 text-amber-500" />
                       <span>Temperature (°C)</span>
                     </span>
-                    <span className="font-mono text-sm font-black text-base-content">
-                      {!isOnline || isMetricsUnavailable || server.temperature === null || server.temperature === undefined
+                  </div>
+                  <div className="my-1">
+                    <span
+                      className={`font-mono text-xl font-black ${
+                        !isOnline || server.temperature === null || server.temperature === undefined
+                          ? 'text-base-content/40'
+                          : server.temperature >= 85
+                          ? 'text-rose-500'
+                          : server.temperature >= 70
+                          ? 'text-amber-500'
+                          : 'text-emerald-500'
+                      }`}
+                    >
+                      {!isOnline || server.temperature === null || server.temperature === undefined
                         ? 'N/A'
                         : `${server.temperature} °C`}
                     </span>
                   </div>
-                  <div className="text-[11px] text-base-content/60 font-mono">
-                    Chassis Thermal Sensor Telemetry
+                  <div className="text-[11px] text-base-content/60 font-mono mt-1">
+                    Chassis Thermal Sensor
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Switch: Optical Power (TX/RX in dBm) Card */}
               {deviceType === 'Switch' && (

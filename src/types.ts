@@ -69,6 +69,8 @@ export interface Server {
   metricsAvailable?: boolean;
   lastPolledAt?: string;
   sysName?: string | null;
+  powerSupplies?: { name: string; status: string }[] | null;
+  fans?: { name: string; status: string; rpm?: number | null }[] | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

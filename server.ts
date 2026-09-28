@@ -960,6 +960,8 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.optical_tx,
         t.optical_rx,
         t.sys_name,
+        t.power_supplies,
+        t.fans,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1088,6 +1090,8 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         t.optical_tx,
         t.optical_rx,
         t.sys_name,
+        t.power_supplies,
+        t.fans,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1178,7 +1182,9 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         s.rack_number, 
         s.snmp_community, 
         s.created_at,
-        t.sys_name
+        t.sys_name,
+        t.power_supplies,
+        t.fans
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
