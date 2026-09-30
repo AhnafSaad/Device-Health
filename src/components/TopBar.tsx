@@ -7,6 +7,7 @@ import {
   Building2,
   Users,
   Sliders,
+  Bell,
   LogOut,
   Sun,
   Moon
@@ -19,12 +20,13 @@ interface TopBarProps {
   isAutoRefresh: boolean;
   setIsAutoRefresh: (val: boolean) => void;
   clusterHealthPercent: number;
-  currentView: 'dashboard' | 'add-device' | 'add-server' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling';
+  currentView: 'dashboard' | 'add-device' | 'add-server' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds';
   onNavigate: (view: 'dashboard' | 'add-device') => void;
   onOpenDcModal?: () => void;
   datacenterCount?: number;
   deviceCount?: number;
   onOpenUsersModal?: () => void;
+  onNavigateThresholds?: () => void;
   currentUsername?: string;
   onLogout?: () => void;
   theme?: 'dark' | 'light';
@@ -44,6 +46,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   datacenterCount,
   deviceCount = 0,
   onOpenUsersModal,
+  onNavigateThresholds,
   currentUsername = 'admin',
   onLogout,
   theme = 'dark',
@@ -132,6 +135,21 @@ export const TopBar: React.FC<TopBarProps> = ({
             >
               <Users className="w-3.5 h-3.5 text-primary" />
               <span>Users</span>
+            </button>
+          )}
+
+          {onNavigateThresholds && (
+            <button
+              onClick={onNavigateThresholds}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                currentView === 'thresholds'
+                  ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
+                  : 'text-base-content/70 hover:text-primary hover:bg-base-100/60'
+              }`}
+              title="Configure Alert Thresholds"
+            >
+              <Bell className="w-3.5 h-3.5 text-primary" />
+              <span>Alerts</span>
             </button>
           )}
         </div>

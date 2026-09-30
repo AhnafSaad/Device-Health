@@ -9,7 +9,14 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { query, ensureTablesExist, getSetting, setSetting, isDbConnected } from './lib/db.js';
-import { pollDevice } from './lib/snmp/poller.js';
+import { 
+  pollDevice, 
+  computeHealth, 
+  loadAlertThresholds, 
+  setThresholdsCache, 
+  getCachedThresholds, 
+  DEFAULT_ALERT_THRESHOLDS 
+} from './lib/snmp/poller.js';
 import { 
   startSnmpScheduler, 
   rescheduleSnmpPolling, 
@@ -620,6 +627,334 @@ app.put('/api/settings/snmp-poll-cron', requireAdmin, async (req: Request, res: 
 });
 
 // ==========================================
+// ALERT THRESHOLDS API ENDPOINTS
+// ==========================================
+
+const VALID_THRESHOLD_METRICS = new Set(['cpu', 'ram', 'disk', 'temperature', 'connected_users']);
+const VALID_THRESHOLD_DEVICE_TYPES = new Set(['All', 'Server', 'Router', 'Switch', 'OLT']);
+
+function normalizeDeviceTypeLabel(rawType: any): string {
+  const s = String(rawType || 'All').trim();
+  if (!s) return 'All';
+  const lower = s.toLowerCase();
+  if (lower === 'all') return 'All';
+  if (lower === 'server') return 'Server';
+  if (lower === 'router') return 'Router';
+  if (lower === 'switch') return 'Switch';
+  if (lower === 'olt') return 'OLT';
+  return s;
+}
+
+// GET /api/thresholds -> return all rows from alert_thresholds
+app.get('/api/thresholds', async (_req: Request, res: Response) => {
+  try {
+    if (isDbConnected()) {
+      const dbRes = await query(
+        `SELECT id, metric, device_type, warning_value, critical_value, enabled
+         FROM alert_thresholds
+         ORDER BY id ASC;`
+      );
+      const rows = ((dbRes && dbRes.rows) || []).map((r: any) => ({
+        id: Number(r.id),
+        metric: String(r.metric),
+        device_type: String(r.device_type),
+        warning_value: Number(r.warning_value),
+        critical_value: Number(r.critical_value),
+        enabled: Boolean(r.enabled),
+      }));
+      setThresholdsCache(rows);
+      return res.json({
+        status: 'success',
+        thresholds: rows,
+      });
+    }
+
+    const cached = await loadAlertThresholds();
+    return res.json({
+      status: 'success',
+      thresholds: cached,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to fetch alert thresholds.',
+    });
+  }
+});
+
+// PUT /api/thresholds -> accept an array of {metric, device_type, warning_value, critical_value, enabled} and upsert each
+const upsertThresholdsHandler = async (req: Request, res: Response) => {
+  try {
+    const rawItems = Array.isArray(req.body)
+      ? req.body
+      : Array.isArray(req.body?.thresholds)
+      ? req.body.thresholds
+      : req.body && typeof req.body === 'object' && req.body.metric
+      ? [req.body]
+      : null;
+
+    if (!rawItems || rawItems.length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Expected an array of threshold objects { metric, device_type, warning_value, critical_value, enabled }.',
+      });
+    }
+
+    const validatedItems: {
+      metric: string;
+      device_type: string;
+      warning_value: number;
+      critical_value: number;
+      enabled: boolean;
+    }[] = [];
+
+    for (const item of rawItems) {
+      const metric = String(item?.metric || '').trim().toLowerCase();
+      const deviceType = normalizeDeviceTypeLabel(item?.device_type);
+      const warn = Number(item?.warning_value);
+      const crit = Number(item?.critical_value);
+      const enabled = item?.enabled !== undefined ? Boolean(item.enabled) : true;
+
+      if (!VALID_THRESHOLD_METRICS.has(metric)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users.`,
+        });
+      }
+
+      if (!VALID_THRESHOLD_DEVICE_TYPES.has(deviceType)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Invalid device_type "${item?.device_type}". Allowed: All, Server, Router, Switch, OLT.`,
+        });
+      }
+
+      if (Number.isNaN(warn) || Number.isNaN(crit) || warn < 0 || crit < 0) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `warning_value and critical_value for "${metric}" (${deviceType}) must be non-negative numbers.`,
+        });
+      }
+
+      if (warn >= crit) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `warning_value (${warn}) must be less than critical_value (${crit}) for "${metric}" (${deviceType}).`,
+        });
+      }
+
+      validatedItems.push({
+        metric,
+        device_type: deviceType,
+        warning_value: warn,
+        critical_value: crit,
+        enabled,
+      });
+    }
+
+    if (isDbConnected()) {
+      for (const item of validatedItems) {
+        await query(
+          `INSERT INTO alert_thresholds (metric, device_type, warning_value, critical_value, enabled)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (metric, device_type)
+           DO UPDATE SET
+             warning_value = EXCLUDED.warning_value,
+             critical_value = EXCLUDED.critical_value,
+             enabled = EXCLUDED.enabled;`,
+          [item.metric, item.device_type, item.warning_value, item.critical_value, item.enabled]
+        );
+      }
+
+      const dbRes = await query(
+        `SELECT id, metric, device_type, warning_value, critical_value, enabled
+         FROM alert_thresholds
+         ORDER BY id ASC;`
+      );
+      const rows = ((dbRes && dbRes.rows) || []).map((r: any) => ({
+        id: Number(r.id),
+        metric: String(r.metric),
+        device_type: String(r.device_type),
+        warning_value: Number(r.warning_value),
+        critical_value: Number(r.critical_value),
+        enabled: Boolean(r.enabled),
+      }));
+      setThresholdsCache(rows);
+
+      // Recompute health on in-memory latest telemetry map
+      const latestMap = getLatestTelemetryMap() as Map<string, NormalizedTelemetry>;
+      for (const [, entry] of latestMap.entries()) {
+        if (entry && entry.status === 'online') {
+          entry.health = computeHealth(entry, rows);
+        }
+      }
+
+      return res.json({
+        status: 'success',
+        thresholds: rows,
+      });
+    }
+
+    // In-memory fallback upsert
+    const current = [...getCachedThresholds()];
+    for (const item of validatedItems) {
+      const existingIdx = current.findIndex(
+        (t) =>
+          t.metric.toLowerCase() === item.metric.toLowerCase() &&
+          t.device_type.toLowerCase() === item.device_type.toLowerCase()
+      );
+      if (existingIdx !== -1) {
+        current[existingIdx] = {
+          ...current[existingIdx],
+          warning_value: item.warning_value,
+          critical_value: item.critical_value,
+          enabled: item.enabled,
+        };
+      } else {
+        const nextId = current.reduce((max, t) => Math.max(max, Number(t.id) || 0), 0) + 1;
+        current.push({
+          id: nextId,
+          ...item,
+        });
+      }
+    }
+
+    const updated = setThresholdsCache(current);
+    const latestMap = getLatestTelemetryMap() as Map<string, NormalizedTelemetry>;
+    for (const [, entry] of latestMap.entries()) {
+      if (entry && entry.status === 'online') {
+        entry.health = computeHealth(entry, updated);
+      }
+    }
+
+    return res.json({
+      status: 'success',
+      thresholds: updated,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to update alert thresholds.',
+    });
+  }
+};
+
+app.put('/api/thresholds', requireAdmin, upsertThresholdsHandler);
+app.post('/api/thresholds', requireAdmin, upsertThresholdsHandler);
+
+// DELETE /api/thresholds/:id (and /api/thresholds) -> delete a threshold row by id
+const deleteThresholdHandler = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id || (req.query.id as string) || (req.body && req.body.id);
+    const metric = (req.query.metric as string) || (req.body && req.body.metric);
+    const deviceType = (req.query.device_type as string) || (req.body && req.body.device_type);
+
+    if (!id && !(metric && deviceType)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Threshold ID (or metric and device_type) is required for deletion.',
+      });
+    }
+
+    if (isDbConnected()) {
+      if (id) {
+        await query(`DELETE FROM alert_thresholds WHERE id = $1;`, [Number(id)]);
+      } else if (metric && deviceType) {
+        await query(
+          `DELETE FROM alert_thresholds WHERE LOWER(metric) = LOWER($1) AND LOWER(device_type) = LOWER($2);`,
+          [String(metric).trim(), String(deviceType).trim()]
+        );
+      }
+
+      const dbRes = await query(
+        `SELECT id, metric, device_type, warning_value, critical_value, enabled
+         FROM alert_thresholds
+         ORDER BY id ASC;`
+      );
+      const rows = ((dbRes && dbRes.rows) || []).map((r: any) => ({
+        id: Number(r.id),
+        metric: String(r.metric),
+        device_type: String(r.device_type),
+        warning_value: Number(r.warning_value),
+        critical_value: Number(r.critical_value),
+        enabled: Boolean(r.enabled),
+      }));
+      setThresholdsCache(rows);
+
+      return res.json({
+        status: 'success',
+        deletedId: id,
+        thresholds: rows,
+      });
+    }
+
+    const current = getCachedThresholds().filter((t) => {
+      if (id) return String(t.id) !== String(id);
+      return !(
+        t.metric.toLowerCase() === String(metric).trim().toLowerCase() &&
+        t.device_type.toLowerCase() === String(deviceType).trim().toLowerCase()
+      );
+    });
+    const updated = setThresholdsCache(current);
+
+    return res.json({
+      status: 'success',
+      deletedId: id,
+      thresholds: updated,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to delete alert threshold.',
+    });
+  }
+};
+
+app.delete('/api/thresholds/:id', requireAdmin, deleteThresholdHandler);
+app.delete('/api/thresholds', requireAdmin, deleteThresholdHandler);
+
+// POST /api/thresholds/reset -> reset alert_thresholds to default seed rows
+app.post('/api/thresholds/reset', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    if (isDbConnected()) {
+      await query(`DELETE FROM alert_thresholds;`);
+      await query(
+        `INSERT INTO alert_thresholds (metric, device_type, warning_value, critical_value, enabled)
+         VALUES
+           ('cpu', 'All', 75, 85, true),
+           ('ram', 'All', 80, 90, true),
+           ('disk', 'All', 70, 85, true),
+           ('temperature', 'All', 60, 75, true)
+         ON CONFLICT (metric, device_type) DO NOTHING;`
+      );
+      const dbRes = await query(
+        `SELECT id, metric, device_type, warning_value, critical_value, enabled
+         FROM alert_thresholds
+         ORDER BY id ASC;`
+      );
+      const rows = ((dbRes && dbRes.rows) || []).map((r: any) => ({
+        id: Number(r.id),
+        metric: String(r.metric),
+        device_type: String(r.device_type),
+        warning_value: Number(r.warning_value),
+        critical_value: Number(r.critical_value),
+        enabled: Boolean(r.enabled),
+      }));
+      setThresholdsCache(rows);
+      return res.json({ status: 'success', thresholds: rows });
+    }
+
+    const resetRows = setThresholdsCache(DEFAULT_ALERT_THRESHOLDS);
+    return res.json({ status: 'success', thresholds: resetRows });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error?.message || 'Failed to reset alert thresholds.',
+    });
+  }
+});
+
+// ==========================================
 // 1. DATACENTER API ENDPOINTS
 // ==========================================
 
@@ -940,6 +1275,9 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
       }
     }
 
+    // Read active alert thresholds before computing health
+    const activeThresholds = await loadAlertThresholds();
+
     // If PostgreSQL is connected and has rows, return latest telemetry row per device from DB
     const dbRes = await query(`
       SELECT DISTINCT ON (s.ip_address)
@@ -976,23 +1314,31 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
       ORDER BY s.ip_address, t.recorded_at DESC NULLS LAST;
     `);
 
+    const computeRowsWithThresholds = (rows: any[]) =>
+      rows.map((r) => ({
+        ...r,
+        health: computeHealth(r, activeThresholds),
+      }));
+
     if (isDbConnected()) {
+      const rows = computeRowsWithThresholds((dbRes && dbRes.rows) || []);
       return res.json({
         status: 'success',
         source: 'postgresql',
         database: 'noc_db',
         total_nodes: (dbRes && dbRes.rowCount) || 0,
-        telemetry: (dbRes && dbRes.rows) || [],
+        telemetry: rows,
       });
     }
 
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+      const rows = computeRowsWithThresholds(dbRes.rows);
       return res.json({
         status: 'success',
         source: 'postgresql',
         database: 'noc_db',
         total_nodes: dbRes.rowCount,
-        telemetry: dbRes.rows,
+        telemetry: rows,
       });
     }
 
@@ -1001,7 +1347,7 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
     const telemetry = memoryDevices.map((d) => {
       const latest = latestMap.get(d.ip_address);
       if (latest) {
-        return {
+        const merged = {
           id: d.id,
           ip_address: d.ip_address,
           hostname: d.hostname,
@@ -1024,9 +1370,11 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
           load_average: latest.load_average,
           recorded_at: latest.recorded_at,
         };
+        merged.health = computeHealth(merged, activeThresholds);
+        return merged;
       }
 
-      return {
+      const fallbackRow = {
         id: d.id,
         ip_address: d.ip_address,
         hostname: d.hostname,
@@ -1049,6 +1397,8 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         load_average: '0.00, 0.00, 0.00',
         recorded_at: d.created_at || new Date().toISOString(),
       };
+      fallbackRow.health = computeHealth(fallbackRow, activeThresholds);
+      return fallbackRow;
     });
 
     return res.json({
@@ -1072,6 +1422,9 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
 // GET /api/devices
 app.get('/api/devices', async (_req: Request, res: Response) => {
   try {
+    // Read active alert thresholds before computing health
+    const activeThresholds = await loadAlertThresholds();
+
     const dbRes = await query(`
       SELECT DISTINCT ON (s.ip_address)
         s.id, 
@@ -1108,19 +1461,27 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
       ORDER BY s.ip_address, t.recorded_at DESC NULLS LAST;
     `);
 
+    const computeDevicesWithThresholds = (rows: any[]) =>
+      rows.map((r) => ({
+        ...r,
+        health: computeHealth(r, activeThresholds),
+      }));
+
     if (isDbConnected()) {
+      const devices = computeDevicesWithThresholds((dbRes && dbRes.rows) || []);
       return res.json({
         status: 'success',
         total: (dbRes && dbRes.rowCount) || 0,
-        devices: (dbRes && dbRes.rows) || [],
+        devices,
       });
     }
 
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+      const devices = computeDevicesWithThresholds(dbRes.rows);
       return res.json({
         status: 'success',
         total: dbRes.rowCount,
-        devices: dbRes.rows,
+        devices,
       });
     }
 
@@ -1128,15 +1489,17 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
     const enrichedDevices = memoryDevices.map((d) => {
       const latest = latestMap.get(d.ip_address);
       if (!latest) {
-        return {
+        const base = {
           ...d,
           connected_users: d.connected_users ?? null,
           temperature: d.temperature ?? null,
           optical_tx: d.optical_tx ?? null,
           optical_rx: d.optical_rx ?? null,
         };
+        base.health = computeHealth(base, activeThresholds);
+        return base;
       }
-      return {
+      const merged = {
         ...d,
         cpu_usage: latest.cpu_usage,
         ram_usage: latest.ram_usage,
@@ -1150,6 +1513,8 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         health: latest.health,
         load_average: latest.load_average,
       };
+      merged.health = computeHealth(merged, activeThresholds);
+      return merged;
     });
 
     return res.json({
@@ -1353,14 +1718,20 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
       }
     }
 
+    // Read active thresholds before polling and computing health
+    const activeThresholds = await loadAlertThresholds();
+
     // Execute real one-time SNMP poll against new node to verify connectivity
-    const pollResult = (await pollDevice({
-      id: newRecord.id,
-      ip_address: cleanIp,
-      snmp_community: cleanCommunity,
-      brand: cleanBrand,
-      device_type: cleanType,
-    })) as NormalizedTelemetry;
+    const pollResult = (await pollDevice(
+      {
+        id: newRecord.id,
+        ip_address: cleanIp,
+        snmp_community: cleanCommunity,
+        brand: cleanBrand,
+        device_type: cleanType,
+      },
+      activeThresholds
+    )) as NormalizedTelemetry;
 
     // Update record with real polled telemetry
     newRecord.status = pollResult.status;
@@ -1720,6 +2091,7 @@ async function startServer() {
   try {
     await ensureTablesExist();
     await seedAdminUser();
+    await loadAlertThresholds(true);
   } catch (err: any) {
     console.warn('[server.ts] Database schema initialization warning:', err?.message);
   }

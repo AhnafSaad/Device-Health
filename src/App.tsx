@@ -13,6 +13,7 @@ import { DeleteDeviceModal } from './components/DeleteDeviceModal';
 import { InspectDeviceView } from './components/InspectDeviceView';
 import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
+import { ThresholdsView } from './components/ThresholdsView';
 import { fetchWithAuth, clearAuth } from './utils/auth';
 import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
 
@@ -39,7 +40,7 @@ export default function App() {
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
   const [usersModalTab, setUsersModalTab] = useState<'users' | 'polling'>('users');
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
   // Three-state authentication lifecycle: 'checking' | 'authenticated' | 'unauthenticated'
@@ -122,6 +123,11 @@ export default function App() {
     if (path === '/admin/users' || path === '/users') {
       setUsersModalTab('users');
       setCurrentView('admin-users');
+      setInspectDeviceId(null);
+      return;
+    }
+    if (path === '/admin/thresholds' || path === '/thresholds') {
+      setCurrentView('thresholds');
       setInspectDeviceId(null);
       return;
     }
@@ -745,6 +751,7 @@ export default function App() {
         datacenterCount={enrichedDatacenters.length}
         deviceCount={servers.length}
         onOpenUsersModal={() => router.push('/admin/users')}
+        onNavigateThresholds={() => router.push('/admin/thresholds')}
         currentUsername={currentUsername}
         onLogout={handleLogout}
         theme={theme}
@@ -805,6 +812,12 @@ export default function App() {
             currentUserId={currentUserId}
             initialTab={currentView === 'admin-polling' ? 'polling' : usersModalTab}
             authStatus={authStatus}
+            onUnauthorized={handleUnauthorized}
+          />
+        ) : currentView === 'thresholds' ? (
+          <ThresholdsView
+            onBack={() => router.push('/')}
+            fetchWithAuth={fetchWithAuth}
             onUnauthorized={handleUnauthorized}
           />
         ) : (

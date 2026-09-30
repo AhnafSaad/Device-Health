@@ -99,4 +99,23 @@ INSERT INTO settings (key, value)
 VALUES ('snmp_poll_cron', '*/1 * * * *')
 ON CONFLICT (key) DO NOTHING;
 
+-- 9. Create alert_thresholds table for configurable alert thresholds
+CREATE TABLE IF NOT EXISTS alert_thresholds (
+  id SERIAL PRIMARY KEY,
+  metric VARCHAR(32) NOT NULL,        -- 'cpu' | 'ram' | 'disk' | 'temperature' | 'connected_users'
+  device_type VARCHAR(32) NOT NULL DEFAULT 'All',  -- 'All' | 'Server' | 'Router' | 'Switch' | 'OLT'
+  warning_value NUMERIC NOT NULL,
+  critical_value NUMERIC NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  UNIQUE(metric, device_type)
+);
+
+INSERT INTO alert_thresholds (metric, device_type, warning_value, critical_value, enabled)
+VALUES
+  ('cpu', 'All', 75, 85, true),
+  ('ram', 'All', 80, 90, true),
+  ('disk', 'All', 70, 85, true),
+  ('temperature', 'All', 60, 75, true)
+ON CONFLICT (metric, device_type) DO NOTHING;
+
 
