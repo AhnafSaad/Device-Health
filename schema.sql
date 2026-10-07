@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   device_model VARCHAR(255),
   sys_descr TEXT,
   storage JSONB,
+  disk_percentage_used INTEGER,
+  disk_power_on_hours INTEGER,
+  disk_lifetime_bytes_read NUMERIC,
+  disk_lifetime_bytes_written NUMERIC,
+  disk_estimated_eol_days INTEGER,
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -73,6 +78,11 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS fans JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS device_model VARCHAR(255);
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS sys_descr TEXT;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS storage JSONB;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_percentage_used INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_power_on_hours INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_lifetime_bytes_read NUMERIC;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_lifetime_bytes_written NUMERIC;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_estimated_eol_days INTEGER;
 
 -- Indexes on ip_address and recorded_at (descending)
 CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);

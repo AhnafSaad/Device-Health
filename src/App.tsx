@@ -211,7 +211,7 @@ export default function App() {
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAutoFetching, setIsAutoFetching] = useState(false);
-  const [pollIntervalMs, setPollIntervalMs] = useState<number>(60000);
+  const [pollIntervalMs, setPollIntervalMs] = useState<number>(5000);
 
   // Fetch initial datacenters from API
   useEffect(() => {
@@ -272,6 +272,15 @@ export default function App() {
                     }
                   })()
                 : null,
+              diskIo: typeof d.disk_io === 'string'
+                ? (() => {
+                    try {
+                      return JSON.parse(d.disk_io);
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.disk_io ?? d.diskIo ?? null),
               opticalTx: d.optical_tx !== undefined && d.optical_tx !== null ? Number(d.optical_tx) : (d.opticalTx ?? null),
               opticalRx: d.optical_rx !== undefined && d.optical_rx !== null ? Number(d.optical_rx) : (d.opticalRx ?? null),
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
@@ -593,6 +602,15 @@ export default function App() {
                       }
                     })()
                   : (existing?.storage ?? null),
+                diskIo: typeof live.disk_io === 'string'
+                  ? (() => {
+                      try {
+                        return JSON.parse(live.disk_io);
+                      } catch {
+                        return existing?.diskIo ?? null;
+                      }
+                    })()
+                  : (live.disk_io !== undefined ? live.disk_io : (existing?.diskIo ?? null)),
                 opticalTx: live.optical_tx !== undefined && live.optical_tx !== null ? Number(live.optical_tx) : (live.opticalTx ?? existing?.opticalTx ?? null),
                 opticalRx: live.optical_rx !== undefined && live.optical_rx !== null ? Number(live.optical_rx) : (live.opticalRx ?? existing?.opticalRx ?? null),
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
@@ -660,21 +678,15 @@ export default function App() {
     }
   }, [currentView, authStatus, handleRefresh]);
 
-  // Auto-refresh interval synced with SNMP polling cron setting (wall-clock aligned + 5s)
+  // Real-time auto-refresh interval for dashboard and fleet telemetry
   useEffect(() => {
     if (!isAutoRefresh || (currentView !== 'dashboard' && currentView !== 'inspect')) return;
-    const delay = pollIntervalMs - (Date.now() % pollIntervalMs) + 5000;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const timeout = setTimeout(() => {
+    const interval = setInterval(() => {
       handleRefresh();
-      interval = setInterval(() => {
-        handleRefresh();
-      }, pollIntervalMs);
-    }, delay);
+    }, pollIntervalMs);
 
     return () => {
-      clearTimeout(timeout);
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
   }, [isAutoRefresh, currentView, handleRefresh, pollIntervalMs]);
 
@@ -741,6 +753,8 @@ export default function App() {
         isAutoFetching={isAutoFetching}
         isAutoRefresh={isAutoRefresh}
         setIsAutoRefresh={setIsAutoRefresh}
+        pollIntervalMs={pollIntervalMs}
+        setPollIntervalMs={setPollIntervalMs}
         clusterHealthPercent={clusterHealthPercent}
         currentView={currentView}
         onNavigate={(view) => {

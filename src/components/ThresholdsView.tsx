@@ -204,7 +204,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
       const list = Array.isArray(data) ? data : Array.isArray(data?.thresholds) ? data.thresholds : [];
       setRows(normalizeLoadedRows(list));
     } catch (err: any) {
-      setLoadError(err?.message || 'Failed to fetch alert thresholds from server.');
+      setLoadError(err?.message || 'Failed to fetch thresholds from server.');
     } finally {
       setLoading(false);
     }
@@ -455,14 +455,14 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-lg sm:text-xl font-black tracking-tight text-base-content">
-                Alert Thresholds
+                Thresholds
               </h1>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/25">
                 {customizedMetricsCount} of {METRIC_CONFIGS.length} metrics customized
               </span>
             </div>
             <p className="text-xs text-base-content/60 mt-1">
-              Configure warning and critical telemetry alert thresholds across all devices or per device type.
+              Configure warning and critical telemetry thresholds across all devices or per device type.
             </p>
           </div>
         </div>
@@ -485,7 +485,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
         <div className="bg-base-100 border border-base-content/10 rounded-2xl p-14 flex flex-col items-center justify-center gap-3 text-center shadow-lg">
           <span className="loading loading-spinner loading-md text-primary" />
           <span className="text-xs font-semibold text-base-content/70">
-            Loading alert thresholds...
+            Loading thresholds...
           </span>
         </div>
       )}
@@ -496,7 +496,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
           <div className="flex items-center gap-3 text-rose-500">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <div>
-              <p className="text-xs font-bold">Failed to load alert thresholds</p>
+              <p className="text-xs font-bold">Failed to load thresholds</p>
               <p className="text-xs opacity-80">{loadError}</p>
             </div>
           </div>

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Server } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { formatRack } from '../utils/rack';
+import { fetchWithAuth } from '../utils/auth';
 import { 
   ArrowLeft,
   Server as ServerIcon, 
@@ -30,7 +31,9 @@ import {
   ExternalLink,
   Users,
   Thermometer,
-  Info
+  Info,
+  Play,
+  Pause
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -39,6 +42,7 @@ interface InspectDeviceViewProps {
   onEditServer?: (server: Server) => void;
   onDeleteServer?: (server: Server) => void;
   onRebootServer?: (serverId: string) => void;
+  onUpdateServer?: (updated: Server) => void;
 }
 
 export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
@@ -47,14 +51,98 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   onEditServer,
   onDeleteServer,
   onRebootServer,
+  onUpdateServer,
 }) => {
+  const [liveServer, setLiveServer] = useState<Server>(server);
+  const [isLiveActive, setIsLiveActive] = useState<boolean>(true);
+  const [liveIntervalSec, setLiveIntervalSec] = useState<number>(2);
+  const [isPollingNow, setIsPollingNow] = useState<boolean>(false);
   const [copiedSsh, setCopiedSsh] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
 
-  const isOnline = server.status === 'online';
-  const isMetricsUnavailable = server.metricsAvailable === false;
-  const deviceType = server.deviceType || 'Server';
+  useEffect(() => {
+    setLiveServer(server);
+  }, [server]);
+
+  const activeServer = liveServer;
+  const isOnline = activeServer.status === 'online';
+  const isMetricsUnavailable = activeServer.metricsAvailable === false;
+  const deviceType = activeServer.deviceType || 'Server';
+
+  const pollingRef = useRef<boolean>(false);
+  const activeServerRef = useRef<Server>(liveServer);
+  activeServerRef.current = liveServer;
+  const onUpdateServerRef = useRef(onUpdateServer);
+  onUpdateServerRef.current = onUpdateServer;
+
+  const performLivePoll = useCallback(async () => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    setIsPollingNow(true);
+    try {
+      const cur = activeServerRef.current;
+      const res = await fetchWithAuth(`/api/devices/${encodeURIComponent(cur.id)}?refresh=true`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.device) {
+          const d = data.device;
+          const updated: Server = {
+            ...cur,
+            cpuUsage: Number(d.cpu_usage ?? d.cpuUsage ?? cur.cpuUsage ?? 0),
+            ramUsage: Number(d.ram_usage ?? d.ramUsage ?? cur.ramUsage ?? 0),
+            diskUsage: Number(d.disk_usage ?? d.diskUsage ?? cur.diskUsage ?? 0),
+            uptime: d.uptime || cur.uptime,
+            status: (d.status as any) || cur.status,
+            health: (d.health as any) || cur.health,
+            loadAverage: d.load_average || cur.loadAverage,
+            lastPolledAt: d.recorded_at || new Date().toISOString(),
+            storage: Array.isArray(d.storage)
+              ? d.storage
+              : typeof d.storage === 'string'
+              ? (() => {
+                  try {
+                    return JSON.parse(d.storage);
+                  } catch {
+                    return cur.storage;
+                  }
+                })()
+              : (cur.storage ?? null),
+            diskIo: typeof d.disk_io === 'string'
+              ? (() => {
+                  try {
+                    return JSON.parse(d.disk_io);
+                  } catch {
+                    return cur.diskIo;
+                  }
+                })()
+              : (d.disk_io !== undefined ? d.disk_io : (cur.diskIo ?? null)),
+          };
+          setLiveServer(updated);
+          onUpdateServerRef.current?.(updated);
+        }
+      }
+    } catch {
+      // safe fallback on transient poll error
+    } finally {
+      pollingRef.current = false;
+      setIsPollingNow(false);
+    }
+  }, []);
+
+  // Recurring live interval for real-time telemetry (especially disk I/O)
+  useEffect(() => {
+    if (!isLiveActive || liveIntervalSec <= 0) return;
+
+    // Trigger an initial poll on mount or server change immediately
+    performLivePoll();
+
+    const timer = setInterval(() => {
+      performLivePoll();
+    }, liveIntervalSec * 1000);
+
+    return () => clearInterval(timer);
+  }, [isLiveActive, liveIntervalSec, server.id, performLivePoll]);
 
   const formatLastPolled = (iso?: string) => {
     if (!iso) return 'Never polled';
@@ -118,6 +206,18 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
     if (lower === 'flash') return 'Flash';
     if (lower === 'swap') return 'Swap';
     return kind;
+  };
+
+  const formatDiskRate = (bytesPerSec?: number | null): string => {
+    if (bytesPerSec === null || bytesPerSec === undefined || bytesPerSec === 0) {
+      return '0 MB/s';
+    }
+    const mib = 1048576;
+    const kib = 1024;
+    if (bytesPerSec >= mib) {
+      return `${(bytesPerSec / mib).toFixed(1)} MB/s`;
+    }
+    return `${(bytesPerSec / kib).toFixed(1)} KB/s`;
   };
 
   const renderDeviceBadge = (type?: string) => {
@@ -710,6 +810,227 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               </div>
             )}
           </div>
+
+          {/* Disk I/O (Server devices only) */}
+          {deviceType === 'Server' && (
+            <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <HardDrive className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-base-content flex items-center gap-2">
+                      <span>Disk I/O Real-Time Throughput</span>
+                      {isLiveActive ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                          LIVE {liveIntervalSec}s
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-base-200 text-base-content/50 border border-base-content/10">
+                          PAUSED
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-base-content/50 font-mono">
+                      Real-time read/write throughput &amp; % activity distribution (/proc/diskstats)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Real-Time Live Polling Controls */}
+                <div className="flex items-center gap-1.5 bg-base-200/70 p-1 rounded-xl border border-base-content/10">
+                  <button
+                    type="button"
+                    onClick={() => setIsLiveActive(!isLiveActive)}
+                    className={`btn btn-xs gap-1 border-0 ${
+                      isLiveActive
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold hover:bg-emerald-500/30'
+                        : 'bg-base-300/80 text-base-content/60 font-semibold hover:bg-base-300'
+                    }`}
+                    title={isLiveActive ? 'Pause real-time streaming' : 'Resume real-time streaming'}
+                  >
+                    {isLiveActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                    <span>{isLiveActive ? 'Streaming' : 'Paused'}</span>
+                  </button>
+
+                  <div className="join">
+                    {[2, 3, 5, 10].map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => {
+                          setLiveIntervalSec(sec);
+                          if (!isLiveActive) setIsLiveActive(true);
+                        }}
+                        className={`join-item btn btn-xs px-2 border-0 ${
+                          liveIntervalSec === sec && isLiveActive
+                            ? 'bg-primary text-primary-content font-bold shadow-xs'
+                            : 'bg-base-100 hover:bg-base-200 text-base-content/70'
+                        }`}
+                        title={`Poll real-time telemetry every ${sec} seconds`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={performLivePoll}
+                    disabled={isPollingNow}
+                    className="btn btn-xs btn-ghost text-base-content/70 hover:text-primary gap-1"
+                    title="Poll real-time snapshot immediately"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPollingNow ? 'animate-spin text-primary' : ''}`} />
+                    <span className="hidden sm:inline">Poll Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {activeServer.diskIo ? (
+                (() => {
+                  const dio = activeServer.diskIo;
+                  const readBytes = dio.read_bytes_per_sec ?? 0;
+                  const writeBytes = dio.write_bytes_per_sec ?? 0;
+                  const totalBytes = dio.total_bytes_per_sec ?? (readBytes + writeBytes);
+                  const readPct = dio.read_pct ?? (totalBytes > 0 ? Math.round((readBytes / totalBytes) * 100) : 0);
+                  const writePct = dio.write_pct ?? (totalBytes > 0 ? (100 - readPct) : 0);
+                  const isIdle = totalBytes === 0;
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Read & Write % cards grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Read Throughput Card */}
+                        <div className="p-4 rounded-xl bg-base-200/40 border border-emerald-500/20 bg-emerald-500/[0.02] flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              <span>Read Throughput</span>
+                            </div>
+                            <div className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
+                              Read: {formatDiskRate(readBytes)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                              {readPct}%
+                            </span>
+                            <div className="text-[10px] text-base-content/50 uppercase font-semibold">
+                              Read Share
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Write Throughput Card */}
+                        <div className="p-4 rounded-xl bg-base-200/40 border border-sky-500/20 bg-sky-500/[0.02] flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-sky-500" />
+                              <span>Write Throughput</span>
+                            </div>
+                            <div className="font-mono text-lg font-black text-sky-600 dark:text-sky-400">
+                              Write: {formatDiskRate(writeBytes)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono text-2xl font-black text-sky-600 dark:text-sky-400">
+                              {writePct}%
+                            </span>
+                            <div className="text-[10px] text-base-content/50 uppercase font-semibold">
+                              Write Share
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Read vs Write % Distribution Bar */}
+                      <div className="p-4 rounded-xl bg-base-200/30 border border-base-content/10 space-y-2">
+                        <div className="flex justify-between items-center text-xs font-mono">
+                          <span className="text-base-content/70 font-semibold flex items-center gap-2">
+                            <span>I/O Distribution Ratio</span>
+                            {isIdle && (
+                              <span className="badge badge-xs badge-ghost text-[10px]">Disk Idle</span>
+                            )}
+                          </span>
+                          <span className="text-base-content/80 font-bold">
+                            Total I/O: {formatDiskRate(totalBytes)}
+                          </span>
+                        </div>
+
+                        {/* Visual Split Progress Bar */}
+                        <div className="h-3 w-full bg-base-300 rounded-full overflow-hidden flex shadow-inner">
+                          {isIdle ? (
+                            <div className="w-full h-full bg-base-content/15 flex items-center justify-center text-[9px] font-mono text-base-content/40">
+                              Idle (0 MB/s)
+                            </div>
+                          ) : (
+                            <>
+                              <div
+                                style={{ width: `${readPct}%` }}
+                                className="h-full bg-emerald-500 transition-all duration-300 flex items-center justify-center text-[9px] font-black text-emerald-950 overflow-hidden"
+                                title={`Read: ${readPct}% (${formatDiskRate(readBytes)})`}
+                              >
+                                {readPct >= 15 ? `${readPct}% Read` : ''}
+                              </div>
+                              <div
+                                style={{ width: `${writePct}%` }}
+                                className="h-full bg-sky-500 transition-all duration-300 flex items-center justify-center text-[9px] font-black text-sky-950 overflow-hidden"
+                                title={`Write: ${writePct}% (${formatDiskRate(writeBytes)})`}
+                              >
+                                {writePct >= 15 ? `${writePct}% Write` : ''}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] font-mono text-base-content/50 pt-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span>Read: {readPct}% ({formatDiskRate(readBytes)})</span>
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-sky-500" />
+                            <span>Write: {writePct}% ({formatDiskRate(writeBytes)})</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="p-4 rounded-xl bg-base-200/50 border border-primary/20 text-xs font-mono text-base-content/80 flex flex-wrap items-center justify-between gap-3 shadow-inner">
+                  <div className="flex items-center gap-3">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                    </span>
+                    <div>
+                      <div className="font-bold text-base-content text-xs flex items-center gap-2">
+                        <span>Calibrating Real-Time Disk I/O Rates...</span>
+                        <span className="badge badge-xs badge-primary font-mono">Live {liveIntervalSec}s</span>
+                      </div>
+                      <div className="text-[11px] text-base-content/60 mt-0.5">
+                        Sampling first pulse from /proc/diskstats. Computing live read/write MB/s &amp; % on next pulse.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={performLivePoll}
+                    disabled={isPollingNow}
+                    className="btn btn-xs btn-primary gap-1"
+                    title="Poll real-time delta immediately"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPollingNow ? 'animate-spin' : ''}`} />
+                    <span>Poll Delta Now</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column (4 cols): Hardware Specs & SRE Diagnostics */}

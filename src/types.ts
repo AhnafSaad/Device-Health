@@ -80,6 +80,13 @@ export interface Server {
     used_bytes: number;
     used_pct: number;
   }[] | null;
+  diskIo?: {
+    read_bytes_per_sec: number;
+    write_bytes_per_sec: number;
+    read_pct?: number;
+    write_pct?: number;
+    total_bytes_per_sec?: number;
+  } | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

@@ -1303,6 +1303,11 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.device_model,
         t.sys_descr,
         t.storage,
+        t.disk_percentage_used,
+        t.disk_power_on_hours,
+        t.disk_lifetime_bytes_read,
+        t.disk_lifetime_bytes_written,
+        t.disk_estimated_eol_days,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1451,6 +1456,11 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         t.device_model,
         t.sys_descr,
         t.storage,
+        t.disk_percentage_used,
+        t.disk_power_on_hours,
+        t.disk_lifetime_bytes_read,
+        t.disk_lifetime_bytes_written,
+        t.disk_estimated_eol_days,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1558,7 +1568,12 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.fans,
         t.device_model,
         t.sys_descr,
-        t.storage
+        t.storage,
+        t.disk_percentage_used,
+        t.disk_power_on_hours,
+        t.disk_lifetime_bytes_read,
+        t.disk_lifetime_bytes_written,
+        t.disk_estimated_eol_days
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address

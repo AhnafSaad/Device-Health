@@ -19,6 +19,8 @@ interface TopBarProps {
   isAutoFetching?: boolean;
   isAutoRefresh: boolean;
   setIsAutoRefresh: (val: boolean) => void;
+  pollIntervalMs?: number;
+  setPollIntervalMs?: (ms: number) => void;
   clusterHealthPercent: number;
   currentView: 'dashboard' | 'add-device' | 'add-server' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds';
   onNavigate: (view: 'dashboard' | 'add-device') => void;
@@ -39,6 +41,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   isAutoFetching = false,
   isAutoRefresh,
   setIsAutoRefresh,
+  pollIntervalMs = 5000,
+  setPollIntervalMs,
   clusterHealthPercent,
   currentView,
   onNavigate,
@@ -146,10 +150,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                   ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
                   : 'text-base-content/70 hover:text-primary hover:bg-base-100/60'
               }`}
-              title="Configure Alert Thresholds"
+              title="Configure Thresholds"
             >
               <Bell className="w-3.5 h-3.5 text-primary" />
-              <span>Alerts</span>
+              <span>Thresholds</span>
             </button>
           )}
         </div>
@@ -157,27 +161,53 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Right Section: Telemetry Pulse, Cluster Health & Operator Status */}
         <div className="flex items-center gap-2.5 sm:gap-3">
           
-          {/* Live Telemetry Glowing Beacon */}
-          <div 
-            onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-            className={`cursor-pointer select-none flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
-              isAutoRefresh
-                ? isAutoFetching
-                  ? 'bg-success/20 border-success/60 text-success shadow-[0_0_20px_rgba(34,197,94,0.3)]'
-                  : 'bg-success/10 border-success/30 text-success shadow-[0_0_15px_rgba(34,197,94,0.15)]'
-                : 'bg-base-200/60 border-base-content/10 text-base-content/50'
-            }`}
-            title="Toggle live polling"
-          >
-            <span className="relative flex h-2 w-2">
-              {isAutoRefresh && (
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-success ${isAutoFetching ? 'opacity-100' : 'opacity-80'}`} />
-              )}
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoRefresh ? 'bg-success' : 'bg-base-content/30'}`} />
-            </span>
-            <span className="text-[11px] font-semibold tracking-wide hidden md:inline">
-              {isAutoRefresh ? 'Live Telemetry' : 'Stream Paused'}
-            </span>
+          {/* Live Telemetry Glowing Beacon & Cadence Selector */}
+          <div className="flex items-center gap-1 bg-base-200/50 p-0.5 rounded-full border border-base-content/10">
+            <div 
+              onClick={() => setIsAutoRefresh(!isAutoRefresh)}
+              className={`cursor-pointer select-none flex items-center gap-2 px-2.5 py-1 rounded-full transition-all duration-300 ${
+                isAutoRefresh
+                  ? isAutoFetching
+                    ? 'bg-success/20 text-success shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                    : 'bg-success/10 text-success shadow-[0_0_10px_rgba(34,197,94,0.15)]'
+                  : 'bg-base-200/40 text-base-content/50'
+              }`}
+              title="Toggle live telemetry streaming"
+            >
+              <span className="relative flex h-2 w-2">
+                {isAutoRefresh && (
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-success ${isAutoFetching ? 'opacity-100' : 'opacity-80'}`} />
+                )}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoRefresh ? 'bg-success' : 'bg-base-content/30'}`} />
+              </span>
+              <span className="text-[11px] font-bold tracking-wide hidden md:inline">
+                {isAutoRefresh ? 'Live' : 'Paused'}
+              </span>
+            </div>
+
+            {isAutoRefresh && setPollIntervalMs && (
+              <div className="flex items-center pr-1 text-[10px] font-mono">
+                {[3000, 5000, 10000, 60000].map((ms) => {
+                  const label = ms < 60000 ? `${ms / 1000}s` : '1m';
+                  const active = pollIntervalMs === ms;
+                  return (
+                    <button
+                      key={ms}
+                      type="button"
+                      onClick={() => setPollIntervalMs(ms)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] transition-all font-semibold ${
+                        active
+                          ? 'bg-primary text-primary-content font-bold shadow-xs'
+                          : 'text-base-content/50 hover:text-base-content hover:bg-base-200'
+                      }`}
+                      title={`Auto-refresh every ${label}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Quick Telemetry Poll Button */}

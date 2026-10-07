@@ -81,6 +81,12 @@ export const ServerTable: React.FC<ServerTableProps> = ({
     return 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.5)]';
   };
 
+  const formatDiskRate = (bytes?: number | null) => {
+    if (!bytes) return '0 MB/s';
+    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
+    return `${(bytes / 1024).toFixed(1)} KB/s`;
+  };
+
   // Small, sleek Device Type Badge (Server, Router, Switch, OLT)
   const renderDeviceBadge = (type?: string) => {
     const raw = (type || 'Server').toLowerCase();
@@ -441,6 +447,37 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                                       className={`h-full rounded-full transition-all duration-300 ${getResourceBarColor(server.ramUsage)}`}
                                       style={{ width: `${server.ramUsage}%` }}
                                     />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Real-Time Disk I/O Meter (Server only) */}
+                              {server.deviceType === 'Server' && server.diskIo && (
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
+                                    <span className="text-base-content/50 flex items-center gap-1">
+                                      <span>Disk I/O</span>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    </span>
+                                    <span className="font-bold text-base-content/80 text-[10px]">
+                                      {formatDiskRate(server.diskIo.total_bytes_per_sec ?? ((server.diskIo.read_bytes_per_sec || 0) + (server.diskIo.write_bytes_per_sec || 0)))}
+                                    </span>
+                                  </div>
+                                  <div className="h-1.5 w-full bg-base-200 rounded-full overflow-hidden flex">
+                                    <div 
+                                      className="h-full bg-emerald-500 transition-all duration-300"
+                                      style={{ width: `${server.diskIo.read_pct ?? 0}%` }}
+                                      title={`Read: ${server.diskIo.read_pct ?? 0}% (${formatDiskRate(server.diskIo.read_bytes_per_sec)})`}
+                                    />
+                                    <div 
+                                      className="h-full bg-sky-500 transition-all duration-300"
+                                      style={{ width: `${server.diskIo.write_pct ?? 0}%` }}
+                                      title={`Write: ${server.diskIo.write_pct ?? 0}% (${formatDiskRate(server.diskIo.write_bytes_per_sec)})`}
+                                    />
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9px] font-mono text-base-content/60 mt-0.5">
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">R: {server.diskIo.read_pct ?? 0}%</span>
+                                    <span className="text-sky-600 dark:text-sky-400 font-semibold">W: {server.diskIo.write_pct ?? 0}%</span>
                                   </div>
                                 </div>
                               )}
