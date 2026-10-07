@@ -26,14 +26,13 @@ import {
   Pencil,
   Trash2,
   ChevronRight,
+  ChevronDown,
   ShieldCheck,
   Zap,
   ExternalLink,
   Users,
   Thermometer,
-  Info,
-  Play,
-  Pause
+  Info
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -60,6 +59,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const [copiedSsh, setCopiedSsh] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
+  const [isEccDetailsExpanded, setIsEccDetailsExpanded] = useState<boolean>(false);
 
   useEffect(() => {
     setLiveServer(server);
@@ -117,6 +117,25 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   }
                 })()
               : (d.disk_io !== undefined ? d.disk_io : (cur.diskIo ?? null)),
+            diskPercentageUsed: d.disk_percentage_used !== undefined && d.disk_percentage_used !== null ? Number(d.disk_percentage_used) : (d.diskPercentageUsed ?? cur.diskPercentageUsed ?? null),
+            diskPowerOnHours: d.disk_power_on_hours !== undefined && d.disk_power_on_hours !== null ? Number(d.disk_power_on_hours) : (d.diskPowerOnHours ?? cur.diskPowerOnHours ?? null),
+            diskLifetimeBytesRead: d.disk_lifetime_bytes_read !== undefined && d.disk_lifetime_bytes_read !== null ? Number(d.disk_lifetime_bytes_read) : (d.diskLifetimeBytesRead ?? cur.diskLifetimeBytesRead ?? null),
+            diskLifetimeBytesWritten: d.disk_lifetime_bytes_written !== undefined && d.disk_lifetime_bytes_written !== null ? Number(d.disk_lifetime_bytes_written) : (d.diskLifetimeBytesWritten ?? cur.diskLifetimeBytesWritten ?? null),
+            diskEstimatedEolDays: d.disk_estimated_eol_days !== undefined && d.disk_estimated_eol_days !== null ? Number(d.disk_estimated_eol_days) : (d.diskEstimatedEolDays ?? cur.diskEstimatedEolDays ?? null),
+            ramEccCorrected: d.ram_ecc_corrected !== undefined && d.ram_ecc_corrected !== null ? Number(d.ram_ecc_corrected) : (d.ramEccCorrected ?? cur.ramEccCorrected ?? null),
+            ramEccUncorrected: d.ram_ecc_uncorrected !== undefined && d.ram_ecc_uncorrected !== null ? Number(d.ram_ecc_uncorrected) : (d.ramEccUncorrected ?? cur.ramEccUncorrected ?? null),
+            ramEccControllers: Array.isArray(d.ram_ecc_controllers)
+              ? d.ram_ecc_controllers
+              : typeof d.ram_ecc_controllers === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(d.ram_ecc_controllers);
+                    return Array.isArray(parsed) ? parsed : (cur.ramEccControllers ?? null);
+                  } catch {
+                    return cur.ramEccControllers ?? null;
+                  }
+                })()
+              : (d.ram_ecc_controllers !== undefined ? d.ram_ecc_controllers : (cur.ramEccControllers ?? null)),
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
@@ -208,16 +227,57 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
     return kind;
   };
 
-  const formatDiskRate = (bytesPerSec?: number | null): string => {
-    if (bytesPerSec === null || bytesPerSec === undefined || bytesPerSec === 0) {
-      return '0 MB/s';
+  const formatPowerOnDuration = (hours?: number | null): string => {
+    if (hours === null || hours === undefined || isNaN(hours) || hours < 0) {
+      return 'N/A';
     }
-    const mib = 1048576;
-    const kib = 1024;
-    if (bytesPerSec >= mib) {
-      return `${(bytesPerSec / mib).toFixed(1)} MB/s`;
+    const h = Math.round(hours);
+    const years = Math.floor(h / 8760);
+    const remHours = h % 8760;
+    const months = Math.floor(remHours / 720);
+    const days = Math.floor((remHours % 720) / 24);
+
+    if (years > 0) {
+      return months > 0 ? `${years}y ${months}m` : `${years}y`;
     }
-    return `${(bytesPerSec / kib).toFixed(1)} KB/s`;
+    if (months > 0) {
+      return days > 0 ? `${months}m ${days}d` : `${months}m`;
+    }
+    if (days > 0) {
+      return `${days}d ${h % 24}h`;
+    }
+    return `${h}h`;
+  };
+
+  const formatLifetimeDataBytes = (bytes?: number | null): string => {
+    if (bytes === null || bytes === undefined || isNaN(bytes) || bytes < 0) {
+      return 'N/A';
+    }
+    const tb = 1000 ** 4;
+    const gb = 1000 ** 3;
+    if (bytes >= tb) {
+      return `${(bytes / tb).toFixed(1)} TB`;
+    }
+    if (bytes >= gb) {
+      return `${(bytes / gb).toFixed(1)} GB`;
+    }
+    const mb = 1000 ** 2;
+    if (bytes >= mb) {
+      return `${(bytes / mb).toFixed(1)} MB`;
+    }
+    return `${bytes} B`;
+  };
+
+  const getWearTextColor = (val: number) => {
+    if (val < 70) return 'text-emerald-500';
+    if (val <= 90) return 'text-amber-500';
+    return 'text-rose-500';
+  };
+
+  const getWearBarColor = (val: number) => {
+    if (val < 70) return 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+    if (val <= 90) return 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]';
+    return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
   };
 
   const renderDeviceBadge = (type?: string) => {
@@ -251,9 +311,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 pb-12 animate-fadeIn">
+    <div className="w-full max-w-7xl mx-auto space-y-4 sm:space-y-5 pb-10 animate-fadeIn">
       {/* 1. Breadcrumbs & Top Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-2 text-xs text-base-content/60 font-medium">
           <button
             onClick={onBack}
@@ -284,7 +344,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
       </div>
 
       {/* 2. Page Header Card with Device Identity and SINGLE Top-Right Action Hub */}
-      <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
         <div className="flex items-start gap-4">
           <div className={`p-3.5 rounded-2xl border ${
             isOnline 
@@ -488,26 +548,26 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
       </div>
 
       {/* 4. Two-Column Dashboard Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
         
-        {/* Left Column (8 cols): Real-Time Telemetry & Disk Partitions */}
-        <div className="lg:col-span-8 space-y-6">
+        {/* Left Column (8 cols): Real-Time Telemetry, Storage & Diagnostics */}
+        <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-start">
           
           {/* Resource Utilization Card */}
-          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-5">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
                 Resource Utilization &amp; Telemetry
               </h3>
-              <span className="text-[11px] font-mono text-base-content/50">
+              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
                 &lt;70% OK • 70-85% WARN • &gt;85% CRIT
               </span>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-3.5 sm:space-y-4">
               {/* CPU Bar (all device types) */}
-              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+              <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                 <div className="flex justify-between items-center text-xs font-semibold mb-2">
                   <span className="flex items-center gap-2 text-base-content">
                     <Cpu className="w-4 h-4 text-base-content/70" />
@@ -533,7 +593,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               {deviceType === 'Server' && (
                 <>
                   {/* RAM Bar */}
-                  <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                  <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                     <div className="flex justify-between items-center text-xs font-semibold mb-2">
                       <span className="flex items-center gap-2 text-base-content">
                         <MemoryStick className="w-4 h-4 text-base-content/70" />
@@ -555,8 +615,99 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     </div>
                   </div>
 
+                  {/* RAM Memory Health (Server devices only) */}
+                  {deviceType === 'Server' && (() => {
+                    const corrected = activeServer.ramEccCorrected ?? server.ramEccCorrected;
+                    const uncorrected = activeServer.ramEccUncorrected ?? server.ramEccUncorrected;
+                    const controllers = activeServer.ramEccControllers ?? server.ramEccControllers;
+                    const hasControllers = Array.isArray(controllers) && controllers.length > 0;
+
+                    let badgeColor = 'bg-base-200 border-base-content/20 text-base-content/60';
+                    let badgeLabel = 'Not available';
+                    let statusText = 'ECC monitoring not available on this host';
+
+                    if (uncorrected !== null && uncorrected !== undefined && !isNaN(uncorrected) && uncorrected > 0) {
+                      badgeColor = 'bg-rose-500/10 border-rose-500/30 text-rose-500';
+                      badgeLabel = 'Critical';
+                      statusText = `Uncorrected ECC errors: ${uncorrected} — replace affected DIMM`;
+                    } else if (
+                      (uncorrected === 0 || uncorrected === null || uncorrected === undefined) &&
+                      corrected !== null &&
+                      corrected !== undefined &&
+                      !isNaN(corrected) &&
+                      corrected > 0
+                    ) {
+                      badgeColor = 'bg-amber-500/10 border-amber-500/30 text-amber-500';
+                      badgeLabel = 'Warning';
+                      statusText = `Corrected ECC errors: ${corrected} — monitor for recurrence`;
+                    } else if (uncorrected === 0 && corrected === 0) {
+                      badgeColor = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500';
+                      badgeLabel = 'Healthy';
+                      statusText = 'No ECC errors detected';
+                    }
+
+                    return (
+                      <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">
+                        <div className="text-xs font-semibold text-base-content flex items-center gap-2">
+                          <MemoryStick className="w-4 h-4 text-secondary shrink-0" />
+                          <span>RAM Memory Health</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badgeColor}`}>
+                            {badgeLabel}
+                          </span>
+                          <span className="text-xs text-base-content/80 font-mono">
+                            {statusText}
+                          </span>
+                        </div>
+
+                        {hasControllers && (
+                          <div className="pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setIsEccDetailsExpanded((prev) => !prev)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline transition-colors cursor-pointer"
+                            >
+                              <span>
+                                {isEccDetailsExpanded
+                                  ? 'Hide details'
+                                  : `Show details (${controllers.length} memory controllers)`}
+                              </span>
+                              <ChevronDown
+                                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                  isEccDetailsExpanded ? 'rotate-180' : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        )}
+
+                        {hasControllers && isEccDetailsExpanded && (
+                          <div className="pt-1.5 border-t border-base-content/10 space-y-0.5 animate-fadeIn">
+                            {controllers.map((mc, idx) => {
+                              const ueNum = Number(mc.ue || 0);
+                              const ceNum = Number(mc.ce || 0);
+                              let itemColor = 'text-base-content/60';
+                              if (ueNum > 0) {
+                                itemColor = 'text-rose-500 font-semibold';
+                              } else if (ceNum > 0) {
+                                itemColor = 'text-amber-500 font-semibold';
+                              }
+
+                              return (
+                                <div key={mc.name || idx} className={`text-xs font-mono ${itemColor}`}>
+                                  {mc.name}: CE {ceNum}, UE {ueNum}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Disk Bar */}
-                  <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                  <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                     <div className="flex justify-between items-center text-xs font-semibold mb-2">
                       <span className="flex items-center gap-2 text-base-content">
                         <HardDrive className="w-4 h-4 text-base-content/70" />
@@ -582,7 +733,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
               {/* Router: Connected Users Card */}
               {deviceType === 'Router' && (
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                   <div className="flex justify-between items-center text-xs font-semibold mb-1">
                     <span className="flex items-center gap-2 text-base-content">
                       <Users className="w-4 h-4 text-primary" />
@@ -600,133 +751,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               )}
 
-              {/* All Device Types: Power Supplies, Fans & Temperature Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Power Supplies Card */}
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
-                  <div className="flex justify-between items-center text-xs font-semibold">
-                    <span className="flex items-center gap-2 text-base-content">
-                      <Zap className="w-4 h-4 text-emerald-500" />
-                      <span>Power Supplies</span>
-                    </span>
-                  </div>
-                  {Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0 ? (
-                    <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                      {server.powerSupplies.map((psu, idx) => {
-                        const rawVal = (psu as { raw_value?: number | null }).raw_value;
-                        const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
-                        const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
-                        const statusBadge =
-                          psu.status === 'ok'
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                            : psu.status === 'warning'
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                            : psu.status === 'critical'
-                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                            : 'bg-base-300/60 text-base-content/50 border-base-content/15';
-                        return (
-                          <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-mono">
-                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                            <div className="flex items-center gap-1.5">
-                              {rawVal !== undefined && rawVal !== null && (
-                                <span className="text-[10px] text-base-content/40 whitespace-nowrap">
-                                  raw value {rawVal}
-                                </span>
-                              )}
-                              <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
-                                {psu.status}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-xs font-mono text-base-content/40">
-                      Not reported by this device
-                    </div>
-                  )}
-                </div>
-
-                {/* Fans Card */}
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
-                  <div className="flex justify-between items-center text-xs font-semibold">
-                    <span className="flex items-center gap-2 text-base-content">
-                      <Activity className="w-4 h-4 text-sky-500" />
-                      <span>Fans</span>
-                    </span>
-                  </div>
-                  {Array.isArray(server.fans) && server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state').length > 0 ? (
-                    <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                      {server.fans
-                        .filter((f) => f.name?.toLowerCase() !== 'fan-state')
-                        .map((fan, idx) => {
-                          const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
-                          const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
-                          const statusBadge =
-                            fan.status === 'ok'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                              : fan.status === 'warning'
-                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                              : fan.status === 'critical'
-                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                              : 'bg-base-300/60 text-base-content/50 border-base-content/15';
-                          return (
-                            <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-mono">
-                              <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                              <div className="flex items-center gap-1.5">
-                                {fan.rpm !== undefined && fan.rpm !== null && (
-                                  <span className="text-base-content/60 whitespace-nowrap">{fan.rpm} RPM</span>
-                                )}
-                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
-                                  {fan.status}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ) : (
-                    <div className="text-xs font-mono text-base-content/40">
-                      Not reported by this device
-                    </div>
-                  )}
-                </div>
-
-                {/* Temperature (°C) Card */}
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                    <span className="flex items-center gap-2 text-base-content">
-                      <Thermometer className="w-4 h-4 text-amber-500" />
-                      <span>Temperature (°C)</span>
-                    </span>
-                  </div>
-                  <div className="my-1">
-                    <span
-                      className={`font-mono text-xl font-black ${
-                        !isOnline || server.temperature === null || server.temperature === undefined
-                          ? 'text-base-content/40'
-                          : server.temperature >= 85
-                          ? 'text-rose-500'
-                          : server.temperature >= 70
-                          ? 'text-amber-500'
-                          : 'text-emerald-500'
-                      }`}
-                    >
-                      {!isOnline || server.temperature === null || server.temperature === undefined
-                        ? 'N/A'
-                        : `${server.temperature} °C`}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-base-content/60 font-mono mt-1">
-                    Chassis Thermal Sensor
-                  </div>
-                </div>
-              </div>
-
               {/* Switch: Optical Power (TX/RX in dBm) Card */}
               {deviceType === 'Switch' && (
-                <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2.5">
+                <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2.5">
                   <div className="flex justify-between items-center text-xs font-semibold">
                     <span className="flex items-center gap-2 text-base-content">
                       <Zap className="w-4 h-4 text-cyan-500" />
@@ -734,8 +761,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     </span>
                     <span className="text-[11px] font-mono text-base-content/50">dBm</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10">
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
                       <div className="text-[10px] uppercase font-bold text-base-content/50">Optical TX Power</div>
                       <div className="font-mono text-sm font-black text-base-content mt-0.5">
                         {!isOnline || isMetricsUnavailable || server.opticalTx === null || server.opticalTx === undefined
@@ -743,7 +770,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           : `${server.opticalTx} dBm`}
                       </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10">
+                    <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
                       <div className="text-[10px] uppercase font-bold text-base-content/50">Optical RX Power</div>
                       <div className="font-mono text-sm font-black text-base-content mt-0.5">
                         {!isOnline || isMetricsUnavailable || server.opticalRx === null || server.opticalRx === undefined
@@ -758,13 +785,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
 
           {/* Storage & Memory (All Device Types) */}
-          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Database className="w-4 h-4 text-secondary" />
                 Storage &amp; Memory
               </h3>
-              <span className="text-[11px] font-mono text-base-content/50">
+              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
                 &lt;70% OK • 70-85% WARN • &gt;85% CRIT
               </span>
             </div>
@@ -775,21 +802,21 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   const pct = Number(item.used_pct ?? 0);
                   const kindLabel = formatStorageKind(item.kind);
                   return (
-                    <div key={`${item.name}-${idx}`} className="p-4 text-xs">
+                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center">
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono font-bold text-base-content text-sm truncate">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
                             {item.name}
                           </span>
                           <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
                             {kindLabel}
                           </span>
                         </div>
-                        <div className="font-mono text-xs shrink-0">
+                        <div className="font-mono text-xs shrink-0 text-right">
                           <span className="text-base-content/70">
                             {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
                           </span>
-                          <span className={`font-bold ml-2 ${getMetricColor(pct)}`}>
+                          <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
                             ({pct}%)
                           </span>
                         </div>
@@ -805,246 +832,311 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 })}
               </div>
             ) : (
-              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40">
+              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40">
                 Not reported by this device
               </div>
             )}
           </div>
 
-          {/* Disk I/O (Server devices only) */}
+          {/* Disk Lifecycle (SMART) (Server devices only) */}
           {deviceType === 'Server' && (
-            <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-                    <HardDrive className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-base-content flex items-center gap-2">
-                      <span>Disk I/O Real-Time Throughput</span>
-                      {isLiveActive ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/30">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                          LIVE {liveIntervalSec}s
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-base-200 text-base-content/50 border border-base-content/10">
-                          PAUSED
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-[11px] text-base-content/50 font-mono">
-                      Real-time read/write throughput &amp; % activity distribution (/proc/diskstats)
-                    </p>
-                  </div>
-                </div>
+            (() => {
+              const wearLevel = activeServer.diskPercentageUsed ?? server.diskPercentageUsed;
+              const hasWear = wearLevel !== null && wearLevel !== undefined && !isNaN(wearLevel);
+              const powerOn = activeServer.diskPowerOnHours ?? server.diskPowerOnHours;
+              const dataRead = activeServer.diskLifetimeBytesRead ?? server.diskLifetimeBytesRead;
+              const dataWritten = activeServer.diskLifetimeBytesWritten ?? server.diskLifetimeBytesWritten;
+              const eolDays = activeServer.diskEstimatedEolDays ?? server.diskEstimatedEolDays;
 
-                {/* Real-Time Live Polling Controls */}
-                <div className="flex items-center gap-1.5 bg-base-200/70 p-1 rounded-xl border border-base-content/10">
-                  <button
-                    type="button"
-                    onClick={() => setIsLiveActive(!isLiveActive)}
-                    className={`btn btn-xs gap-1 border-0 ${
-                      isLiveActive
-                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold hover:bg-emerald-500/30'
-                        : 'bg-base-300/80 text-base-content/60 font-semibold hover:bg-base-300'
-                    }`}
-                    title={isLiveActive ? 'Pause real-time streaming' : 'Resume real-time streaming'}
-                  >
-                    {isLiveActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                    <span>{isLiveActive ? 'Streaming' : 'Paused'}</span>
-                  </button>
-
-                  <div className="join">
-                    {[2, 3, 5, 10].map((sec) => (
-                      <button
-                        key={sec}
-                        type="button"
-                        onClick={() => {
-                          setLiveIntervalSec(sec);
-                          if (!isLiveActive) setIsLiveActive(true);
-                        }}
-                        className={`join-item btn btn-xs px-2 border-0 ${
-                          liveIntervalSec === sec && isLiveActive
-                            ? 'bg-primary text-primary-content font-bold shadow-xs'
-                            : 'bg-base-100 hover:bg-base-200 text-base-content/70'
-                        }`}
-                        title={`Poll real-time telemetry every ${sec} seconds`}
-                      >
-                        {sec}s
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={performLivePoll}
-                    disabled={isPollingNow}
-                    className="btn btn-xs btn-ghost text-base-content/70 hover:text-primary gap-1"
-                    title="Poll real-time snapshot immediately"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isPollingNow ? 'animate-spin text-primary' : ''}`} />
-                    <span className="hidden sm:inline">Poll Now</span>
-                  </button>
-                </div>
-              </div>
-
-              {activeServer.diskIo ? (
-                (() => {
-                  const dio = activeServer.diskIo;
-                  const readBytes = dio.read_bytes_per_sec ?? 0;
-                  const writeBytes = dio.write_bytes_per_sec ?? 0;
-                  const totalBytes = dio.total_bytes_per_sec ?? (readBytes + writeBytes);
-                  const readPct = dio.read_pct ?? (totalBytes > 0 ? Math.round((readBytes / totalBytes) * 100) : 0);
-                  const writePct = dio.write_pct ?? (totalBytes > 0 ? (100 - readPct) : 0);
-                  const isIdle = totalBytes === 0;
+              const renderEolSection = () => {
+                if (eolDays !== null && eolDays !== undefined && !isNaN(eolDays) && eolDays > 0) {
+                  const remainingStr =
+                    eolDays >= 365
+                      ? `~${(eolDays / 365.25).toFixed(1)} years remaining`
+                      : eolDays >= 30
+                      ? `~${(eolDays / 30.4).toFixed(1)} months remaining`
+                      : `~${Math.round(eolDays)} days remaining`;
 
                   return (
-                    <div className="space-y-4">
-                      {/* Read & Write % cards grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Read Throughput Card */}
-                        <div className="p-4 rounded-xl bg-base-200/40 border border-emerald-500/20 bg-emerald-500/[0.02] flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                              <span>Read Throughput</span>
-                            </div>
-                            <div className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
-                              Read: {formatDiskRate(readBytes)}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                              {readPct}%
-                            </span>
-                            <div className="text-[10px] text-base-content/50 uppercase font-semibold">
-                              Read Share
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Write Throughput Card */}
-                        <div className="p-4 rounded-xl bg-base-200/40 border border-sky-500/20 bg-sky-500/[0.02] flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-sky-500" />
-                              <span>Write Throughput</span>
-                            </div>
-                            <div className="font-mono text-lg font-black text-sky-600 dark:text-sky-400">
-                              Write: {formatDiskRate(writeBytes)}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono text-2xl font-black text-sky-600 dark:text-sky-400">
-                              {writePct}%
-                            </span>
-                            <div className="text-[10px] text-base-content/50 uppercase font-semibold">
-                              Write Share
-                            </div>
-                          </div>
-                        </div>
+                    <div>
+                      <div className="font-mono text-sm sm:text-base font-bold text-base-content">
+                        {remainingStr}
                       </div>
-
-                      {/* Read vs Write % Distribution Bar */}
-                      <div className="p-4 rounded-xl bg-base-200/30 border border-base-content/10 space-y-2">
-                        <div className="flex justify-between items-center text-xs font-mono">
-                          <span className="text-base-content/70 font-semibold flex items-center gap-2">
-                            <span>I/O Distribution Ratio</span>
-                            {isIdle && (
-                              <span className="badge badge-xs badge-ghost text-[10px]">Disk Idle</span>
-                            )}
-                          </span>
-                          <span className="text-base-content/80 font-bold">
-                            Total I/O: {formatDiskRate(totalBytes)}
-                          </span>
-                        </div>
-
-                        {/* Visual Split Progress Bar */}
-                        <div className="h-3 w-full bg-base-300 rounded-full overflow-hidden flex shadow-inner">
-                          {isIdle ? (
-                            <div className="w-full h-full bg-base-content/15 flex items-center justify-center text-[9px] font-mono text-base-content/40">
-                              Idle (0 MB/s)
-                            </div>
-                          ) : (
-                            <>
-                              <div
-                                style={{ width: `${readPct}%` }}
-                                className="h-full bg-emerald-500 transition-all duration-300 flex items-center justify-center text-[9px] font-black text-emerald-950 overflow-hidden"
-                                title={`Read: ${readPct}% (${formatDiskRate(readBytes)})`}
-                              >
-                                {readPct >= 15 ? `${readPct}% Read` : ''}
-                              </div>
-                              <div
-                                style={{ width: `${writePct}%` }}
-                                className="h-full bg-sky-500 transition-all duration-300 flex items-center justify-center text-[9px] font-black text-sky-950 overflow-hidden"
-                                title={`Write: ${writePct}% (${formatDiskRate(writeBytes)})`}
-                              >
-                                {writePct >= 15 ? `${writePct}% Write` : ''}
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] font-mono text-base-content/50 pt-0.5">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span>Read: {readPct}% ({formatDiskRate(readBytes)})</span>
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-sky-500" />
-                            <span>Write: {writePct}% ({formatDiskRate(writeBytes)})</span>
-                          </span>
-                        </div>
+                      <div className="text-xs text-base-content/50 mt-1">
+                        Estimate based on current wear rate; not a guarantee.
                       </div>
                     </div>
                   );
-                })()
-              ) : (
-                <div className="p-4 rounded-xl bg-base-200/50 border border-primary/20 text-xs font-mono text-base-content/80 flex flex-wrap items-center justify-between gap-3 shadow-inner">
-                  <div className="flex items-center gap-3">
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                }
+
+                if ((eolDays === null || eolDays === undefined) && wearLevel === 0) {
+                  return (
+                    <div className="font-mono text-xs sm:text-sm text-base-content/70">
+                      Not enough wear data yet (drive wear is still at 0%)
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="font-mono text-xs sm:text-sm text-base-content/50">
+                    Not enough data to estimate
+                  </div>
+                );
+              };
+
+              return (
+                <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-primary" />
+                      Disk Lifecycle (SMART)
+                    </h3>
+                    <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
+                      NVMe / SMART Telemetry
                     </span>
-                    <div>
-                      <div className="font-bold text-base-content text-xs flex items-center gap-2">
-                        <span>Calibrating Real-Time Disk I/O Rates...</span>
-                        <span className="badge badge-xs badge-primary font-mono">Live {liveIntervalSec}s</span>
+                  </div>
+
+                  {/* Wear Level */}
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-semibold">
+                      <span className="flex items-center gap-2 text-base-content">
+                        <Activity className="w-4 h-4 text-base-content/70" />
+                        <span>Wear Level</span>
+                      </span>
+                      <span
+                        className={`font-mono text-sm font-black ${
+                          hasWear ? getWearTextColor(wearLevel) : 'text-base-content/40'
+                        }`}
+                      >
+                        {hasWear ? `${wearLevel}% used` : 'Not available'}
+                      </span>
+                    </div>
+                    {hasWear && (
+                      <>
+                        <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${getWearBarColor(wearLevel)}`}
+                            style={{ width: `${Math.min(100, Math.max(0, wearLevel))}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] sm:text-[11px] text-base-content/50 font-mono">
+                          <span>0% (New Drive)</span>
+                          <span>&lt;70% OK • 70-90% WARN • &gt;90% CRIT</span>
+                          <span>100% (End of Life)</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Grid for Powered On, Total Data Read, Total Data Written */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                    {/* Powered On */}
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
+                        <Clock className="w-4 h-4 text-sky-500" />
+                        <span>Powered On</span>
                       </div>
-                      <div className="text-[11px] text-base-content/60 mt-0.5">
-                        Sampling first pulse from /proc/diskstats. Computing live read/write MB/s &amp; % on next pulse.
+                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
+                        {formatPowerOnDuration(powerOn)}
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
+                        Power-on cumulative duration
+                      </div>
+                    </div>
+
+                    {/* Total Data Read */}
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
+                        <Activity className="w-4 h-4 text-emerald-500" />
+                        <span>Total Data Read</span>
+                      </div>
+                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
+                        {formatLifetimeDataBytes(dataRead)}
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
+                        Cumulative Host Read Units
+                      </div>
+                    </div>
+
+                    {/* Total Data Written */}
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
+                        <Database className="w-4 h-4 text-purple-500" />
+                        <span>Total Data Written</span>
+                      </div>
+                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
+                        {formatLifetimeDataBytes(dataWritten)}
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
+                        Cumulative Host Write Units
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={performLivePoll}
-                    disabled={isPollingNow}
-                    className="btn btn-xs btn-primary gap-1"
-                    title="Poll real-time delta immediately"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isPollingNow ? 'animate-spin' : ''}`} />
-                    <span>Poll Delta Now</span>
-                  </button>
+
+                  {/* Estimated Remaining Life */}
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
+                      <ShieldCheck className="w-4 h-4 text-amber-500" />
+                      <span>Estimated Remaining Life</span>
+                    </div>
+                    <div className="pt-0.5">
+                      {renderEolSection()}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()
           )}
+
+          {/* Power Supplies, Fans & Temperature (All Device Types) */}
+          <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-500" />
+                Power Supplies, Fans &amp; Temperature
+              </h3>
+              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
+                Chassis Environmental Sensors
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+              {/* Power Supplies Card */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="flex items-center gap-2 text-base-content">
+                    <Zap className="w-4 h-4 text-emerald-500" />
+                    <span>Power Supplies</span>
+                  </span>
+                </div>
+                {Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0 ? (
+                  <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                    {server.powerSupplies.map((psu, idx) => {
+                      const rawVal = (psu as { raw_value?: number | null }).raw_value;
+                      const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
+                      const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
+                      const statusBadge =
+                        psu.status === 'ok'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                          : psu.status === 'warning'
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                          : psu.status === 'critical'
+                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                          : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+                      return (
+                        <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
+                          <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                          <div className="flex items-center gap-1.5">
+                            {rawVal !== undefined && rawVal !== null && (
+                              <span className="text-[10px] text-base-content/40 whitespace-nowrap">
+                                raw value {rawVal}
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                              {psu.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs font-mono text-base-content/40">
+                    Not reported by this device
+                  </div>
+                )}
+              </div>
+
+              {/* Fans Card */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="flex items-center gap-2 text-base-content">
+                    <Activity className="w-4 h-4 text-sky-500" />
+                    <span>Fans</span>
+                  </span>
+                </div>
+                {Array.isArray(server.fans) && server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state').length > 0 ? (
+                  <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                    {server.fans
+                      .filter((f) => f.name?.toLowerCase() !== 'fan-state')
+                      .map((fan, idx) => {
+                        const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
+                        const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
+                        const statusBadge =
+                          fan.status === 'ok'
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                            : fan.status === 'warning'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                            : fan.status === 'critical'
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                            : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+                        return (
+                          <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
+                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                            <div className="flex items-center gap-1.5">
+                              {fan.rpm !== undefined && fan.rpm !== null && (
+                                <span className="text-base-content/60 whitespace-nowrap">{fan.rpm} RPM</span>
+                              )}
+                              <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                                {fan.status}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="text-xs font-mono text-base-content/40">
+                    Not reported by this device
+                  </div>
+                )}
+              </div>
+
+              {/* Temperature (°C) Card */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">
+                <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                  <span className="flex items-center gap-2 text-base-content">
+                    <Thermometer className="w-4 h-4 text-amber-500" />
+                    <span>Temperature (°C)</span>
+                  </span>
+                </div>
+                <div className="my-1">
+                  <span
+                    className={`font-mono text-xl font-black ${
+                      !isOnline || server.temperature === null || server.temperature === undefined
+                        ? 'text-base-content/40'
+                        : server.temperature >= 85
+                        ? 'text-rose-500'
+                        : server.temperature >= 70
+                        ? 'text-amber-500'
+                        : 'text-emerald-500'
+                    }`}
+                  >
+                    {!isOnline || server.temperature === null || server.temperature === undefined
+                      ? 'N/A'
+                      : `${server.temperature} °C`}
+                  </span>
+                </div>
+                <div className="text-[11px] text-base-content/60 font-mono mt-1">
+                  Chassis Thermal Sensor
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Right Column (4 cols): Hardware Specs & SRE Diagnostics */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-4 sm:space-y-5">
           
           {/* Hardware Info Card */}
-          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
               <Terminal className="w-4 h-4 text-primary" />
               Hardware Specifications
             </h3>
 
-            <div className="space-y-3">
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+            <div className="space-y-2.5">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center justify-between mb-1">
                   <span className="flex items-center gap-1.5">
                     <ServerIcon className="w-3.5 h-3.5 text-primary" />
@@ -1058,7 +1150,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Cpu className="w-3.5 h-3.5 text-primary" />
                   Device Model
@@ -1076,7 +1168,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 )}
               </div>
 
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Clock className="w-3.5 h-3.5 text-primary" />
                   System Uptime
@@ -1084,7 +1176,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 <div className="font-semibold font-mono text-base-content">{server.uptime}</div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <MapPin className="w-3.5 h-3.5 text-secondary" />
                   Datacenter Facility
@@ -1095,7 +1187,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 <div className="text-[11px] text-base-content/50 font-mono mt-0.5">{server.location}</div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <Layers className="w-3.5 h-3.5 text-accent" />
                   Rack
@@ -1105,7 +1197,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/10">
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                   SNMPv2c Polling Engine
@@ -1119,7 +1211,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
 
           {/* Quick SRE Diagnostic Actions Card */}
-          <div className="p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
               <Radio className="w-4 h-4 text-primary" />
               Immediate SRE Diagnostics
@@ -1137,7 +1229,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
 
             {pingResult && (
-              <div className="p-3.5 rounded-xl bg-base-300/80 border border-base-content/10 font-mono text-xs text-base-content/90 animate-fadeIn space-y-1">
+              <div className="p-3 rounded-xl bg-base-300/80 border border-base-content/10 font-mono text-xs text-base-content/90 animate-fadeIn space-y-1">
                 <div className="text-[10px] text-base-content/50 uppercase font-bold tracking-wider">ICMP Ping Echo Output:</div>
                 <div className="leading-relaxed">{pingResult}</div>
               </div>

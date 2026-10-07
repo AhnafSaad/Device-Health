@@ -87,6 +87,14 @@ export interface Server {
     write_pct?: number;
     total_bytes_per_sec?: number;
   } | null;
+  diskPercentageUsed?: number | null;
+  diskPowerOnHours?: number | null;
+  diskLifetimeBytesRead?: number | null;
+  diskLifetimeBytesWritten?: number | null;
+  diskEstimatedEolDays?: number | null;
+  ramEccCorrected?: number | null;
+  ramEccUncorrected?: number | null;
+  ramEccControllers?: { name: string; ce: number; ue: number }[] | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

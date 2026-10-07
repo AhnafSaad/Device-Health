@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   disk_lifetime_bytes_read NUMERIC,
   disk_lifetime_bytes_written NUMERIC,
   disk_estimated_eol_days INTEGER,
+  ram_ecc_corrected INTEGER,
+  ram_ecc_uncorrected INTEGER,
+  ram_ecc_controllers JSONB,
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -83,6 +86,9 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_power_on_hours INTEGER;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_lifetime_bytes_read NUMERIC;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_lifetime_bytes_written NUMERIC;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_estimated_eol_days INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_corrected INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_uncorrected INTEGER;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_controllers JSONB;
 
 -- Indexes on ip_address and recorded_at (descending)
 CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);
@@ -125,7 +131,9 @@ VALUES
   ('cpu', 'All', 75, 85, true),
   ('ram', 'All', 80, 90, true),
   ('disk', 'All', 70, 85, true),
-  ('temperature', 'All', 60, 75, true)
+  ('temperature', 'All', 60, 75, true),
+  ('ram_ecc_corrected', 'All', 10, 50, true),
+  ('ram_ecc_uncorrected', 'All', 1, 1, true)
 ON CONFLICT (metric, device_type) DO NOTHING;
 
 

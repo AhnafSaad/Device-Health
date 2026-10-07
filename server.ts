@@ -630,7 +630,15 @@ app.put('/api/settings/snmp-poll-cron', requireAdmin, async (req: Request, res: 
 // ALERT THRESHOLDS API ENDPOINTS
 // ==========================================
 
-const VALID_THRESHOLD_METRICS = new Set(['cpu', 'ram', 'disk', 'temperature', 'connected_users']);
+const VALID_THRESHOLD_METRICS = new Set([
+  'cpu',
+  'ram',
+  'disk',
+  'temperature',
+  'connected_users',
+  'ram_ecc_corrected',
+  'ram_ecc_uncorrected',
+]);
 const VALID_THRESHOLD_DEVICE_TYPES = new Set(['All', 'Server', 'Router', 'Switch', 'OLT']);
 
 function normalizeDeviceTypeLabel(rawType: any): string {
@@ -718,7 +726,7 @@ const upsertThresholdsHandler = async (req: Request, res: Response) => {
       if (!VALID_THRESHOLD_METRICS.has(metric)) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users.`,
+          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users, ram_ecc_corrected, ram_ecc_uncorrected.`,
         });
       }
 
@@ -736,7 +744,14 @@ const upsertThresholdsHandler = async (req: Request, res: Response) => {
         });
       }
 
-      if (warn >= crit) {
+      if (metric === 'ram_ecc_uncorrected') {
+        if (warn > crit) {
+          return res.status(400).json({
+            error: 'Bad Request',
+            message: `warning_value (${warn}) cannot be greater than critical_value (${crit}) for "${metric}" (${deviceType}).`,
+          });
+        }
+      } else if (warn >= crit) {
         return res.status(400).json({
           error: 'Bad Request',
           message: `warning_value (${warn}) must be less than critical_value (${crit}) for "${metric}" (${deviceType}).`,
@@ -924,7 +939,9 @@ app.post('/api/thresholds/reset', requireAdmin, async (_req: Request, res: Respo
            ('cpu', 'All', 75, 85, true),
            ('ram', 'All', 80, 90, true),
            ('disk', 'All', 70, 85, true),
-           ('temperature', 'All', 60, 75, true)
+           ('temperature', 'All', 60, 75, true),
+           ('ram_ecc_corrected', 'All', 10, 50, true),
+           ('ram_ecc_uncorrected', 'All', 1, 1, true)
          ON CONFLICT (metric, device_type) DO NOTHING;`
       );
       const dbRes = await query(
@@ -1308,6 +1325,9 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.disk_lifetime_bytes_read,
         t.disk_lifetime_bytes_written,
         t.disk_estimated_eol_days,
+        t.ram_ecc_corrected,
+        t.ram_ecc_uncorrected,
+        t.ram_ecc_controllers,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1461,6 +1481,9 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         t.disk_lifetime_bytes_read,
         t.disk_lifetime_bytes_written,
         t.disk_estimated_eol_days,
+        t.ram_ecc_corrected,
+        t.ram_ecc_uncorrected,
+        t.ram_ecc_controllers,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1573,7 +1596,10 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.disk_power_on_hours,
         t.disk_lifetime_bytes_read,
         t.disk_lifetime_bytes_written,
-        t.disk_estimated_eol_days
+        t.disk_estimated_eol_days,
+        t.ram_ecc_corrected,
+        t.ram_ecc_uncorrected,
+        t.ram_ecc_controllers
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address

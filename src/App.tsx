@@ -283,6 +283,25 @@ export default function App() {
                 : (d.disk_io ?? d.diskIo ?? null),
               opticalTx: d.optical_tx !== undefined && d.optical_tx !== null ? Number(d.optical_tx) : (d.opticalTx ?? null),
               opticalRx: d.optical_rx !== undefined && d.optical_rx !== null ? Number(d.optical_rx) : (d.opticalRx ?? null),
+              diskPercentageUsed: d.disk_percentage_used !== undefined && d.disk_percentage_used !== null ? Number(d.disk_percentage_used) : (d.diskPercentageUsed ?? null),
+              diskPowerOnHours: d.disk_power_on_hours !== undefined && d.disk_power_on_hours !== null ? Number(d.disk_power_on_hours) : (d.diskPowerOnHours ?? null),
+              diskLifetimeBytesRead: d.disk_lifetime_bytes_read !== undefined && d.disk_lifetime_bytes_read !== null ? Number(d.disk_lifetime_bytes_read) : (d.diskLifetimeBytesRead ?? null),
+              diskLifetimeBytesWritten: d.disk_lifetime_bytes_written !== undefined && d.disk_lifetime_bytes_written !== null ? Number(d.disk_lifetime_bytes_written) : (d.diskLifetimeBytesWritten ?? null),
+              diskEstimatedEolDays: d.disk_estimated_eol_days !== undefined && d.disk_estimated_eol_days !== null ? Number(d.disk_estimated_eol_days) : (d.diskEstimatedEolDays ?? null),
+              ramEccCorrected: d.ram_ecc_corrected !== undefined && d.ram_ecc_corrected !== null ? Number(d.ram_ecc_corrected) : (d.ramEccCorrected ?? null),
+              ramEccUncorrected: d.ram_ecc_uncorrected !== undefined && d.ram_ecc_uncorrected !== null ? Number(d.ram_ecc_uncorrected) : (d.ramEccUncorrected ?? null),
+              ramEccControllers: Array.isArray(d.ram_ecc_controllers)
+                ? d.ram_ecc_controllers
+                : typeof d.ram_ecc_controllers === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.ram_ecc_controllers);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.ramEccControllers ?? null),
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
               lastPolledAt: d.recorded_at ?? d.lastPolledAt,
               status: (d.status as any) || 'offline',
@@ -613,6 +632,25 @@ export default function App() {
                   : (live.disk_io !== undefined ? live.disk_io : (existing?.diskIo ?? null)),
                 opticalTx: live.optical_tx !== undefined && live.optical_tx !== null ? Number(live.optical_tx) : (live.opticalTx ?? existing?.opticalTx ?? null),
                 opticalRx: live.optical_rx !== undefined && live.optical_rx !== null ? Number(live.optical_rx) : (live.opticalRx ?? existing?.opticalRx ?? null),
+                diskPercentageUsed: live.disk_percentage_used !== undefined && live.disk_percentage_used !== null ? Number(live.disk_percentage_used) : (live.diskPercentageUsed ?? existing?.diskPercentageUsed ?? null),
+                diskPowerOnHours: live.disk_power_on_hours !== undefined && live.disk_power_on_hours !== null ? Number(live.disk_power_on_hours) : (live.diskPowerOnHours ?? existing?.diskPowerOnHours ?? null),
+                diskLifetimeBytesRead: live.disk_lifetime_bytes_read !== undefined && live.disk_lifetime_bytes_read !== null ? Number(live.disk_lifetime_bytes_read) : (live.diskLifetimeBytesRead ?? existing?.diskLifetimeBytesRead ?? null),
+                diskLifetimeBytesWritten: live.disk_lifetime_bytes_written !== undefined && live.disk_lifetime_bytes_written !== null ? Number(live.disk_lifetime_bytes_written) : (live.diskLifetimeBytesWritten ?? existing?.diskLifetimeBytesWritten ?? null),
+                diskEstimatedEolDays: live.disk_estimated_eol_days !== undefined && live.disk_estimated_eol_days !== null ? Number(live.disk_estimated_eol_days) : (live.diskEstimatedEolDays ?? existing?.diskEstimatedEolDays ?? null),
+                ramEccCorrected: live.ram_ecc_corrected !== undefined && live.ram_ecc_corrected !== null ? Number(live.ram_ecc_corrected) : (live.ramEccCorrected ?? existing?.ramEccCorrected ?? null),
+                ramEccUncorrected: live.ram_ecc_uncorrected !== undefined && live.ram_ecc_uncorrected !== null ? Number(live.ram_ecc_uncorrected) : (live.ramEccUncorrected ?? existing?.ramEccUncorrected ?? null),
+                ramEccControllers: Array.isArray(live.ram_ecc_controllers)
+                  ? live.ram_ecc_controllers
+                  : typeof live.ram_ecc_controllers === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.ram_ecc_controllers);
+                        return Array.isArray(parsed) ? parsed : (existing?.ramEccControllers ?? null);
+                      } catch {
+                        return existing?.ramEccControllers ?? null;
+                      }
+                    })()
+                  : (live.ram_ecc_controllers !== undefined ? live.ram_ecc_controllers : (existing?.ramEccControllers ?? null)),
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
                 lastPolledAt: live.recorded_at ?? live.lastPolledAt ?? existing?.lastPolledAt,
                 status: (live.status as any) || existing?.status || 'offline',
