@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Bell,
+  Clock,
   Save,
   Trash2,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   MemoryStick,
   X as CloseIcon,
 } from 'lucide-react';
+import { PollingSettingsSection } from './PollingSettingsSection';
 import { fetchWithAuth as defaultFetchWithAuth } from '../utils/auth';
 
 export type ThresholdMetric =
@@ -735,9 +737,30 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
         </div>
       )}
 
-      {/* 2-Column Responsive Metric Cards Grid */}
+      {/* SNMP Polling Frequency & 2-Column Responsive Metric Cards Grid */}
       {!loading && !loadError && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+        <div className="space-y-6">
+          {/* SNMP Polling Frequency Card */}
+          <div className="bg-base-100 border border-base-content/10 rounded-2xl p-5 sm:p-6 shadow-lg space-y-4">
+            <div className="flex items-center gap-3 border-b border-base-content/10 pb-3.5">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/25 text-primary flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.12)] shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-base-content tracking-tight">
+                  SNMP Polling Frequency
+                </h2>
+                <p className="text-xs text-base-content/60">
+                  Configure background telemetry sweep cadence and scheduler presets across fleet nodes.
+                </p>
+              </div>
+            </div>
+
+            <PollingSettingsSection onUnauthorized={onUnauthorized} />
+          </div>
+
+          {/* 2-Column Responsive Metric Cards Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
           {METRIC_CONFIGS.map((cfg) => {
             const metricRows = rows.filter((r) => r.metric === cfg.metric);
             const allRow = metricRows.find((r) => r.device_type === 'All');
@@ -1488,6 +1511,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
               </div>
             );
           })()}
+          </div>
         </div>
       )}
 

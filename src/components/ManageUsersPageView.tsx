@@ -9,11 +9,9 @@ import {
   RefreshCw,
   Lock,
   User,
-  Sliders,
   ArrowLeft,
   LogIn,
 } from 'lucide-react';
-import { PollingSettingsSection } from './PollingSettingsSection';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
 
 export interface UserItem {
@@ -27,7 +25,7 @@ interface ManageUsersPageViewProps {
   onBack: () => void;
   currentUsername: string;
   currentUserId?: string | number;
-  initialTab?: 'users' | 'polling';
+  initialTab?: string;
   authStatus?: 'checking' | 'authenticated' | 'unauthenticated';
   onUnauthorized?: () => void;
 }
@@ -36,11 +34,9 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
   onBack,
   currentUsername,
   currentUserId,
-  initialTab = 'users',
   authStatus: propAuthStatus,
   onUnauthorized,
 }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'polling'>(initialTab);
   const [pageAuthStatus, setPageAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>(
     propAuthStatus === 'authenticated' ? 'authenticated' : 'checking'
   );
@@ -54,12 +50,6 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
-
-  useEffect(() => {
-    if (initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [initialTab]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -226,80 +216,30 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
         </div>
       </div>
 
-      {/* Main Page Header & View Switcher */}
+      {/* Main Page Header */}
       <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3 rounded-2xl bg-primary/10 text-primary shadow-xs">
-            {activeTab === 'users' ? <Users className="w-7 h-7" /> : <Sliders className="w-7 h-7" />}
+            <Users className="w-7 h-7" />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-base-content flex items-center gap-3">
-              <span>{activeTab === 'users' ? 'Manage HealthStream Users' : 'SNMP Polling Settings'}</span>
-              {activeTab === 'users' && pageAuthStatus === 'authenticated' && (
+              <span>Manage HealthStream Users</span>
+              {pageAuthStatus === 'authenticated' && (
                 <span className="badge badge-sm badge-primary badge-outline font-mono">
                   {users.length} {users.length === 1 ? 'user' : 'users'}
                 </span>
               )}
             </h1>
             <p className="text-xs sm:text-sm text-base-content/60 mt-1">
-              {activeTab === 'users'
-                ? 'Control operator credentials, database-backed authentication, and access roles.'
-                : 'Configure background SNMP sweep cadence and scheduler presets in real-time.'}
+              Control operator credentials, database-backed authentication, and access roles.
             </p>
           </div>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex items-center bg-base-200/80 p-1 rounded-xl border border-base-content/10 self-start sm:self-center">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('users');
-              setError(null);
-              setSuccessMsg(null);
-            }}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'users'
-                ? 'bg-base-100 text-primary shadow-sm font-bold'
-                : 'text-base-content/60 hover:text-base-content'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Users</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('polling');
-              setError(null);
-              setSuccessMsg(null);
-            }}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'polling'
-                ? 'bg-base-100 text-primary shadow-sm font-bold'
-                : 'text-base-content/60 hover:text-base-content'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Polling Settings</span>
-          </button>
         </div>
       </div>
 
       {/* Main Content */}
-      {activeTab === 'polling' ? (
-        <div className="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
-          <PollingSettingsSection
-            parentAuthStatus={pageAuthStatus}
-            onBackToUsers={() => {
-              setActiveTab('users');
-              setError(null);
-            }}
-            onUnauthorized={handleLoginRedirect}
-          />
-        </div>
-      ) : pageAuthStatus === 'checking' ? (
+      {pageAuthStatus === 'checking' ? (
         <div className="rounded-2xl border border-base-content/10 bg-base-100 p-12 shadow-sm flex flex-col items-center justify-center gap-3 text-center">
           <span className="loading loading-spinner loading-md text-primary" />
           <span className="text-xs font-semibold text-base-content/70">
@@ -530,30 +470,6 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
                 </tbody>
               </table>
             </div>
-          </div>
-
-          {/* Quick Status / Navigation to Polling Settings */}
-          <div className="p-4 rounded-2xl bg-base-100 border border-base-content/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                <Sliders className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-base-content">
-                  SNMP Polling Frequency Settings
-                </span>
-                <p className="text-[11px] text-base-content/60">
-                  Background telemetry sweep interval is configurable live from the Polling Settings tab.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('polling')}
-              className="btn btn-sm btn-outline btn-primary rounded-xl shrink-0 self-start sm:self-auto"
-            >
-              Configure Polling
-            </button>
           </div>
         </div>
       )}

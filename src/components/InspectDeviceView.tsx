@@ -1025,8 +1025,15 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           : 'bg-base-300/60 text-base-content/50 border-base-content/15';
                       return (
                         <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
-                          <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                            {typeof psu.watts === 'number' && Number.isFinite(psu.watts) && (
+                              <span className="text-[11px] text-base-content/50 font-normal whitespace-nowrap">
+                                {psu.watts} W
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {rawVal !== undefined && rawVal !== null && (
                               <span className="text-[10px] text-base-content/40 whitespace-nowrap">
                                 raw value {rawVal}
@@ -1048,49 +1055,69 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               </div>
 
               {/* Fans Card */}
-              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="flex items-center gap-2 text-base-content">
-                    <Activity className="w-4 h-4 text-sky-500" />
-                    <span>Fans</span>
-                  </span>
-                </div>
-                {Array.isArray(server.fans) && server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state').length > 0 ? (
-                  <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                    {server.fans
-                      .filter((f) => f.name?.toLowerCase() !== 'fan-state')
-                      .map((fan, idx) => {
-                        const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
-                        const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
-                        const statusBadge =
-                          fan.status === 'ok'
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                            : fan.status === 'warning'
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                            : fan.status === 'critical'
-                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                            : 'bg-base-300/60 text-base-content/50 border-base-content/15';
-                        return (
-                          <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
-                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                            <div className="flex items-center gap-1.5">
-                              {fan.rpm !== undefined && fan.rpm !== null && (
-                                <span className="text-base-content/60 whitespace-nowrap">{fan.rpm} RPM</span>
-                              )}
-                              <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
-                                {fan.status}
-                              </span>
+              {(() => {
+                const validFans = Array.isArray(server.fans)
+                  ? server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state')
+                  : [];
+                const hasPercentFan = validFans.some((f) => typeof f.percent === 'number' && Number.isFinite(f.percent));
+
+                return (
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                    <div>
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span className="flex items-center gap-2 text-base-content">
+                          <Activity className="w-4 h-4 text-sky-500" />
+                          <span>Fans</span>
+                        </span>
+                      </div>
+                      {hasPercentFan && (
+                        <p className="text-[10px] text-base-content/50 font-sans mt-0.5">
+                          Fan speed reported as duty cycle (%) by this hardware
+                        </p>
+                      )}
+                    </div>
+                    {validFans.length > 0 ? (
+                      <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                        {validFans.map((fan, idx) => {
+                          const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
+                          const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
+                          const statusBadge =
+                            fan.status === 'ok'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : fan.status === 'warning'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              : fan.status === 'critical'
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+
+                          const fanValueText =
+                            typeof fan.rpm === 'number' && Number.isFinite(fan.rpm)
+                              ? `${fan.rpm} RPM`
+                              : typeof fan.percent === 'number' && Number.isFinite(fan.percent)
+                              ? `${fan.percent.toFixed(1)}%`
+                              : '—';
+
+                          return (
+                            <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
+                              <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-base-content/60 whitespace-nowrap">{fanValueText}</span>
+                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                                  {fan.status}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-xs font-mono text-base-content/40">
+                        Not reported by this device
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-xs font-mono text-base-content/40">
-                    Not reported by this device
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Temperature (°C) Card */}
               <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">

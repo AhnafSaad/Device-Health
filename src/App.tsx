@@ -39,8 +39,7 @@ export default function App() {
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
-  const [usersModalTab, setUsersModalTab] = useState<'users' | 'polling'>('users');
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'thresholds'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
   // Three-state authentication lifecycle: 'checking' | 'authenticated' | 'unauthenticated'
@@ -114,19 +113,19 @@ export default function App() {
       setInspectDeviceId(null);
       return;
     }
-    if (path === '/admin/polling' || path === '/polling' || path === '/settings' || path === '/admin/settings') {
-      setUsersModalTab('polling');
-      setCurrentView('admin-polling');
-      setInspectDeviceId(null);
-      return;
-    }
     if (path === '/admin/users' || path === '/users') {
-      setUsersModalTab('users');
       setCurrentView('admin-users');
       setInspectDeviceId(null);
       return;
     }
-    if (path === '/admin/thresholds' || path === '/thresholds') {
+    if (
+      path === '/admin/thresholds' ||
+      path === '/thresholds' ||
+      path === '/admin/polling' ||
+      path === '/polling' ||
+      path === '/settings' ||
+      path === '/admin/settings'
+    ) {
       setCurrentView('thresholds');
       setInspectDeviceId(null);
       return;
@@ -857,12 +856,11 @@ export default function App() {
             onUpdateDatacenter={handleUpdateDatacenter}
             onUnauthorized={handleUnauthorized}
           />
-        ) : currentView === 'admin-users' || currentView === 'admin-polling' ? (
+        ) : currentView === 'admin-users' ? (
           <ManageUsersPageView
             onBack={() => router.push('/')}
             currentUsername={currentUsername}
             currentUserId={currentUserId}
-            initialTab={currentView === 'admin-polling' ? 'polling' : usersModalTab}
             authStatus={authStatus}
             onUnauthorized={handleUnauthorized}
           />

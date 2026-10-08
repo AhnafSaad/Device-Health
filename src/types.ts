@@ -69,8 +69,8 @@ export interface Server {
   metricsAvailable?: boolean;
   lastPolledAt?: string;
   sysName?: string | null;
-  powerSupplies?: { name: string; status: string }[] | null;
-  fans?: { name: string; status: string; rpm?: number | null }[] | null;
+  powerSupplies?: { name: string; status: string; watts?: number | null }[] | null;
+  fans?: { name: string; status: string; rpm?: number | null; percent?: number | null }[] | null;
   deviceModel?: string | null;
   sysDescr?: string | null;
   storage?: {
