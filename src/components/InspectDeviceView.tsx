@@ -65,6 +65,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const [portFilter, setPortFilter] = useState<'all' | 'up' | 'down'>('all');
   const [showPortsModal, setShowPortsModal] = useState<boolean>(false);
   const [isPortsExpanded, setIsPortsExpanded] = useState<boolean>(false);
+  const [routerInterfaceTab, setRouterInterfaceTab] = useState<'physical' | 'virtual' | 'ppp'>('physical');
+  const [virtualPortFilter, setVirtualPortFilter] = useState<'all' | 'up' | 'down'>('all');
+  const [pppSessionFilter, setPppSessionFilter] = useState<'all' | 'up' | 'down'>('all');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1180,18 +1183,63 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           {((deviceType === 'Router' || deviceType === 'Switch') || (Array.isArray(activeServer.interfaces) && activeServer.interfaces.length > 0)) && (
             (() => {
               const allPorts = getDeviceInterfaces(activeServer);
-              const totalPorts = allPorts.length;
-              const upPorts = allPorts.filter((p) => p.oper_status === 'up');
-              const downPorts = allPorts.filter((p) => p.oper_status === 'down');
+              const isRouter = deviceType === 'Router';
+
+              const isPhysicalPort = (p: NetworkInterface): boolean => {
+                const t = (p.type || '').toLowerCase();
+                return t === 'ethernet' || t === 'sfp';
+              };
+
+              const isPppSession = (p: NetworkInterface): boolean => {
+                const t = (p.type || '').toLowerCase();
+                return t === 'ppp_session' || t === 'ppp';
+              };
+
+              const getVirtualTypeLabel = (type?: string | null, name?: string): string => {
+                const t = (type || '').toLowerCase();
+                if (t === 'vlan' || /vlan/i.test(name || '')) return 'VLAN';
+                if (t === 'bridge' || /bridge/i.test(name || '')) return 'Bridge';
+                if (t === 'loopback' || /^lo/i.test(name || '')) return 'Loopback';
+                return type ? type.toUpperCase() : 'Virtual';
+              };
+
+              // For Router, headline counts strictly computed from PHYSICAL interfaces ONLY (type === 'ethernet' || type === 'sfp')
+              const physicalPorts = isRouter ? allPorts.filter(isPhysicalPort) : allPorts;
+              const pppSessions = isRouter ? allPorts.filter(isPppSession) : [];
+              const virtualPorts = isRouter ? allPorts.filter((p) => !isPhysicalPort(p) && !isPppSession(p)) : [];
+
+              const headlinePorts = isRouter ? physicalPorts : allPorts;
+              const totalPorts = headlinePorts.length;
+              const upPorts = headlinePorts.filter((p) => p.oper_status === 'up');
+              const downPorts = headlinePorts.filter((p) => p.oper_status === 'down');
               const upCount = upPorts.length;
               const downCount = downPorts.length;
               const upRatio = totalPorts > 0 ? Math.round((upCount / totalPorts) * 100) : 0;
 
-              const filteredPorts = portFilter === 'up'
+              // Filtered headline / physical ports
+              const filteredHeadlinePorts = portFilter === 'up'
                 ? upPorts
                 : portFilter === 'down'
                 ? downPorts
-                : allPorts;
+                : headlinePorts;
+
+              // Filtered virtual ports for modal
+              const virtualUpPorts = virtualPorts.filter((p) => p.oper_status === 'up');
+              const virtualDownPorts = virtualPorts.filter((p) => p.oper_status === 'down');
+              const filteredVirtualPorts = virtualPortFilter === 'up'
+                ? virtualUpPorts
+                : virtualPortFilter === 'down'
+                ? virtualDownPorts
+                : virtualPorts;
+
+              // Filtered dial-in PPP sessions for modal
+              const pppUpPorts = pppSessions.filter((p) => p.oper_status === 'up');
+              const pppDownPorts = pppSessions.filter((p) => p.oper_status === 'down');
+              const filteredPppSessions = pppSessionFilter === 'up'
+                ? pppUpPorts
+                : pppSessionFilter === 'down'
+                ? pppDownPorts
+                : pppSessions;
 
               return (
                 <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
@@ -1261,7 +1309,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   {/* Compact Quick Front-Panel Summary Strip & Inline Toggle */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-base-content/5">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {allPorts.slice(0, 10).map((p) => {
+                      {headlinePorts.slice(0, 10).map((p) => {
                         const isUp = p.oper_status === 'up';
                         return (
                           <span
@@ -1278,9 +1326,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           </span>
                         );
                       })}
-                      {allPorts.length > 10 && (
+                      {headlinePorts.length > 10 && (
                         <span className="text-[10px] font-mono text-base-content/50 px-1">
-                          +{allPorts.length - 10} more
+                          +{headlinePorts.length - 10} more
                         </span>
                       )}
                     </div>
@@ -1341,9 +1389,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
                       {/* Compact Scrollable Grid */}
                       <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1">
-                        {filteredPorts.length > 0 ? (
+                        {filteredHeadlinePorts.length > 0 ? (
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                            {filteredPorts.map((port) => {
+                            {filteredHeadlinePorts.map((port) => {
                               const isUp = port.oper_status === 'up';
                               return (
                                 <div
@@ -1423,7 +1471,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                 </span>
                               </h3>
                               <p className="text-xs text-base-content/50 truncate">
-                                IP: {activeServer.ip} • Type: {deviceType} • {totalPorts} ports detected
+                                IP: {activeServer.ip} • Type: {deviceType} • {isRouter ? `${physicalPorts.length} physical ports, ${virtualPorts.length} virtual interfaces${pppSessions.length > 0 ? `, ${pppSessions.length} dial-in sessions` : ''}` : `${totalPorts} ports detected`}
                               </p>
                             </div>
                           </div>
@@ -1454,7 +1502,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                               </span>
                             </div>
                             <div className="text-xs font-mono text-base-content/70">
-                              <span>Link Availability: </span>
+                              <span>Port Link Availability: </span>
                               <span className="font-bold text-emerald-500">{upRatio}%</span> ({upCount}/{totalPorts} online)
                             </div>
                           </div>
@@ -1464,108 +1512,437 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                             <div className="h-full bg-rose-500/60 transition-all duration-300" style={{ width: `${100 - upRatio}%` }} />
                           </div>
 
-                          {/* Filter Tabs */}
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setPortFilter('all')}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                portFilter === 'all'
-                                  ? 'bg-primary text-primary-content shadow-xs'
-                                  : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
-                              }`}
-                            >
-                              All Ports ({totalPorts})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPortFilter('up')}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                portFilter === 'up'
-                                  ? 'bg-emerald-500 text-white shadow-xs'
-                                  : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              }`}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Active Up ({upCount})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPortFilter('down')}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                portFilter === 'down'
-                                  ? 'bg-rose-500 text-white shadow-xs'
-                                  : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
-                              }`}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                              Down ({downCount})
-                            </button>
-                          </div>
+                          {/* For Router: Tab control (Physical Ports vs Virtual / VLAN Interfaces vs Dial-in Sessions) */}
+                          {isRouter ? (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-base-content/10">
+                              <div className="flex flex-wrap items-center gap-1.5 bg-base-200/80 p-1 rounded-xl">
+                                <button
+                                  type="button"
+                                  onClick={() => setRouterInterfaceTab('physical')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                                    routerInterfaceTab === 'physical'
+                                      ? 'bg-primary text-primary-content shadow-xs'
+                                      : 'hover:bg-base-300 text-base-content/70'
+                                  }`}
+                                >
+                                  <span>Physical Ports</span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                      routerInterfaceTab === 'physical'
+                                        ? 'bg-primary-content/20 text-primary-content'
+                                        : 'bg-base-300 text-base-content/60'
+                                    }`}
+                                  >
+                                    {physicalPorts.length}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRouterInterfaceTab('virtual')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                                    routerInterfaceTab === 'virtual'
+                                      ? 'bg-primary text-primary-content shadow-xs'
+                                      : 'hover:bg-base-300 text-base-content/70'
+                                  }`}
+                                >
+                                  <span>Virtual / VLAN Interfaces</span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                      routerInterfaceTab === 'virtual'
+                                        ? 'bg-primary-content/20 text-primary-content'
+                                        : 'bg-base-300 text-base-content/60'
+                                    }`}
+                                  >
+                                    {virtualPorts.length}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRouterInterfaceTab('ppp')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                                    routerInterfaceTab === 'ppp'
+                                      ? 'bg-primary text-primary-content shadow-xs'
+                                      : 'hover:bg-base-300 text-base-content/70'
+                                  }`}
+                                >
+                                  <span>Dial-in Sessions (PPP/PPPoE)</span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                      routerInterfaceTab === 'ppp'
+                                        ? 'bg-primary-content/20 text-primary-content'
+                                        : 'bg-base-300 text-base-content/60'
+                                    }`}
+                                  >
+                                    {pppSessions.length}
+                                  </span>
+                                </button>
+                              </div>
+
+                              {/* Filter chips for active tab */}
+                              {routerInterfaceTab === 'physical' ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPortFilter('all')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      portFilter === 'all'
+                                        ? 'bg-primary text-primary-content shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
+                                    }`}
+                                  >
+                                    All ({physicalPorts.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPortFilter('up')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      portFilter === 'up'
+                                        ? 'bg-emerald-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    Active Up ({upCount})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPortFilter('down')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      portFilter === 'down'
+                                        ? 'bg-rose-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    Down ({downCount})
+                                  </button>
+                                </div>
+                              ) : routerInterfaceTab === 'virtual' ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setVirtualPortFilter('all')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      virtualPortFilter === 'all'
+                                        ? 'bg-primary text-primary-content shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
+                                    }`}
+                                  >
+                                    All ({virtualPorts.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setVirtualPortFilter('up')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      virtualPortFilter === 'up'
+                                        ? 'bg-emerald-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    Active Up ({virtualUpPorts.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setVirtualPortFilter('down')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      virtualPortFilter === 'down'
+                                        ? 'bg-rose-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    Down ({virtualDownPorts.length})
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPppSessionFilter('all')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      pppSessionFilter === 'all'
+                                        ? 'bg-primary text-primary-content shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
+                                    }`}
+                                  >
+                                    All ({pppSessions.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPppSessionFilter('up')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      pppSessionFilter === 'up'
+                                        ? 'bg-emerald-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    Active Up ({pppUpPorts.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPppSessionFilter('down')}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      pppSessionFilter === 'down'
+                                        ? 'bg-rose-500 text-white shadow-xs'
+                                        : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    Down ({pppDownPorts.length})
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Non-Router devices: Original filter tabs unchanged */
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setPortFilter('all')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                  portFilter === 'all'
+                                    ? 'bg-primary text-primary-content shadow-xs'
+                                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
+                                }`}
+                              >
+                                All Ports ({totalPorts})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPortFilter('up')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  portFilter === 'up'
+                                    ? 'bg-emerald-500 text-white shadow-xs'
+                                    : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Active Up ({upCount})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPortFilter('down')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  portFilter === 'down'
+                                    ? 'bg-rose-500 text-white shadow-xs'
+                                    : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                Down ({downCount})
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Modal Body: Full Responsive Ports Grid */}
                         <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3">
-                          {filteredPorts.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                              {filteredPorts.map((port) => {
-                                const isUp = port.oper_status === 'up';
-                                return (
-                                  <div
-                                    key={`modal-${port.name}-${port.index}`}
-                                    className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
-                                      isUp
-                                        ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
-                                        : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-1.5">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span
-                                          className={`w-2 h-2 rounded-full shrink-0 ${
-                                            isUp
-                                              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                              : 'bg-rose-500/70'
-                                          }`}
-                                        />
-                                        <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
-                                          {port.name}
+                          {isRouter && routerInterfaceTab === 'ppp' ? (
+                            filteredPppSessions.length > 0 ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                {filteredPppSessions.map((port) => {
+                                  const isUp = port.oper_status === 'up';
+                                  return (
+                                    <div
+                                      key={`modal-ppp-${port.name}-${port.index}`}
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                        isUp
+                                          ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
+                                          : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span
+                                            className={`w-2 h-2 rounded-full shrink-0 ${
+                                              isUp
+                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                : 'bg-rose-500/70'
+                                            }`}
+                                          />
+                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
+                                            {port.name}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-sky-500/15 text-sky-500 border border-sky-500/30">
+                                            PPP
+                                          </span>
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                              isUp
+                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                            }`}
+                                          >
+                                            {isUp ? 'UP' : 'DOWN'}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
+                                        <span className="text-base-content/50 uppercase text-[10px] font-medium">
+                                          PPP Session
+                                        </span>
+                                        <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
+                                          {isUp ? formatPortSpeed(port.speed) : 'No Link'}
                                         </span>
                                       </div>
-                                      <span
-                                        className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
-                                          isUp
-                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                            : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                        }`}
-                                      >
-                                        {isUp ? 'UP' : 'DOWN'}
-                                      </span>
                                     </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
+                                {pppSessions.length === 0
+                                  ? 'No active PPP/PPPoE dial-in sessions detected on this router.'
+                                  : 'No dial-in sessions match the selected filter.'}
+                              </div>
+                            )
+                          ) : isRouter && routerInterfaceTab === 'virtual' ? (
+                            filteredVirtualPorts.length > 0 ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                {filteredVirtualPorts.map((port) => {
+                                  const isUp = port.oper_status === 'up';
+                                  const typeLabel = getVirtualTypeLabel(port.type, port.name);
+                                  return (
+                                    <div
+                                      key={`modal-virt-${port.name}-${port.index}`}
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                        isUp
+                                          ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
+                                          : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span
+                                            className={`w-2 h-2 rounded-full shrink-0 ${
+                                              isUp
+                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                : 'bg-rose-500/70'
+                                            }`}
+                                          />
+                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
+                                            {port.name}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                              typeLabel === 'VLAN'
+                                                ? 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
+                                                : typeLabel === 'Bridge'
+                                                ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+                                                : 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
+                                            }`}
+                                          >
+                                            {typeLabel}
+                                          </span>
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                              isUp
+                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                            }`}
+                                          >
+                                            {isUp ? 'UP' : 'DOWN'}
+                                          </span>
+                                        </div>
+                                      </div>
 
-                                    <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
-                                      <span className="text-base-content/50 uppercase text-[10px]">
-                                        {port.type || 'Ethernet'}
-                                      </span>
-                                      <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
-                                        {isUp ? formatPortSpeed(port.speed) : 'No Link'}
-                                      </span>
+                                      <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
+                                        <span className="text-base-content/50 uppercase text-[10px] font-medium">
+                                          {typeLabel}
+                                        </span>
+                                        <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
+                                          {isUp ? formatPortSpeed(port.speed) : 'No Link'}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
+                                {virtualPorts.length === 0
+                                  ? 'No virtual or VLAN interfaces detected on this router.'
+                                  : 'No virtual interfaces match the selected filter.'}
+                              </div>
+                            )
                           ) : (
-                            <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
-                              No ports match the selected filter.
-                            </div>
+                            /* Physical ports for Router OR All ports for other deviceTypes */
+                            filteredHeadlinePorts.length > 0 ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                {filteredHeadlinePorts.map((port) => {
+                                  const isUp = port.oper_status === 'up';
+                                  return (
+                                    <div
+                                      key={`modal-${port.name}-${port.index}`}
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                        isUp
+                                          ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
+                                          : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span
+                                            className={`w-2 h-2 rounded-full shrink-0 ${
+                                              isUp
+                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                : 'bg-rose-500/70'
+                                            }`}
+                                          />
+                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
+                                            {port.name}
+                                          </span>
+                                        </div>
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                            isUp
+                                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                              : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                          }`}
+                                        >
+                                          {isUp ? 'UP' : 'DOWN'}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
+                                        <span className="text-base-content/50 uppercase text-[10px]">
+                                          {port.type || 'Ethernet'}
+                                        </span>
+                                        <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
+                                          {isUp ? formatPortSpeed(port.speed) : 'No Link'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
+                                No ports match the selected filter.
+                              </div>
+                            )
                           )}
                         </div>
 
                         {/* Modal Footer */}
                         <div className="p-3.5 sm:p-4 border-t border-base-content/10 flex items-center justify-between bg-base-200/30">
                           <span className="text-xs font-mono text-base-content/50">
-                            Showing {filteredPorts.length} of {totalPorts} ports
+                            {isRouter ? (
+                              routerInterfaceTab === 'physical'
+                                ? `Showing ${filteredHeadlinePorts.length} of ${physicalPorts.length} physical ports`
+                                : routerInterfaceTab === 'virtual'
+                                ? `Showing ${filteredVirtualPorts.length} of ${virtualPorts.length} virtual interfaces`
+                                : `Showing ${filteredPppSessions.length} of ${pppSessions.length} dial-in sessions`
+                            ) : (
+                              `Showing ${filteredHeadlinePorts.length} of ${totalPorts} ports`
+                            )}
                           </span>
                           <button
                             type="button"
