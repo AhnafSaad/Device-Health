@@ -73,6 +73,7 @@ export interface Server {
   fans?: { name: string; status: string; rpm?: number | null; percent?: number | null }[] | null;
   deviceModel?: string | null;
   deviceSerial?: string | null;
+  softwareId?: string | null;
   sysDescr?: string | null;
   storage?: {
     name: string;

@@ -259,6 +259,7 @@ export default function App() {
               fans: Array.isArray(d.fans) ? d.fans : null,
               deviceModel: d.device_model ?? d.deviceModel ?? null,
               deviceSerial: d.device_serial ?? d.deviceSerial ?? null,
+              softwareId: d.software_id ?? d.softwareId ?? null,
               sysDescr: d.sys_descr ?? d.sysDescr ?? null,
               storage: Array.isArray(d.storage)
                 ? d.storage
@@ -633,6 +634,7 @@ export default function App() {
                 fans: Array.isArray(live.fans) ? live.fans : (existing?.fans ?? null),
                 deviceModel: live.device_model ?? live.deviceModel ?? existing?.deviceModel ?? null,
                 deviceSerial: live.device_serial ?? live.deviceSerial ?? existing?.deviceSerial ?? null,
+                softwareId: live.software_id ?? live.softwareId ?? existing?.softwareId ?? null,
                 sysDescr: live.sys_descr ?? live.sysDescr ?? existing?.sysDescr ?? null,
                 storage: Array.isArray(live.storage)
                   ? live.storage

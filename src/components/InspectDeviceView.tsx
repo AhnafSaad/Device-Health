@@ -35,7 +35,8 @@ import {
   Info,
   Eye,
   X,
-  Hash
+  Hash,
+  Key
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -186,6 +187,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (cur.powerSupplies ?? null),
             fans: Array.isArray(d.fans) ? d.fans : (cur.fans ?? null),
             deviceSerial: d.device_serial !== undefined ? d.device_serial : (d.deviceSerial !== undefined ? d.deviceSerial : (cur.deviceSerial ?? null)),
+            softwareId: d.software_id !== undefined ? d.software_id : (d.softwareId !== undefined ? d.softwareId : (cur.softwareId ?? null)),
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
@@ -647,7 +649,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-stretch">
           
           {/* Resource Utilization Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col justify-between">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -658,7 +660,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3.5 sm:space-y-4">
+            <div className="space-y-3.5 sm:space-y-4 flex-1 flex flex-col justify-between">
               {/* CPU Bar (all device types) */}
               <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                 <div className="flex justify-between items-center text-xs font-semibold mb-2">
@@ -855,7 +857,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
 
           {/* Storage & Memory (All Device Types) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col justify-between">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Database className="w-4 h-4 text-secondary" />
@@ -867,12 +869,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
 
             {Array.isArray(server.storage) && server.storage.length > 0 ? (
-              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10">
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col justify-between">
                 {server.storage.map((item, idx) => {
                   const pct = Number(item.used_pct ?? 0);
                   const kindLabel = formatStorageKind(item.kind);
                   return (
-                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center">
+                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
@@ -902,7 +904,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 })}
               </div>
             ) : (
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40">
+              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
                 Not reported by this device
               </div>
             )}
@@ -2258,6 +2260,28 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* MikroTik Software ID */}
+              {(((server.brand || '').toLowerCase().includes('mikrotik') ||
+                (activeServer.brand || '').toLowerCase().includes('mikrotik') ||
+                deviceType === 'Router' ||
+                Boolean(activeServer.softwareId ?? server.softwareId))) && (
+                <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
+                  <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
+                    <Key className="w-3.5 h-3.5 text-primary" />
+                    Software ID
+                  </div>
+                  {(activeServer.softwareId ?? server.softwareId) ? (
+                    <div className="font-semibold text-base-content font-mono break-all">
+                      {activeServer.softwareId ?? server.softwareId}
+                    </div>
+                  ) : (
+                    <div className="font-semibold text-base-content/40 font-mono">
+                      Not reported
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">

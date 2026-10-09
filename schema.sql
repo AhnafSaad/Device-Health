@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   fans JSONB,
   device_model VARCHAR(255),
   device_serial VARCHAR(128),
+  software_id VARCHAR(64),
   sys_descr TEXT,
   storage JSONB,
   disk_percentage_used INTEGER,
@@ -83,6 +84,7 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS power_supplies JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS fans JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS device_model VARCHAR(255);
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS device_serial VARCHAR(128);
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS software_id VARCHAR(64);
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS sys_descr TEXT;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS storage JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_percentage_used INTEGER;
