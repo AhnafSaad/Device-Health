@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
   ram_ecc_corrected INTEGER,
   ram_ecc_uncorrected INTEGER,
   ram_ecc_controllers JSONB,
+  disks JSONB,
+  interfaces JSONB,
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -89,6 +91,19 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disk_estimated_eol_days INTE
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_corrected INTEGER;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_uncorrected INTEGER;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_controllers JSONB;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disks JSONB;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS interfaces JSONB;
+
+-- 6. Raw I/O counters table for per-disk rate computation across polls
+CREATE TABLE IF NOT EXISTS disk_io_raw_v2 (
+  device_ip VARCHAR(45) NOT NULL,
+  disk_name VARCHAR(64) NOT NULL,
+  read_bytes NUMERIC NOT NULL,
+  written_bytes NUMERIC NOT NULL,
+  sys_uptime_ticks NUMERIC NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (device_ip, disk_name)
+);
 
 -- Indexes on ip_address and recorded_at (descending)
 CREATE INDEX IF NOT EXISTS idx_telemetry_ip ON telemetry_data(ip_address);

@@ -255,6 +255,7 @@ interface DeviceRecord {
   temperature?: number | null;
   optical_tx?: number | null;
   optical_rx?: number | null;
+  interfaces?: any;
   status?: string;
   health?: string;
   uptime?: string;
@@ -273,6 +274,7 @@ export interface NormalizedTelemetry {
   optical_tx?: number | null;
   optical_rx?: number | null;
   metrics_available?: boolean;
+  interfaces?: any;
   uptime: string;
   load_average: string;
   snmp_reachable: boolean;
@@ -1328,6 +1330,8 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.ram_ecc_corrected,
         t.ram_ecc_uncorrected,
         t.ram_ecc_controllers,
+        t.disks,
+        t.interfaces,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1389,6 +1393,7 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
           temperature: latest.temperature ?? null,
           optical_tx: latest.optical_tx ?? null,
           optical_rx: latest.optical_rx ?? null,
+          interfaces: latest.interfaces ?? null,
           uptime: latest.uptime,
           status: latest.status,
           health: latest.health,
@@ -1484,6 +1489,8 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         t.ram_ecc_corrected,
         t.ram_ecc_uncorrected,
         t.ram_ecc_controllers,
+        t.disks,
+        t.interfaces,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1541,6 +1548,7 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         temperature: latest.temperature ?? null,
         optical_tx: latest.optical_tx ?? null,
         optical_rx: latest.optical_rx ?? null,
+        interfaces: latest.interfaces ?? null,
         uptime: latest.uptime,
         status: latest.status,
         health: latest.health,
@@ -1599,7 +1607,9 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.disk_estimated_eol_days,
         t.ram_ecc_corrected,
         t.ram_ecc_uncorrected,
-        t.ram_ecc_controllers
+        t.ram_ecc_controllers,
+        t.disks,
+        t.interfaces
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
@@ -1625,9 +1635,13 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
     // Fallback to memory
     const dev = memoryDevices.find((d) => String(d.id) === String(id) || d.ip_address === String(id));
     if (dev) {
+      const latest = (getLatestTelemetryMap() as Map<string, any>).get(dev.ip_address);
       return res.json({
         status: 'success',
-        device: dev,
+        device: {
+          ...dev,
+          ...(latest ? { interfaces: latest.interfaces ?? (dev as any).interfaces ?? null } : {}),
+        },
       });
     }
 

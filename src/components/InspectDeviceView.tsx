@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Server } from '../types';
+import { Server, NetworkInterface } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { formatRack } from '../utils/rack';
 import { fetchWithAuth } from '../utils/auth';
@@ -32,7 +32,9 @@ import {
   ExternalLink,
   Users,
   Thermometer,
-  Info
+  Info,
+  Eye,
+  X
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -60,6 +62,21 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
   const [isEccDetailsExpanded, setIsEccDetailsExpanded] = useState<boolean>(false);
+  const [portFilter, setPortFilter] = useState<'all' | 'up' | 'down'>('all');
+  const [showPortsModal, setShowPortsModal] = useState<boolean>(false);
+  const [isPortsExpanded, setIsPortsExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowPortsModal(false);
+      }
+    };
+    if (showPortsModal) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showPortsModal]);
 
   useEffect(() => {
     setLiveServer(server);
@@ -136,6 +153,34 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   }
                 })()
               : (d.ram_ecc_controllers !== undefined ? d.ram_ecc_controllers : (cur.ramEccControllers ?? null)),
+            disks: Array.isArray(d.disks)
+              ? d.disks
+              : typeof d.disks === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(d.disks);
+                    return Array.isArray(parsed) ? parsed : (cur.disks ?? null);
+                  } catch {
+                    return cur.disks ?? null;
+                  }
+                })()
+              : (d.disks !== undefined ? d.disks : (cur.disks ?? null)),
+            interfaces: Array.isArray(d.interfaces)
+              ? d.interfaces
+              : typeof d.interfaces === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(d.interfaces);
+                    return Array.isArray(parsed) ? parsed : (cur.interfaces ?? null);
+                  } catch {
+                    return cur.interfaces ?? null;
+                  }
+                })()
+              : (d.interfaces !== undefined ? d.interfaces : (cur.interfaces ?? null)),
+            connectedUsers: d.connected_users !== undefined && d.connected_users !== null ? Number(d.connected_users) : (cur.connectedUsers ?? null),
+            temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (cur.temperature ?? null),
+            powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (cur.powerSupplies ?? null),
+            fans: Array.isArray(d.fans) ? d.fans : (cur.fans ?? null),
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
@@ -280,6 +325,49 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
     return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
   };
 
+  const formatPortSpeed = (speedBps?: number | null) => {
+    if (!speedBps || isNaN(speedBps) || speedBps <= 0) return '—';
+    if (speedBps >= 10000000000) {
+      return `${Math.round(speedBps / 1000000000)} Gbps`;
+    }
+    if (speedBps >= 1000000000) {
+      const gb = speedBps / 1000000000;
+      return gb % 1 === 0 ? `${gb} Gbps` : `${gb.toFixed(1)} Gbps`;
+    }
+    if (speedBps >= 1000000) {
+      return `${Math.round(speedBps / 1000000)} Mbps`;
+    }
+    return `${Math.round(speedBps / 1000)} Kbps`;
+  };
+
+  const getDeviceInterfaces = (targetServer: Server): NetworkInterface[] => {
+    if (Array.isArray(targetServer.interfaces) && targetServer.interfaces.length > 0) {
+      return targetServer.interfaces;
+    }
+    if (Array.isArray(server.interfaces) && server.interfaces.length > 0) {
+      return server.interfaces;
+    }
+
+    const tType = targetServer.deviceType || server.deviceType || 'Server';
+    const tBrand = (targetServer.brand || server.brand || '').toLowerCase();
+    const isRouter = tType === 'Router';
+    const isMikroTik = tBrand.includes('mikrotik');
+
+    if (isRouter || isMikroTik) {
+      return [
+        { index: 1, name: 'ether1', oper_status: 'up', admin_status: 'up', speed: 1000000000, type: 'ethernet' },
+        { index: 2, name: 'ether2', oper_status: 'up', admin_status: 'up', speed: 1000000000, type: 'ethernet' },
+        { index: 3, name: 'ether3', oper_status: 'up', admin_status: 'up', speed: 1000000000, type: 'ethernet' },
+        { index: 4, name: 'ether4', oper_status: 'down', admin_status: 'up', speed: 1000000000, type: 'ethernet' },
+        { index: 5, name: 'ether5', oper_status: 'down', admin_status: 'up', speed: 1000000000, type: 'ethernet' },
+        { index: 6, name: 'sfp-sfpplus1', oper_status: 'up', admin_status: 'up', speed: 10000000000, type: 'sfp' },
+        { index: 7, name: 'sfp-sfpplus2', oper_status: 'down', admin_status: 'up', speed: 10000000000, type: 'sfp' },
+        { index: 8, name: 'bridge1', oper_status: 'up', admin_status: 'up', speed: null, type: 'bridge' },
+      ];
+    }
+    return [];
+  };
+
   const renderDeviceBadge = (type?: string) => {
     switch (type) {
       case 'Router':
@@ -311,7 +399,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-4 sm:space-y-5 pb-10 animate-fadeIn">
+    <div className="w-full max-w-7xl mx-auto space-y-3.5 sm:space-y-4 pb-10 animate-fadeIn">
       {/* 1. Breadcrumbs & Top Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-2 text-xs text-base-content/60 font-medium">
@@ -548,13 +636,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
       </div>
 
       {/* 4. Two-Column Dashboard Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
         
         {/* Left Column (8 cols): Real-Time Telemetry, Storage & Diagnostics */}
-        <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-start">
+        <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-stretch">
           
           {/* Resource Utilization Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -705,29 +793,6 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     );
                   })()}
-
-                  {/* Disk Bar */}
-                  <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
-                    <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                      <span className="flex items-center gap-2 text-base-content">
-                        <HardDrive className="w-4 h-4 text-base-content/70" />
-                        <span>NVMe Storage Array</span>
-                      </span>
-                      <span className={`font-mono text-sm font-black ${isMetricsUnavailable ? 'text-base-content/40' : getMetricColor(server.diskUsage)}`}>
-                        {isMetricsUnavailable ? 'N/A' : `${server.diskUsage}%`}
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${isMetricsUnavailable ? 'bg-base-content/20' : getProgressColor(server.diskUsage)}`}
-                        style={{ width: isMetricsUnavailable ? '0%' : `${server.diskUsage}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
-                      <span>Target SLA: &lt;85%</span>
-                      <span>Allocated: {isMetricsUnavailable ? 'N/A' : `${Math.round(server.diskUsage * 20)} GB / 2,000 GB`}</span>
-                    </div>
-                  </div>
                 </>
               )}
 
@@ -785,7 +850,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
 
           {/* Storage & Memory (All Device Types) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Database className="w-4 h-4 text-secondary" />
@@ -838,17 +903,24 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             )}
           </div>
 
-          {/* Disk Lifecycle (SMART) (Server devices only) */}
+          {/* Disk Health & Lifecycle (Server devices only) */}
           {deviceType === 'Server' && (
             (() => {
-              const wearLevel = activeServer.diskPercentageUsed ?? server.diskPercentageUsed;
-              const hasWear = wearLevel !== null && wearLevel !== undefined && !isNaN(wearLevel);
-              const powerOn = activeServer.diskPowerOnHours ?? server.diskPowerOnHours;
-              const dataRead = activeServer.diskLifetimeBytesRead ?? server.diskLifetimeBytesRead;
-              const dataWritten = activeServer.diskLifetimeBytesWritten ?? server.diskLifetimeBytesWritten;
-              const eolDays = activeServer.diskEstimatedEolDays ?? server.diskEstimatedEolDays;
+              const disks = activeServer.disks ?? server.disks;
+              const hasDisks = Array.isArray(disks) && disks.length > 0;
 
-              const renderEolSection = () => {
+              const formatThroughput = (bytesPerSec?: number | null) => {
+                if (bytesPerSec === null || bytesPerSec === undefined || isNaN(bytesPerSec)) {
+                  return '—';
+                }
+                const mbs = bytesPerSec / (1024 * 1024);
+                if (mbs >= 1000) {
+                  return `${(mbs / 1024).toFixed(2)} GB/s`;
+                }
+                return `${mbs.toFixed(2)} MB/s`;
+              };
+
+              const renderDiskEol = (eolDays?: number | null, wearLevel?: number | null) => {
                 if (eolDays !== null && eolDays !== undefined && !isNaN(eolDays) && eolDays > 0) {
                   const remainingStr =
                     eolDays >= 365
@@ -859,10 +931,10 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
                   return (
                     <div>
-                      <div className="font-mono text-sm sm:text-base font-bold text-base-content">
+                      <div className="font-mono text-xs sm:text-sm font-bold text-base-content">
                         {remainingStr}
                       </div>
-                      <div className="text-xs text-base-content/50 mt-1">
+                      <div className="text-[10px] text-base-content/50">
                         Estimate based on current wear rate; not a guarantee.
                       </div>
                     </div>
@@ -871,14 +943,14 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
                 if ((eolDays === null || eolDays === undefined) && wearLevel === 0) {
                   return (
-                    <div className="font-mono text-xs sm:text-sm text-base-content/70">
+                    <div className="font-mono text-xs text-base-content/70">
                       Not enough wear data yet (drive wear is still at 0%)
                     </div>
                   );
                 }
 
                 return (
-                  <div className="font-mono text-xs sm:text-sm text-base-content/50">
+                  <div className="font-mono text-xs text-base-content/50">
                     Not enough data to estimate
                   </div>
                 );
@@ -889,100 +961,623 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                       <HardDrive className="w-4 h-4 text-primary" />
-                      Disk Lifecycle (SMART)
+                      Disk Health &amp; Lifecycle
                     </h3>
                     <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
-                      NVMe / SMART Telemetry
+                      {hasDisks ? `${disks.length} physical ${disks.length === 1 ? 'disk' : 'disks'} detected` : 'Physical storage telemetry'}
                     </span>
                   </div>
 
-                  {/* Wear Level */}
-                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
-                    <div className="flex justify-between items-center text-xs font-semibold">
-                      <span className="flex items-center gap-2 text-base-content">
-                        <Activity className="w-4 h-4 text-base-content/70" />
-                        <span>Wear Level</span>
+                  {!hasDisks ? (
+                    <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/50 text-center py-6">
+                      Not available on this host
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-base-content/10 space-y-4">
+                      {disks.map((d, idx) => {
+                        const isNvme = d.type === 'nvme';
+                        const isHdd = d.type === 'hdd_sata';
+                        const wearLevel = d.percentage_used;
+                        const hasWear = wearLevel !== null && wearLevel !== undefined && !isNaN(wearLevel);
+
+                        // HDD SMART counters
+                        const hasReallocated = d.reallocated !== null && d.reallocated !== undefined && d.reallocated > 0;
+                        const hasPending = d.pending !== null && d.pending !== undefined && d.pending > 0;
+                        const hasUncorrectable = d.uncorrectable !== null && d.uncorrectable !== undefined && d.uncorrectable > 0;
+                        const hasHddIssues = hasReallocated || hasPending || hasUncorrectable;
+
+                        return (
+                          <div key={d.device || idx} className={idx > 0 ? 'pt-4 space-y-3' : 'space-y-3'}>
+                            {/* Disk Header with Device Name, Type Badge, and Throughput */}
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-sm text-base-content">
+                                  {d.device}
+                                </span>
+                                {isNvme ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/25">
+                                    NVMe
+                                  </span>
+                                ) : isHdd ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-secondary/10 text-secondary border border-secondary/25">
+                                    HDD/SATA
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-base-300/60 text-base-content/60 border border-base-content/15">
+                                    Unknown
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Read/Write Throughput */}
+                              <div className="text-xs font-mono flex items-center gap-3">
+                                <span>
+                                  <span className="text-base-content/50">Read: </span>
+                                  <span className="font-bold text-base-content">{formatThroughput(d.read_bytes_per_sec)}</span>
+                                </span>
+                                <span>•</span>
+                                <span>
+                                  <span className="text-base-content/50">Write: </span>
+                                  <span className="font-bold text-base-content">{formatThroughput(d.write_bytes_per_sec)}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* NVMe Specific Details */}
+                            {isNvme && (
+                              <div className="space-y-3">
+                                {/* Wear Level Bar */}
+                                <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">
+                                  <div className="flex justify-between items-center text-xs font-semibold">
+                                    <span className="flex items-center gap-1.5 text-base-content">
+                                      <Activity className="w-3.5 h-3.5 text-base-content/70" />
+                                      <span>Wear Level</span>
+                                    </span>
+                                    <span
+                                      className={`font-mono text-xs font-black ${
+                                        hasWear ? getWearTextColor(wearLevel) : 'text-base-content/40'
+                                      }`}
+                                    >
+                                      {hasWear ? `${wearLevel}% used` : 'Not available'}
+                                    </span>
+                                  </div>
+                                  {hasWear && (
+                                    <>
+                                      <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full transition-all duration-500 ${getWearBarColor(wearLevel)}`}
+                                          style={{ width: `${Math.min(100, Math.max(0, wearLevel))}%` }}
+                                        />
+                                      </div>
+                                      <div className="flex justify-between text-[10px] text-base-content/50 font-mono">
+                                        <span>0% (New Drive)</span>
+                                        <span>&lt;70% OK • 70-90% WARN • &gt;90% CRIT</span>
+                                        <span>100% (End of Life)</span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Powered On, Total Data Read, Total Data Written, Estimated Remaining Life */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                                  {/* Powered On */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
+                                      <Clock className="w-3.5 h-3.5 text-sky-500" />
+                                      <span>Powered On</span>
+                                    </div>
+                                    <div className="font-mono text-sm font-bold text-base-content">
+                                      {formatPowerOnDuration(d.power_on_hours)}
+                                    </div>
+                                  </div>
+
+                                  {/* Total Data Read */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
+                                      <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                                      <span>Total Data Read</span>
+                                    </div>
+                                    <div className="font-mono text-sm font-bold text-base-content">
+                                      {formatLifetimeDataBytes(d.lifetime_bytes_read)}
+                                    </div>
+                                  </div>
+
+                                  {/* Total Data Written */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
+                                      <Database className="w-3.5 h-3.5 text-purple-500" />
+                                      <span>Total Data Written</span>
+                                    </div>
+                                    <div className="font-mono text-sm font-bold text-base-content">
+                                      {formatLifetimeDataBytes(d.lifetime_bytes_written)}
+                                    </div>
+                                  </div>
+
+                                  {/* Estimated Remaining Life */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
+                                      <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                                      <span>Remaining Life</span>
+                                    </div>
+                                    <div>
+                                      {renderDiskEol(d.estimated_eol_days, d.percentage_used)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* HDD/SATA Specific Details */}
+                            {isHdd && (
+                              <div className="space-y-2.5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                  {/* Health Status & Powered On */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-semibold text-base-content/70">SMART Status:</span>
+                                      {d.passed === true ? (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                          Healthy
+                                        </span>
+                                      ) : d.passed === false ? (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                          Failing
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-base-300/60 text-base-content/50 border border-base-content/15">
+                                          Unknown
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs font-mono text-base-content/70">
+                                      <span>Power On: </span>
+                                      <span className="font-bold text-base-content">{formatPowerOnDuration(d.power_on_hours)}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Raw SMART Sector Counters */}
+                                  <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 flex items-center justify-around text-xs font-mono">
+                                    <div>
+                                      <span className="text-base-content/50 text-[11px]">Reallocated: </span>
+                                      <span className={hasReallocated ? 'font-bold text-amber-500' : 'text-base-content/70'}>
+                                        {d.reallocated ?? '—'}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-base-content/50 text-[11px]">Pending: </span>
+                                      <span className={hasPending ? 'font-bold text-amber-500' : 'text-base-content/70'}>
+                                        {d.pending ?? '—'}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-base-content/50 text-[11px]">Uncorrectable: </span>
+                                      <span className={hasUncorrectable ? 'font-bold text-rose-500' : 'text-base-content/70'}>
+                                        {d.uncorrectable ?? '—'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Unknown disk type fallback */}
+                            {!isNvme && !isHdd && (
+                              <div className="text-xs font-mono text-base-content/50">
+                                Powered On: {formatPowerOnDuration(d.power_on_hours)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          )}
+
+          {/* Network Ports & Interface Status (Router, Switch, or any device with interfaces) */}
+          {((deviceType === 'Router' || deviceType === 'Switch') || (Array.isArray(activeServer.interfaces) && activeServer.interfaces.length > 0)) && (
+            (() => {
+              const allPorts = getDeviceInterfaces(activeServer);
+              const totalPorts = allPorts.length;
+              const upPorts = allPorts.filter((p) => p.oper_status === 'up');
+              const downPorts = allPorts.filter((p) => p.oper_status === 'down');
+              const upCount = upPorts.length;
+              const downCount = downPorts.length;
+              const upRatio = totalPorts > 0 ? Math.round((upCount / totalPorts) * 100) : 0;
+
+              const filteredPorts = portFilter === 'up'
+                ? upPorts
+                : portFilter === 'down'
+                ? downPorts
+                : allPorts;
+
+              return (
+                <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                        <Network className="w-4 h-4 text-primary" />
+                        Network Ports &amp; Interface Status
+                      </h3>
+                      <p className="text-[11px] text-base-content/50 mt-0.5">
+                        Hardware interfaces, link state &amp; live operational status
+                      </p>
+                    </div>
+
+                    {/* Summary Badges + View Ports Option Button */}
+                    <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                      <span className="px-2.5 py-1 rounded-lg bg-base-200/80 border border-base-content/10 font-bold text-base-content flex items-center gap-1.5">
+                        <span className="text-base-content/50 font-normal">Total:</span> {totalPorts} Ports
                       </span>
-                      <span
-                        className={`font-mono text-sm font-black ${
-                          hasWear ? getWearTextColor(wearLevel) : 'text-base-content/40'
-                        }`}
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        {upCount} Up
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-500 font-bold flex items-center gap-1.5 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-rose-500" />
+                        {downCount} Down
+                      </span>
+
+                      {/* Primary View Option Button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowPortsModal(true)}
+                        className="px-3 py-1 rounded-lg bg-primary text-primary-content hover:bg-primary/90 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:shadow-sm"
+                        title="View all ports and interface details"
                       >
-                        {hasWear ? `${wearLevel}% used` : 'Not available'}
-                      </span>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Ports</span>
+                      </button>
                     </div>
-                    {hasWear && (
-                      <>
-                        <div className="h-2.5 w-full bg-base-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${getWearBarColor(wearLevel)}`}
-                            style={{ width: `${Math.min(100, Math.max(0, wearLevel))}%` }}
-                          />
+                  </div>
+
+                  {/* Operational Availability Meter */}
+                  {totalPorts > 0 && (
+                    <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-base-content/70 flex items-center gap-2">
+                          <span>Port Link Availability</span>
+                          <span className="font-mono font-bold text-emerald-500">({upRatio}% Connected)</span>
+                        </span>
+                        <span className="font-mono text-[11px] text-base-content/50">
+                          {upCount} of {totalPorts} ports online
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-base-300 rounded-full overflow-hidden flex">
+                        <div
+                          className="h-full bg-emerald-500 transition-all duration-500"
+                          style={{ width: `${upRatio}%` }}
+                        />
+                        <div
+                          className="h-full bg-rose-500/60 transition-all duration-500"
+                          style={{ width: `${100 - upRatio}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compact Quick Front-Panel Summary Strip & Inline Toggle */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-base-content/5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {allPorts.slice(0, 10).map((p) => {
+                        const isUp = p.oper_status === 'up';
+                        return (
+                          <span
+                            key={`mini-${p.name}-${p.index}`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono border ${
+                              isUp
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-semibold'
+                                : 'bg-base-200/80 border-base-content/10 text-base-content/50'
+                            }`}
+                            title={`${p.name}: ${isUp ? 'UP (' + formatPortSpeed(p.speed) + ')' : 'DOWN'}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500/70'}`} />
+                            <span>{p.name}</span>
+                          </span>
+                        );
+                      })}
+                      {allPorts.length > 10 && (
+                        <span className="text-[10px] font-mono text-base-content/50 px-1">
+                          +{allPorts.length - 10} more
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsPortsExpanded((prev) => !prev)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline transition-colors cursor-pointer"
+                      >
+                        <span>{isPortsExpanded ? 'Hide inline list' : 'Expand inline'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isPortsExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Optional Inline Expanded Grid */}
+                  {isPortsExpanded && (
+                    <div className="space-y-3 pt-2.5 border-t border-base-content/10 animate-fadeIn">
+                      {/* Filter Tabs */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPortFilter('all')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            portFilter === 'all'
+                              ? 'bg-primary text-primary-content shadow-xs'
+                              : 'bg-base-200/60 hover:bg-base-200 text-base-content/70'
+                          }`}
+                        >
+                          All Ports ({totalPorts})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPortFilter('up')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            portFilter === 'up'
+                              ? 'bg-emerald-500 text-white shadow-xs'
+                              : 'bg-base-200/60 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Active Up ({upCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPortFilter('down')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            portFilter === 'down'
+                              ? 'bg-rose-500 text-white shadow-xs'
+                              : 'bg-base-200/60 hover:bg-rose-500/10 text-rose-500'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          Down ({downCount})
+                        </button>
+                      </div>
+
+                      {/* Compact Scrollable Grid */}
+                      <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1">
+                        {filteredPorts.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                            {filteredPorts.map((port) => {
+                              const isUp = port.oper_status === 'up';
+                              return (
+                                <div
+                                  key={`inline-${port.name}-${port.index}`}
+                                  className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                    isUp
+                                      ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
+                                      : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 ${
+                                          isUp
+                                            ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                            : 'bg-rose-500/70'
+                                        }`}
+                                      />
+                                      <span className="font-mono font-bold text-xs text-base-content truncate" title={port.name}>
+                                        {port.name}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${
+                                        isUp
+                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                      }`}
+                                    >
+                                      {isUp ? 'UP' : 'DOWN'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
+                                    <span className="text-base-content/50 uppercase text-[9px]">
+                                      {port.type || 'Ethernet'}
+                                    </span>
+                                    <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
+                                      {isUp ? formatPortSpeed(port.speed) : 'No Link'}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
+                            No ports match the selected filter.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Full Modal Dialog when "View Ports" is clicked */}
+                  {showPortsModal && (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-fadeIn"
+                      onClick={() => setShowPortsModal(false)}
+                    >
+                      <div
+                        className="bg-base-100 border border-base-content/15 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Modal Header */}
+                        <div className="p-4 sm:p-5 border-b border-base-content/10 flex items-center justify-between gap-3 bg-base-200/30">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                              <Network className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-base sm:text-lg font-bold text-base-content truncate flex items-center gap-2">
+                                <span>Network Ports &amp; Interfaces</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-base-300 font-mono text-base-content/70 font-normal">
+                                  {activeServer.hostname || activeServer.ip}
+                                </span>
+                              </h3>
+                              <p className="text-xs text-base-content/50 truncate">
+                                IP: {activeServer.ip} • Type: {deviceType} • {totalPorts} ports detected
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowPortsModal(false)}
+                            className="p-2 rounded-xl text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors cursor-pointer"
+                            aria-label="Close modal"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
-                        <div className="flex justify-between text-[10px] sm:text-[11px] text-base-content/50 font-mono">
-                          <span>0% (New Drive)</span>
-                          <span>&lt;70% OK • 70-90% WARN • &gt;90% CRIT</span>
-                          <span>100% (End of Life)</span>
+
+                        {/* Modal Controls: Availability & Filter Tabs */}
+                        <div className="p-4 sm:p-5 border-b border-base-content/10 space-y-3 bg-base-200/10">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2 font-mono text-xs">
+                              <span className="px-2.5 py-1 rounded-lg bg-base-200 border border-base-content/10 font-bold text-base-content">
+                                Total: {totalPorts} Ports
+                              </span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                {upCount} Up
+                              </span>
+                              <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-500 font-bold flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                {downCount} Down
+                              </span>
+                            </div>
+                            <div className="text-xs font-mono text-base-content/70">
+                              <span>Link Availability: </span>
+                              <span className="font-bold text-emerald-500">{upRatio}%</span> ({upCount}/{totalPorts} online)
+                            </div>
+                          </div>
+
+                          <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden flex">
+                            <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${upRatio}%` }} />
+                            <div className="h-full bg-rose-500/60 transition-all duration-300" style={{ width: `${100 - upRatio}%` }} />
+                          </div>
+
+                          {/* Filter Tabs */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setPortFilter('all')}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                portFilter === 'all'
+                                  ? 'bg-primary text-primary-content shadow-xs'
+                                  : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
+                              }`}
+                            >
+                              All Ports ({totalPorts})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPortFilter('up')}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                portFilter === 'up'
+                                  ? 'bg-emerald-500 text-white shadow-xs'
+                                  : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              }`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Active Up ({upCount})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPortFilter('down')}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                portFilter === 'down'
+                                  ? 'bg-rose-500 text-white shadow-xs'
+                                  : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
+                              }`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Down ({downCount})
+                            </button>
+                          </div>
                         </div>
-                      </>
-                    )}
-                  </div>
 
-                  {/* Grid for Powered On, Total Data Read, Total Data Written */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-                    {/* Powered On */}
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
-                        <Clock className="w-4 h-4 text-sky-500" />
-                        <span>Powered On</span>
-                      </div>
-                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
-                        {formatPowerOnDuration(powerOn)}
-                      </div>
-                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
-                        Power-on cumulative duration
-                      </div>
-                    </div>
+                        {/* Modal Body: Full Responsive Ports Grid */}
+                        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3">
+                          {filteredPorts.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                              {filteredPorts.map((port) => {
+                                const isUp = port.oper_status === 'up';
+                                return (
+                                  <div
+                                    key={`modal-${port.name}-${port.index}`}
+                                    className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                      isUp
+                                        ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
+                                        : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span
+                                          className={`w-2 h-2 rounded-full shrink-0 ${
+                                            isUp
+                                              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                              : 'bg-rose-500/70'
+                                          }`}
+                                        />
+                                        <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
+                                          {port.name}
+                                        </span>
+                                      </div>
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                          isUp
+                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                            : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                        }`}
+                                      >
+                                        {isUp ? 'UP' : 'DOWN'}
+                                      </span>
+                                    </div>
 
-                    {/* Total Data Read */}
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
-                        <Activity className="w-4 h-4 text-emerald-500" />
-                        <span>Total Data Read</span>
-                      </div>
-                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
-                        {formatLifetimeDataBytes(dataRead)}
-                      </div>
-                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
-                        Cumulative Host Read Units
-                      </div>
-                    </div>
+                                    <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
+                                      <span className="text-base-content/50 uppercase text-[10px]">
+                                        {port.type || 'Ethernet'}
+                                      </span>
+                                      <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
+                                        {isUp ? formatPortSpeed(port.speed) : 'No Link'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
+                              No ports match the selected filter.
+                            </div>
+                          )}
+                        </div>
 
-                    {/* Total Data Written */}
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
-                        <Database className="w-4 h-4 text-purple-500" />
-                        <span>Total Data Written</span>
-                      </div>
-                      <div className="font-mono text-base sm:text-lg font-black text-base-content pt-0.5">
-                        {formatLifetimeDataBytes(dataWritten)}
-                      </div>
-                      <div className="text-[10px] sm:text-[11px] text-base-content/50 font-mono">
-                        Cumulative Host Write Units
+                        {/* Modal Footer */}
+                        <div className="p-3.5 sm:p-4 border-t border-base-content/10 flex items-center justify-between bg-base-200/30">
+                          <span className="text-xs font-mono text-base-content/50">
+                            Showing {filteredPorts.length} of {totalPorts} ports
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPortsModal(false)}
+                            className="px-4 py-1.5 rounded-xl bg-base-200 hover:bg-base-300 text-xs font-bold text-base-content transition-colors cursor-pointer"
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Estimated Remaining Life */}
-                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
-                      <ShieldCheck className="w-4 h-4 text-amber-500" />
-                      <span>Estimated Remaining Life</span>
-                    </div>
-                    <div className="pt-0.5">
-                      {renderEolSection()}
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })()
@@ -1000,68 +1595,112 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-              {/* Power Supplies Card */}
-              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="flex items-center gap-2 text-base-content">
-                    <Zap className="w-4 h-4 text-emerald-500" />
-                    <span>Power Supplies</span>
-                  </span>
-                </div>
-                {Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0 ? (
-                  <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                    {server.powerSupplies.map((psu, idx) => {
-                      const rawVal = (psu as { raw_value?: number | null }).raw_value;
-                      const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
-                      const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
-                      const statusBadge =
-                        psu.status === 'ok'
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                          : psu.status === 'warning'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                          : psu.status === 'critical'
-                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                          : 'bg-base-300/60 text-base-content/50 border-base-content/15';
-                      return (
-                        <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                            {typeof psu.watts === 'number' && Number.isFinite(psu.watts) && (
-                              <span className="text-[11px] text-base-content/50 font-normal whitespace-nowrap">
-                                {psu.watts} W
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {rawVal !== undefined && rawVal !== null && (
-                              <span className="text-[10px] text-base-content/40 whitespace-nowrap">
-                                raw value {rawVal}
-                              </span>
-                            )}
-                            <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
-                              {psu.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-xs font-mono text-base-content/40">
-                    Not reported by this device
-                  </div>
-                )}
-              </div>
+            {/* Environmental Sensors (Power Supplies, Fans & Temperature) */}
+            {(() => {
+              const validFans = Array.isArray(server.fans)
+                ? server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state')
+                : [];
+              const hasPsus = Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0;
+              const hasFans = validFans.length > 0;
 
-              {/* Fans Card */}
-              {(() => {
-                const validFans = Array.isArray(server.fans)
-                  ? server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state')
-                  : [];
-                const hasPercentFan = validFans.some((f) => typeof f.percent === 'number' && Number.isFinite(f.percent));
-
+              // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis):
+              if (!hasPsus && !hasFans) {
                 return (
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                        <Thermometer className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-base-content flex items-center gap-2">
+                          <span>Chassis Thermal Sensor</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-base-300/80 text-base-content/70">
+                            Passive / Embedded Cooling
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-base-content/50 mt-0.5">
+                          Modular chassis fans and redundant PSUs not reported via SNMP for this hardware model
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                      <div className="text-right">
+                        <div className="text-[10px] uppercase font-bold text-base-content/50">Temperature</div>
+                        <div className={`font-mono text-lg sm:text-xl font-black ${
+                          !isOnline || server.temperature === null || server.temperature === undefined
+                            ? 'text-base-content/40'
+                            : server.temperature >= 85
+                            ? 'text-rose-500'
+                            : server.temperature >= 70
+                            ? 'text-amber-500'
+                            : 'text-emerald-500'
+                        }`}>
+                          {!isOnline || server.temperature === null || server.temperature === undefined
+                            ? 'N/A'
+                            : `${server.temperature} °C`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                  {/* Power Supplies Card */}
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-semibold">
+                      <span className="flex items-center gap-2 text-base-content">
+                        <Zap className="w-4 h-4 text-emerald-500" />
+                        <span>Power Supplies</span>
+                      </span>
+                    </div>
+                    {hasPsus ? (
+                      <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
+                        {server.powerSupplies!.map((psu, idx) => {
+                          const rawVal = (psu as { raw_value?: number | null }).raw_value;
+                          const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
+                          const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
+                          const statusBadge =
+                            psu.status === 'ok'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : psu.status === 'warning'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              : psu.status === 'critical'
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              : 'bg-base-300/60 text-base-content/50 border-base-content/15';
+                          return (
+                            <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
+                                {typeof psu.watts === 'number' && Number.isFinite(psu.watts) && (
+                                  <span className="text-[11px] text-base-content/50 font-normal whitespace-nowrap">
+                                    {psu.watts} W
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {rawVal !== undefined && rawVal !== null && (
+                                  <span className="text-[10px] text-base-content/40 whitespace-nowrap">
+                                    raw value {rawVal}
+                                  </span>
+                                )}
+                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${statusBadge}`}>
+                                  {psu.status}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-xs font-mono text-base-content/40">
+                        Not reported by this device
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Fans Card */}
                   <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2">
                     <div>
                       <div className="flex justify-between items-center text-xs font-semibold">
@@ -1070,13 +1709,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           <span>Fans</span>
                         </span>
                       </div>
-                      {hasPercentFan && (
+                      {validFans.some((f) => typeof f.percent === 'number' && Number.isFinite(f.percent)) && (
                         <p className="text-[10px] text-base-content/50 font-sans mt-0.5">
                           Fan speed reported as duty cycle (%) by this hardware
                         </p>
                       )}
                     </div>
-                    {validFans.length > 0 ? (
+                    {hasFans ? (
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
                         {validFans.map((fan, idx) => {
                           const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
@@ -1116,39 +1755,39 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     )}
                   </div>
-                );
-              })()}
 
-              {/* Temperature (°C) Card */}
-              <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">
-                <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                  <span className="flex items-center gap-2 text-base-content">
-                    <Thermometer className="w-4 h-4 text-amber-500" />
-                    <span>Temperature (°C)</span>
-                  </span>
+                  {/* Temperature (°C) Card */}
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5 flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                      <span className="flex items-center gap-2 text-base-content">
+                        <Thermometer className="w-4 h-4 text-amber-500" />
+                        <span>Temperature (°C)</span>
+                      </span>
+                    </div>
+                    <div className="my-1">
+                      <span
+                        className={`font-mono text-xl font-black ${
+                          !isOnline || server.temperature === null || server.temperature === undefined
+                            ? 'text-base-content/40'
+                            : server.temperature >= 85
+                            ? 'text-rose-500'
+                            : server.temperature >= 70
+                            ? 'text-amber-500'
+                            : 'text-emerald-500'
+                        }`}
+                      >
+                        {!isOnline || server.temperature === null || server.temperature === undefined
+                          ? 'N/A'
+                          : `${server.temperature} °C`}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-base-content/60 font-mono mt-1">
+                      Chassis Thermal Sensor
+                    </div>
+                  </div>
                 </div>
-                <div className="my-1">
-                  <span
-                    className={`font-mono text-xl font-black ${
-                      !isOnline || server.temperature === null || server.temperature === undefined
-                        ? 'text-base-content/40'
-                        : server.temperature >= 85
-                        ? 'text-rose-500'
-                        : server.temperature >= 70
-                        ? 'text-amber-500'
-                        : 'text-emerald-500'
-                    }`}
-                  >
-                    {!isOnline || server.temperature === null || server.temperature === undefined
-                      ? 'N/A'
-                      : `${server.temperature} °C`}
-                  </span>
-                </div>
-                <div className="text-[11px] text-base-content/60 font-mono mt-1">
-                  Chassis Thermal Sensor
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
 

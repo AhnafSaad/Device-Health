@@ -95,6 +95,32 @@ export interface Server {
   ramEccCorrected?: number | null;
   ramEccUncorrected?: number | null;
   ramEccControllers?: { name: string; ce: number; ue: number }[] | null;
+  disks?: {
+    device: string;
+    type: 'nvme' | 'hdd_sata' | null;
+    percentage_used: number | null;
+    power_on_hours: number | null;
+    lifetime_bytes_read: number | null;
+    lifetime_bytes_written: number | null;
+    estimated_eol_days: number | null;
+    passed: boolean | null;
+    reallocated: number | null;
+    pending: number | null;
+    uncorrectable: number | null;
+    read_bytes_per_sec: number | null;
+    write_bytes_per_sec: number | null;
+  }[] | null;
+  interfaces?: NetworkInterface[] | null;
+}
+
+export interface NetworkInterface {
+  index: number;
+  name: string;
+  oper_status: 'up' | 'down' | 'unknown';
+  admin_status?: 'up' | 'down' | 'unknown';
+  speed?: number | null;
+  type?: string | null;
+  mac?: string | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

@@ -301,6 +301,30 @@ export default function App() {
                     }
                   })()
                 : (d.ramEccControllers ?? null),
+              disks: Array.isArray(d.disks)
+                ? d.disks
+                : typeof d.disks === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.disks);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.disks ?? null),
+              interfaces: Array.isArray(d.interfaces)
+                ? d.interfaces
+                : typeof d.interfaces === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.interfaces);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.interfaces ?? null),
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
               lastPolledAt: d.recorded_at ?? d.lastPolledAt,
               status: (d.status as any) || 'offline',
@@ -650,6 +674,30 @@ export default function App() {
                       }
                     })()
                   : (live.ram_ecc_controllers !== undefined ? live.ram_ecc_controllers : (existing?.ramEccControllers ?? null)),
+                disks: Array.isArray(live.disks)
+                  ? live.disks
+                  : typeof live.disks === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.disks);
+                        return Array.isArray(parsed) ? parsed : (existing?.disks ?? null);
+                      } catch {
+                        return existing?.disks ?? null;
+                      }
+                    })()
+                  : (live.disks !== undefined ? live.disks : (existing?.disks ?? null)),
+                interfaces: Array.isArray(live.interfaces)
+                  ? live.interfaces
+                  : typeof live.interfaces === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.interfaces);
+                        return Array.isArray(parsed) ? parsed : (existing?.interfaces ?? null);
+                      } catch {
+                        return existing?.interfaces ?? null;
+                      }
+                    })()
+                  : (live.interfaces !== undefined ? live.interfaces : (existing?.interfaces ?? null)),
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
                 lastPolledAt: live.recorded_at ?? live.lastPolledAt ?? existing?.lastPolledAt,
                 status: (live.status as any) || existing?.status || 'offline',
