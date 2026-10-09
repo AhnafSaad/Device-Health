@@ -258,6 +258,7 @@ export default function App() {
               powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (Array.isArray(d.powerSupplies) ? d.powerSupplies : null),
               fans: Array.isArray(d.fans) ? d.fans : null,
               deviceModel: d.device_model ?? d.deviceModel ?? null,
+              deviceSerial: d.device_serial ?? d.deviceSerial ?? null,
               sysDescr: d.sys_descr ?? d.sysDescr ?? null,
               storage: Array.isArray(d.storage)
                 ? d.storage
@@ -631,6 +632,7 @@ export default function App() {
                 powerSupplies: Array.isArray(live.power_supplies) ? live.power_supplies : (Array.isArray(live.powerSupplies) ? live.powerSupplies : (existing?.powerSupplies ?? null)),
                 fans: Array.isArray(live.fans) ? live.fans : (existing?.fans ?? null),
                 deviceModel: live.device_model ?? live.deviceModel ?? existing?.deviceModel ?? null,
+                deviceSerial: live.device_serial ?? live.deviceSerial ?? existing?.deviceSerial ?? null,
                 sysDescr: live.sys_descr ?? live.sysDescr ?? existing?.sysDescr ?? null,
                 storage: Array.isArray(live.storage)
                   ? live.storage

@@ -72,6 +72,7 @@ export interface Server {
   powerSupplies?: { name: string; status: string; watts?: number | null }[] | null;
   fans?: { name: string; status: string; rpm?: number | null; percent?: number | null }[] | null;
   deviceModel?: string | null;
+  deviceSerial?: string | null;
   sysDescr?: string | null;
   storage?: {
     name: string;

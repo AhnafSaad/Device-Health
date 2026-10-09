@@ -34,7 +34,8 @@ import {
   Thermometer,
   Info,
   Eye,
-  X
+  X,
+  Hash
 } from 'lucide-react';
 
 interface InspectDeviceViewProps {
@@ -184,6 +185,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (cur.temperature ?? null),
             powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (cur.powerSupplies ?? null),
             fans: Array.isArray(d.fans) ? d.fans : (cur.fans ?? null),
+            deviceSerial: d.device_serial !== undefined ? d.device_serial : (d.deviceSerial !== undefined ? d.deviceSerial : (cur.deviceSerial ?? null)),
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
@@ -2237,6 +2239,22 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     title={server.sysDescr}
                   >
                     {server.sysDescr}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
+                <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
+                  <Hash className="w-3.5 h-3.5 text-primary" />
+                  Serial Number
+                </div>
+                {(activeServer.deviceSerial ?? server.deviceSerial) ? (
+                  <div className="font-semibold text-base-content font-mono break-all">
+                    {activeServer.deviceSerial ?? server.deviceSerial}
+                  </div>
+                ) : (
+                  <div className="font-semibold text-base-content/40 font-mono">
+                    Not reported
                   </div>
                 )}
               </div>
