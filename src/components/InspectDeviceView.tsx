@@ -1401,29 +1401,39 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                       ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
                                       : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
                                   }`}
+                                  title={port.name}
                                 >
-                                  <div className="flex items-center justify-between gap-1.5">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <span
-                                        className={`w-2 h-2 rounded-full shrink-0 ${
-                                          isUp
-                                            ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                            : 'bg-rose-500/70'
-                                        }`}
-                                      />
-                                      <span className="font-mono font-bold text-xs text-base-content truncate" title={port.name}>
-                                        {port.name}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span
+                                          className={`w-2 h-2 rounded-full shrink-0 ${
+                                            isUp
+                                              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                              : 'bg-rose-500/70'
+                                          }`}
+                                        />
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${
+                                            isUp
+                                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                              : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                          }`}
+                                        >
+                                          {isUp ? 'UP' : 'DOWN'}
+                                        </span>
+                                      </div>
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
+                                        {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
                                       </span>
                                     </div>
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${
-                                        isUp
-                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                      }`}
+
+                                    <div
+                                      className="font-mono font-bold text-xs text-base-content line-clamp-2 break-all leading-tight w-full"
+                                      title={port.name}
                                     >
-                                      {isUp ? 'UP' : 'DOWN'}
-                                    </span>
+                                      {port.name}
+                                    </div>
                                   </div>
 
                                   <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
@@ -1747,38 +1757,43 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                   return (
                                     <div
                                       key={`modal-ppp-${port.name}-${port.index}`}
-                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
                                         isUp
                                           ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
                                           : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
                                       }`}
+                                      title={port.name}
                                     >
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                          <span
-                                            className={`w-2 h-2 rounded-full shrink-0 ${
-                                              isUp
-                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                                : 'bg-rose-500/70'
-                                            }`}
-                                          />
-                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
-                                            {port.name}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-sky-500/15 text-sky-500 border border-sky-500/30">
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span
+                                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                  : 'bg-rose-500/70'
+                                              }`}
+                                            />
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                              }`}
+                                            >
+                                              {isUp ? 'UP' : 'DOWN'}
+                                            </span>
+                                          </div>
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-sky-500/15 text-sky-500 border border-sky-500/30">
                                             PPP
                                           </span>
-                                          <span
-                                            className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
-                                              isUp
-                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                            }`}
-                                          >
-                                            {isUp ? 'UP' : 'DOWN'}
-                                          </span>
+                                        </div>
+
+                                        <div
+                                          className="font-mono font-bold text-xs sm:text-sm text-base-content line-clamp-2 break-all leading-tight w-full"
+                                          title={port.name}
+                                        >
+                                          {port.name}
                                         </div>
                                       </div>
 
@@ -1810,28 +1825,35 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                   return (
                                     <div
                                       key={`modal-virt-${port.name}-${port.index}`}
-                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
                                         isUp
                                           ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
                                           : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
                                       }`}
+                                      title={port.name}
                                     >
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <div className="flex items-center gap-1.5 min-w-0">
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span
+                                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                  : 'bg-rose-500/70'
+                                              }`}
+                                            />
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                              }`}
+                                            >
+                                              {isUp ? 'UP' : 'DOWN'}
+                                            </span>
+                                          </div>
                                           <span
-                                            className={`w-2 h-2 rounded-full shrink-0 ${
-                                              isUp
-                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                                : 'bg-rose-500/70'
-                                            }`}
-                                          />
-                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
-                                            {port.name}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          <span
-                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
                                               typeLabel === 'VLAN'
                                                 ? 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
                                                 : typeLabel === 'Bridge'
@@ -1841,15 +1863,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                           >
                                             {typeLabel}
                                           </span>
-                                          <span
-                                            className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
-                                              isUp
-                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                            }`}
-                                          >
-                                            {isUp ? 'UP' : 'DOWN'}
-                                          </span>
+                                        </div>
+
+                                        <div
+                                          className="font-mono font-bold text-xs sm:text-sm text-base-content line-clamp-2 break-all leading-tight w-full"
+                                          title={port.name}
+                                        >
+                                          {port.name}
                                         </div>
                                       </div>
 
@@ -1881,34 +1901,44 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                                   return (
                                     <div
                                       key={`modal-${port.name}-${port.index}`}
-                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
                                         isUp
                                           ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
                                           : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
                                       }`}
+                                      title={port.name}
                                     >
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                          <span
-                                            className={`w-2 h-2 rounded-full shrink-0 ${
-                                              isUp
-                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                                : 'bg-rose-500/70'
-                                            }`}
-                                          />
-                                          <span className="font-mono font-bold text-xs sm:text-sm text-base-content truncate" title={port.name}>
-                                            {port.name}
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span
+                                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
+                                                  : 'bg-rose-500/70'
+                                              }`}
+                                            />
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                                                isUp
+                                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                              }`}
+                                            >
+                                              {isUp ? 'UP' : 'DOWN'}
+                                            </span>
+                                          </div>
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
+                                            {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
                                           </span>
                                         </div>
-                                        <span
-                                          className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
-                                            isUp
-                                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                              : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                          }`}
+
+                                        <div
+                                          className="font-mono font-bold text-xs sm:text-sm text-base-content line-clamp-2 break-all leading-tight w-full"
+                                          title={port.name}
                                         >
-                                          {isUp ? 'UP' : 'DOWN'}
-                                        </span>
+                                          {port.name}
+                                        </div>
                                       </div>
 
                                       <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
