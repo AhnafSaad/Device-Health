@@ -660,7 +660,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3.5 sm:space-y-4 flex-1 flex flex-col justify-between">
+            <div className="space-y-3.5 sm:space-y-4 flex-1 flex flex-col">
               {/* CPU Bar (all device types) */}
               <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                 <div className="flex justify-between items-center text-xs font-semibold mb-2">
@@ -684,10 +684,19 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               </div>
 
-              {/* Server: RAM & Disk Bars */}
-              {deviceType === 'Server' && (
-                <>
-                  {/* RAM Bar */}
+              {/* RAM Bar (All device types: Server, Router, Switch, OLT) */}
+              {(() => {
+                const ramStorageItem = Array.isArray(server.storage)
+                  ? server.storage.find(s => (s.kind || '').toLowerCase() === 'ram' || /ram|main memory|memory/i.test(s.name || ''))
+                  : null;
+
+                const ramUsedLabel = ramStorageItem
+                  ? `${formatStorageBytes(ramStorageItem.used_bytes)} / ${formatStorageBytes(ramStorageItem.total_bytes)}`
+                  : deviceType === 'Server'
+                  ? `${Math.round(server.ramUsage * 0.64)} GB / 64 GB`
+                  : `${server.ramUsage}%`;
+
+                return (
                   <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5">
                     <div className="flex justify-between items-center text-xs font-semibold mb-2">
                       <span className="flex items-center gap-2 text-base-content">
@@ -706,12 +715,14 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     </div>
                     <div className="flex justify-between text-[11px] text-base-content/60 mt-1.5 font-mono">
                       <span>Target SLA: &lt;80%</span>
-                      <span>Used: {!isOnline ? '0 GB' : isMetricsUnavailable ? 'N/A' : `${Math.round(server.ramUsage * 0.64)} GB / 64 GB`}</span>
+                      <span>Used: {!isOnline ? '0 GB' : isMetricsUnavailable ? 'N/A' : ramUsedLabel}</span>
                     </div>
                   </div>
+                );
+              })()}
 
-                  {/* RAM Memory Health (Server devices only) */}
-                  {deviceType === 'Server' && (() => {
+              {/* RAM Memory Health (Server devices only) */}
+              {deviceType === 'Server' && (() => {
                     const corrected = activeServer.ramEccCorrected ?? server.ramEccCorrected;
                     const uncorrected = activeServer.ramEccUncorrected ?? server.ramEccUncorrected;
                     const controllers = activeServer.ramEccControllers ?? server.ramEccControllers;
@@ -800,8 +811,6 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     );
                   })()}
-                </>
-              )}
 
               {/* Router: Connected Users Card */}
               {deviceType === 'Router' && (
@@ -869,7 +878,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
 
             {Array.isArray(server.storage) && server.storage.length > 0 ? (
-              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col justify-between">
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
                 {server.storage.map((item, idx) => {
                   const pct = Number(item.used_pct ?? 0);
                   const kindLabel = formatStorageKind(item.kind);

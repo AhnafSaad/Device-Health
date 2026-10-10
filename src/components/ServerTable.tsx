@@ -137,7 +137,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               id="server-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search devices by IP address, hostname, device type (Server, Router, Switch, OLT), rack..."
+              placeholder="Search devices by IP, hostname, serial number, software ID, type, rack..."
               className="w-full pl-10 pr-24 py-2 text-xs sm:text-sm rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/25 text-base-content placeholder:text-base-content/40 transition-all outline-none shadow-inner"
             />
             
@@ -356,6 +356,41 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                           • {server.id}
                         </span>
                       </div>
+
+                      {/* Serial Number & Software ID tags */}
+                      {(server.deviceSerial || server.softwareId) && (
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono text-base-content/50">
+                          {server.deviceSerial && (
+                            <span
+                              className={`inline-flex items-center gap-1 transition-colors ${
+                                searchQuery && server.deviceSerial.toLowerCase().includes(searchQuery.toLowerCase().trim())
+                                  ? 'text-primary font-bold bg-primary/10 px-1 py-0.5 rounded border border-primary/20'
+                                  : 'hover:text-base-content'
+                              }`}
+                              title={`Serial Number: ${server.deviceSerial}`}
+                            >
+                              <span className="text-base-content/40 font-sans">SN:</span>
+                              <span className="text-base-content/70">{server.deviceSerial}</span>
+                            </span>
+                          )}
+                          {server.deviceSerial && server.softwareId && (
+                            <span className="text-base-content/30">•</span>
+                          )}
+                          {server.softwareId && (
+                            <span
+                              className={`inline-flex items-center gap-1 transition-colors ${
+                                searchQuery && server.softwareId.toLowerCase().includes(searchQuery.toLowerCase().trim())
+                                  ? 'text-primary font-bold bg-primary/10 px-1 py-0.5 rounded border border-primary/20'
+                                  : 'hover:text-base-content'
+                              }`}
+                              title={`Software ID: ${server.softwareId}`}
+                            >
+                              <span className="text-base-content/40 font-sans">SW-ID:</span>
+                              <span className="text-base-content/70">{server.softwareId}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* 2. Status: Glowing UP/DOWN badge */}

@@ -413,7 +413,7 @@ export default function App() {
         }
       }
 
-      // 5. Search query (IP, Hostname, Location, Rack, DC Name, or Device Type)
+      // 5. Search query (IP, Hostname, Location, Rack, DC Name, Device Type, Serial Number, Software ID, or Model)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchIp = srv.ip.toLowerCase().includes(query);
@@ -422,7 +422,20 @@ export default function App() {
         const matchRack = srv.rackNumber?.toLowerCase().includes(query);
         const matchDc = srv.datacenterName?.toLowerCase().includes(query);
         const matchType = srv.deviceType?.toLowerCase().includes(query);
-        return matchIp || matchHost || matchLoc || matchRack || matchDc || matchType;
+        const matchSerial = srv.deviceSerial?.toLowerCase().includes(query);
+        const matchSoftwareId = srv.softwareId?.toLowerCase().includes(query);
+        const matchModel = srv.deviceModel?.toLowerCase().includes(query);
+        return Boolean(
+          matchIp ||
+          matchHost ||
+          matchLoc ||
+          matchRack ||
+          matchDc ||
+          matchType ||
+          matchSerial ||
+          matchSoftwareId ||
+          matchModel
+        );
       }
       return true;
     });
