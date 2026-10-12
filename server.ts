@@ -1585,6 +1585,74 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
 
     // Try database first
     const isNumeric = /^\d+$/.test(id);
+    const shouldRefresh = req.query.refresh === 'true';
+
+    if (shouldRefresh && isDbConnected()) {
+      try {
+        const devRecordRes = await query(
+          `SELECT s.id, s.ip_address, s.hostname, s.device_type, s.brand, s.snmp_community
+           FROM servers_info s
+           WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
+           LIMIT 1;`,
+          [id]
+        );
+
+        if (devRecordRes && devRecordRes.rows && devRecordRes.rows.length > 0) {
+          const devRow = devRecordRes.rows[0];
+          const freshTel = (await pollDevice({
+            id: devRow.id,
+            ip_address: devRow.ip_address,
+            snmp_community: devRow.snmp_community,
+            brand: devRow.brand,
+            device_type: devRow.device_type,
+          })) as any;
+
+          if (freshTel) {
+            getLatestTelemetryMap().set(devRow.ip_address, freshTel);
+
+            if (freshTel.detected_brand && (!devRow.brand || devRow.brand.toLowerCase() === 'auto')) {
+              await query('UPDATE servers_info SET brand = $1, updated_at = NOW() WHERE ip_address = $2', [
+                freshTel.detected_brand,
+                devRow.ip_address,
+              ]);
+            }
+
+            await query(
+              `INSERT INTO telemetry_data (
+                ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, connected_users,
+                temperature, optical_tx, optical_rx, sys_name, power_supplies, fans, device_model, device_serial,
+                software_id, sys_descr, storage, recorded_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW());`,
+              [
+                devRow.ip_address,
+                freshTel.cpu_usage,
+                freshTel.ram_usage,
+                freshTel.disk_usage,
+                freshTel.uptime,
+                freshTel.status,
+                freshTel.health,
+                freshTel.load_average,
+                freshTel.connected_users ?? null,
+                freshTel.temperature ?? null,
+                freshTel.optical_tx ?? null,
+                freshTel.optical_rx ?? null,
+                freshTel.sys_name ?? null,
+                freshTel.power_supplies ? JSON.stringify(freshTel.power_supplies) : null,
+                freshTel.fans ? JSON.stringify(freshTel.fans) : null,
+                freshTel.device_model ?? null,
+                freshTel.device_serial ?? null,
+                freshTel.software_id ?? null,
+                freshTel.sys_descr ?? null,
+                freshTel.storage ? JSON.stringify(freshTel.storage) : null,
+              ]
+            );
+          }
+        }
+      } catch (err: any) {
+        console.warn('[server.ts] on-demand poll error in GET /api/devices/:id:', err?.message);
+      }
+    }
+
     const dbRes = await query(`
       SELECT 
         s.id, 
@@ -1598,6 +1666,18 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         s.rack_number, 
         s.snmp_community, 
         s.created_at,
+        t.status,
+        t.health,
+        t.cpu_usage,
+        t.ram_usage,
+        t.disk_usage,
+        t.uptime,
+        t.load_average,
+        t.connected_users,
+        t.temperature,
+        t.optical_tx,
+        t.optical_rx,
+        t.recorded_at,
         t.sys_name,
         t.power_supplies,
         t.fans,

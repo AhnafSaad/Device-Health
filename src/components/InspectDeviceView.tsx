@@ -49,14 +49,15 @@ interface InspectDeviceViewProps {
 }
 
 export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
-  server,
+  server: propServer,
   onBack,
   onEditServer,
   onDeleteServer,
   onRebootServer,
   onUpdateServer,
 }) => {
-  const [liveServer, setLiveServer] = useState<Server>(server);
+  const [liveServer, setLiveServer] = useState<Server>(propServer);
+  const server = liveServer;
   const [isLiveActive, setIsLiveActive] = useState<boolean>(true);
   const [liveIntervalSec, setLiveIntervalSec] = useState<number>(2);
   const [isPollingNow, setIsPollingNow] = useState<boolean>(false);
@@ -84,8 +85,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   }, [showPortsModal]);
 
   useEffect(() => {
-    setLiveServer(server);
-  }, [server]);
+    setLiveServer(propServer);
+  }, [propServer]);
 
   const activeServer = liveServer;
   const isOnline = activeServer.status === 'online';
@@ -186,8 +187,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (cur.temperature ?? null),
             powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (cur.powerSupplies ?? null),
             fans: Array.isArray(d.fans) ? d.fans : (cur.fans ?? null),
+            brand: d.brand || cur.brand,
+            deviceModel: d.device_model !== undefined ? d.device_model : (d.deviceModel !== undefined ? d.deviceModel : (cur.deviceModel ?? null)),
             deviceSerial: d.device_serial !== undefined ? d.device_serial : (d.deviceSerial !== undefined ? d.deviceSerial : (cur.deviceSerial ?? null)),
             softwareId: d.software_id !== undefined ? d.software_id : (d.softwareId !== undefined ? d.softwareId : (cur.softwareId ?? null)),
+            sysDescr: d.sys_descr || cur.sysDescr,
+            sysName: d.sys_name || cur.sysName,
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
