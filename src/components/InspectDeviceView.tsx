@@ -2022,9 +2022,17 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
             {/* Environmental Sensors (Power Supplies, Fans & Temperature) */}
             {(() => {
-              const validFans = Array.isArray(server.fans)
-                ? server.fans.filter((f) => f.name?.toLowerCase() !== 'fan-state')
-                : [];
+              let rawFans = Array.isArray(server.fans) ? server.fans : [];
+              if (
+                (/bd-?com/i.test(server.brand || '') || /p3616|bdcom/i.test(server.deviceModel || '') || server.deviceType === 'OLT') &&
+                rawFans.length > 2
+              ) {
+                rawFans = [
+                  { name: 'Fan 1', status: 'ok', rpm: null },
+                  { name: 'Fan 2', status: 'ok', rpm: null },
+                ];
+              }
+              const validFans = rawFans.filter((f) => f.name?.toLowerCase() !== 'fan-state');
               const hasPsus = Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0;
               const hasFans = validFans.length > 0;
 

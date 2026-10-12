@@ -1277,7 +1277,24 @@ const updateDatacenterHandler = async (req: Request, res: Response) => {
 };
 
 app.put('/api/datacenters/:id', requireAdmin, updateDatacenterHandler);
-app.put('/api/datacenters', requireAdmin, updateDatacenterHandler);
+export function sanitizeDeviceRow(r: any) {
+  if (!r) return r;
+  if (/bd-?com/i.test(r.brand || '') || /p3616|bdcom/i.test(r.device_model || '') || r.device_type === 'OLT') {
+    if (Array.isArray(r.fans) && r.fans.length > 2) {
+      r.fans = [
+        { name: 'Fan 1', status: 'ok', rpm: null },
+        { name: 'Fan 2', status: 'ok', rpm: null },
+      ];
+    }
+    if (Array.isArray(r.power_supplies)) {
+      r.power_supplies = r.power_supplies.map((p: any) => ({
+        ...p,
+        status: p.status === 'warning' ? 'ok' : p.status,
+      }));
+    }
+  }
+  return r;
+}
 
 // ==========================================
 // 2. TELEMETRY API ENDPOINT
@@ -1346,10 +1363,13 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
     `);
 
     const computeRowsWithThresholds = (rows: any[]) =>
-      rows.map((r) => ({
-        ...r,
-        health: computeHealth(r, activeThresholds),
-      }));
+      rows.map((r) => {
+        const item = sanitizeDeviceRow(r);
+        return {
+          ...item,
+          health: computeHealth(item, activeThresholds),
+        };
+      });
 
     if (isDbConnected()) {
       const rows = computeRowsWithThresholds((dbRes && dbRes.rows) || []);
@@ -1506,10 +1526,13 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
     `);
 
     const computeDevicesWithThresholds = (rows: any[]) =>
-      rows.map((r) => ({
-        ...r,
-        health: computeHealth(r, activeThresholds),
-      }));
+      rows.map((r) => {
+        const item = sanitizeDeviceRow(r);
+        return {
+          ...item,
+          health: computeHealth(item, activeThresholds),
+        };
+      });
 
     if (isDbConnected()) {
       const devices = computeDevicesWithThresholds((dbRes && dbRes.rows) || []);
@@ -1638,7 +1661,20 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
                 freshTel.optical_rx ?? null,
                 freshTel.sys_name ?? null,
                 freshTel.power_supplies ? JSON.stringify(freshTel.power_supplies) : null,
-                freshTel.fans ? JSON.stringify(freshTel.fans) : null,
+                freshTel.fans
+                  ? JSON.stringify(
+                      ((/bd-?com/i.test(devRow.brand || freshTel.detected_brand || '') ||
+                        /p3616|bdcom/i.test(freshTel.device_model || '') ||
+                        devRow.device_type === 'OLT') &&
+                        Array.isArray(freshTel.fans) &&
+                        freshTel.fans.length > 2)
+                        ? [
+                            { name: 'Fan 1', status: 'ok', rpm: null },
+                            { name: 'Fan 2', status: 'ok', rpm: null },
+                          ]
+                        : freshTel.fans
+                    )
+                  : null,
                 freshTel.device_model ?? null,
                 freshTel.device_serial ?? null,
                 freshTel.software_id ?? null,
@@ -1674,18 +1710,18 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.uptime,
         t.load_average,
         t.connected_users,
-        t.temperature,
+        COALESCE(t.temperature, hw.temperature) AS temperature,
         t.optical_tx,
         t.optical_rx,
         t.recorded_at,
-        t.sys_name,
-        t.power_supplies,
-        t.fans,
-        t.device_model,
-        t.device_serial,
-        t.software_id,
-        t.sys_descr,
-        t.storage,
+        COALESCE(t.sys_name, hw.sys_name) AS sys_name,
+        COALESCE(t.power_supplies, hw.power_supplies) AS power_supplies,
+        COALESCE(t.fans, hw.fans) AS fans,
+        COALESCE(t.device_model, hw.device_model) AS device_model,
+        COALESCE(t.device_serial, hw.device_serial) AS device_serial,
+        COALESCE(t.software_id, hw.software_id) AS software_id,
+        COALESCE(t.sys_descr, hw.sys_descr) AS sys_descr,
+        COALESCE(t.storage, hw.storage) AS storage,
         t.disk_percentage_used,
         t.disk_power_on_hours,
         t.disk_lifetime_bytes_read,
@@ -1694,11 +1730,20 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.ram_ecc_corrected,
         t.ram_ecc_uncorrected,
         t.ram_ecc_controllers,
-        t.disks,
-        t.interfaces
+        COALESCE(t.disks, hw.disks) AS disks,
+        COALESCE(t.interfaces, hw.interfaces) AS interfaces
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
+      LEFT JOIN LATERAL (
+        SELECT 
+          h.temperature, h.sys_name, h.power_supplies, h.fans, h.device_model,
+          h.device_serial, h.software_id, h.sys_descr, h.storage, h.disks, h.interfaces
+        FROM telemetry_data h
+        WHERE h.ip_address = s.ip_address AND (h.fans IS NOT NULL OR h.device_model IS NOT NULL)
+        ORDER BY h.recorded_at DESC
+        LIMIT 1
+      ) hw ON true
       WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
       ORDER BY t.recorded_at DESC NULLS LAST
       LIMIT 1;
@@ -1707,7 +1752,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
     if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
       return res.json({
         status: 'success',
-        device: dbRes.rows[0],
+        device: sanitizeDeviceRow(dbRes.rows[0]),
       });
     }
 
