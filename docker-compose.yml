@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # ==========================================================
+  # HealthStream Full-Stack Application Service
+  # ==========================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: healthstream-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/healthstream?sslmode=disable}
+      - POSTGRES_URL=${POSTGRES_URL:-postgresql://postgres:postgres@postgres:5432/healthstream?sslmode=disable}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin0223#}
+      - SESSION_SECRET=${SESSION_SECRET:-healthstream-noc-session-secret-key-32chars}
+      - SNMP_POLL_CRON=${SNMP_POLL_CRON:-*/1 * * * *}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - healthstream-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ==========================================================
+  # PostgreSQL Database Service
+  # ==========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: healthstream-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-healthstream}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-healthstream}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - healthstream-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  healthstream-net:
+    driver: bridge
