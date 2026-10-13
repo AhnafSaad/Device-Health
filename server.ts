@@ -1296,6 +1296,36 @@ export function sanitizeDeviceRow(r: any) {
   if (typeof r.interfaces === 'string') {
     try { r.interfaces = JSON.parse(r.interfaces); } catch {}
   }
+  if (typeof r.ram_ecc_controllers === 'string') {
+    try { r.ram_ecc_controllers = JSON.parse(r.ram_ecc_controllers); } catch {}
+  }
+
+  // Strip the contaminated fake mock serial number VSOL88A4F2C901
+  if (r.device_serial === 'VSOL88A4F2C901') {
+    r.device_serial = null;
+  }
+
+  // Ensure Huawei OLT brand, model, and serial are properly normalized
+  if (/huawei/i.test(r.brand || '') || /huawei|smartax|ma5683|frame-300/i.test(r.device_model || '') || r.ip_address === '172.16.1.42') {
+    r.brand = 'Huawei';
+    if (!r.device_model || /v-?sol/i.test(r.device_model)) {
+      r.device_model = 'SmartAX MA5683T (FRAME-300)';
+    }
+    if (/v-?sol/i.test(r.device_serial || '')) {
+      r.device_serial = null;
+    }
+    r.fans = null;
+    r.power_supplies = null;
+  }
+
+  // For private IP OLTs (172.16.1.x, 10.254.x.x) unreachable without local collector, remove fake hardware
+  if (r.ip_address === '172.16.1.78' || r.ip_address === '10.254.3.10') {
+    if (r.device_serial === 'VSOL88A4F2C901') {
+      r.device_serial = null;
+    }
+    r.power_supplies = null;
+    r.fans = null;
+  }
 
   const isVsol = /v-?sol/i.test(r.brand || '') || /v-?sol|v1600/i.test(r.device_model || '');
 
@@ -1664,8 +1694,11 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
               `INSERT INTO telemetry_data (
                 ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, connected_users,
                 temperature, optical_tx, optical_rx, sys_name, power_supplies, fans, device_model, device_serial,
-                software_id, sys_descr, storage, recorded_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW());`,
+                software_id, sys_descr, storage, disks, interfaces,
+                ram_ecc_corrected, ram_ecc_uncorrected, ram_ecc_controllers,
+                disk_percentage_used, disk_power_on_hours, disk_lifetime_bytes_read, disk_lifetime_bytes_written, disk_estimated_eol_days,
+                recorded_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW());`,
               [
                 devRow.ip_address,
                 freshTel.cpu_usage,
@@ -1700,6 +1733,16 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
                 freshTel.software_id ?? null,
                 freshTel.sys_descr ?? null,
                 freshTel.storage ? JSON.stringify(freshTel.storage) : null,
+                freshTel.disks ? JSON.stringify(freshTel.disks) : null,
+                freshTel.interfaces ? JSON.stringify(freshTel.interfaces) : null,
+                freshTel.ram_ecc_corrected ?? null,
+                freshTel.ram_ecc_uncorrected ?? null,
+                freshTel.ram_ecc_controllers ? JSON.stringify(freshTel.ram_ecc_controllers) : null,
+                freshTel.disk_percentage_used ?? null,
+                freshTel.disk_power_on_hours ?? null,
+                freshTel.disk_lifetime_bytes_read ?? null,
+                freshTel.disk_lifetime_bytes_written ?? null,
+                freshTel.disk_estimated_eol_days ?? null,
               ]
             );
           }
@@ -1747,9 +1790,9 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         t.disk_lifetime_bytes_read,
         t.disk_lifetime_bytes_written,
         t.disk_estimated_eol_days,
-        t.ram_ecc_corrected,
-        t.ram_ecc_uncorrected,
-        t.ram_ecc_controllers,
+        COALESCE(t.ram_ecc_corrected, hw.ram_ecc_corrected) AS ram_ecc_corrected,
+        COALESCE(t.ram_ecc_uncorrected, hw.ram_ecc_uncorrected) AS ram_ecc_uncorrected,
+        COALESCE(t.ram_ecc_controllers, hw.ram_ecc_controllers) AS ram_ecc_controllers,
         COALESCE(t.disks, hw.disks) AS disks,
         COALESCE(t.interfaces, hw.interfaces) AS interfaces
       FROM servers_info s
@@ -1758,9 +1801,10 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
       LEFT JOIN LATERAL (
         SELECT 
           h.temperature, h.sys_name, h.power_supplies, h.fans, h.device_model,
-          h.device_serial, h.software_id, h.sys_descr, h.storage, h.disks, h.interfaces
+          h.device_serial, h.software_id, h.sys_descr, h.storage, h.disks, h.interfaces,
+          h.ram_ecc_controllers, h.ram_ecc_corrected, h.ram_ecc_uncorrected
         FROM telemetry_data h
-        WHERE h.ip_address = s.ip_address AND (h.fans IS NOT NULL OR h.device_model IS NOT NULL)
+        WHERE h.ip_address = s.ip_address AND (h.fans IS NOT NULL OR h.device_model IS NOT NULL OR h.ram_ecc_controllers IS NOT NULL)
         ORDER BY h.recorded_at DESC
         LIMIT 1
       ) hw ON true
