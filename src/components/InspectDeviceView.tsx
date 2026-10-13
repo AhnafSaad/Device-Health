@@ -185,8 +185,30 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               : (d.interfaces !== undefined ? d.interfaces : (cur.interfaces ?? null)),
             connectedUsers: d.connected_users !== undefined && d.connected_users !== null ? Number(d.connected_users) : (cur.connectedUsers ?? null),
             temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (cur.temperature ?? null),
-            powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (cur.powerSupplies ?? null),
-            fans: Array.isArray(d.fans) ? d.fans : (cur.fans ?? null),
+            powerSupplies: Array.isArray(d.power_supplies)
+              ? d.power_supplies
+              : typeof d.power_supplies === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(d.power_supplies);
+                    return Array.isArray(parsed) ? parsed : (cur.powerSupplies ?? null);
+                  } catch {
+                    return cur.powerSupplies ?? null;
+                  }
+                })()
+              : (cur.powerSupplies ?? null),
+            fans: Array.isArray(d.fans)
+              ? d.fans
+              : typeof d.fans === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(d.fans);
+                    return Array.isArray(parsed) ? parsed : (cur.fans ?? null);
+                  } catch {
+                    return cur.fans ?? null;
+                  }
+                })()
+              : (cur.fans ?? null),
             brand: d.brand || cur.brand,
             deviceModel: d.device_model !== undefined ? d.device_model : (d.deviceModel !== undefined ? d.deviceModel : (cur.deviceModel ?? null)),
             deviceSerial: d.device_serial !== undefined ? d.device_serial : (d.deviceSerial !== undefined ? d.deviceSerial : (cur.deviceSerial ?? null)),
@@ -654,7 +676,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-stretch">
           
           {/* Resource Utilization Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
+          <div className={`p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col ${deviceType === 'OLT' ? 'lg:col-span-2' : ''}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -870,59 +892,61 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
           </div>
 
-          {/* Storage & Memory (All Device Types) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
-                <Database className="w-4 h-4 text-secondary" />
-                Storage &amp; Memory
-              </h3>
-              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
-                &lt;70% OK • 70-85% WARN • &gt;85% CRIT
-              </span>
-            </div>
+          {/* Storage & Memory (Server, Router, Switch — skipped for OLT) */}
+          {deviceType !== 'OLT' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-secondary" />
+                  Storage &amp; Memory
+                </h3>
+                <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
+                  &lt;70% OK • 70-85% WARN • &gt;85% CRIT
+                </span>
+              </div>
 
-            {Array.isArray(server.storage) && server.storage.length > 0 ? (
-              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
-                {server.storage.map((item, idx) => {
-                  const pct = Number(item.used_pct ?? 0);
-                  const kindLabel = formatStorageKind(item.kind);
-                  return (
-                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
-                            {item.name}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
-                            {kindLabel}
-                          </span>
+              {Array.isArray(server.storage) && server.storage.length > 0 ? (
+                <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
+                  {server.storage.map((item, idx) => {
+                    const pct = Number(item.used_pct ?? 0);
+                    const kindLabel = formatStorageKind(item.kind);
+                    return (
+                      <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
+                              {item.name}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
+                              {kindLabel}
+                            </span>
+                          </div>
+                          <div className="font-mono text-xs shrink-0 text-right">
+                            <span className="text-base-content/70">
+                              {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
+                            </span>
+                            <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
+                              ({pct}%)
+                            </span>
+                          </div>
                         </div>
-                        <div className="font-mono text-xs shrink-0 text-right">
-                          <span className="text-base-content/70">
-                            {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
-                          </span>
-                          <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
-                            ({pct}%)
-                          </span>
+                        <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
+                            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                          />
                         </div>
                       </div>
-                      <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
-                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
-                Not reported by this device
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
+                  Not reported by this device
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Disk Health & Lifecycle (Server devices only) */}
           {deviceType === 'Server' && (

@@ -14,7 +14,7 @@ import {
   Edit3,
   Tag
 } from 'lucide-react';
-import { Server, Datacenter, DeviceType } from '../types';
+import { Server, Datacenter, DeviceType, BRAND_OPTIONS } from '../types';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
 import { formatRack } from '../utils/rack';
 
@@ -37,6 +37,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
 }) => {
   const [ip, setIp] = useState('');
   const [deviceType, setDeviceType] = useState<DeviceType>('Server');
+  const [brand, setBrand] = useState<string>('Auto');
   const [datacenterId, setDatacenterId] = useState<string>('');
   const [location, setLocation] = useState('');
   const [rackNumber, setRackNumber] = useState('');
@@ -50,6 +51,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
     if (device && isOpen) {
       setIp(device.ip || '');
       setDeviceType((device.deviceType as DeviceType) || 'Server');
+      setBrand(device.brand || 'Auto');
       setDatacenterId(device.datacenterId ? String(device.datacenterId) : '');
       setLocation(device.location || '');
       setRackNumber(formatRack(device.rackNumber));
@@ -111,6 +113,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
       hostname: existingHost,
       device_type: deviceType,
       deviceType,
+      brand: brand || device.brand,
       datacenter_id: datacenterId || undefined,
       datacenterId: datacenterId || undefined,
       datacenter_name: resolvedDcName,
@@ -148,7 +151,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
         ip: cleanIp,
         hostname: existingHost,
         deviceType,
-        brand: device.brand,
+        brand: brand || device.brand,
         datacenterId: datacenterId || undefined,
         datacenterName: resolvedDcName,
         location: cleanLocation || (selectedDc?.location ?? device.location),
@@ -158,7 +161,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
           ip: updatedFromServer.ip_address || updatedFromServer.ip || cleanIp,
           hostname: existingHost,
           deviceType: updatedFromServer.device_type || updatedFromServer.deviceType || deviceType,
-          brand: device.brand,
+          brand: updatedFromServer.brand || brand || device.brand,
           datacenterId: updatedFromServer.datacenter_id || updatedFromServer.datacenterId || datacenterId,
           datacenterName: updatedFromServer.datacenter_name || updatedFromServer.datacenterName || resolvedDcName,
           location: updatedFromServer.location || cleanLocation,
@@ -176,7 +179,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
         ip: cleanIp,
         hostname: existingHost,
         deviceType,
-        brand: device.brand,
+        brand: brand || device.brand,
         datacenterId: datacenterId || undefined,
         datacenterName: resolvedDcName,
         location: cleanLocation || (selectedDc?.location ?? device.location),
@@ -262,23 +265,45 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
               <p className="text-[10px] text-base-content/50 mt-1">Must be a valid IPv4 address.</p>
             </div>
 
-            {/* Row 2: Device Type (full width) */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                Device Architecture Type
-              </label>
-              <select
-                value={deviceType}
-                onChange={(e) => setDeviceType(e.target.value as DeviceType)}
-                disabled={isSubmitting}
-                className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
-              >
-                <option value="Server">Server</option>
-                <option value="Router">Router</option>
-                <option value="Switch">Switch</option>
-                <option value="OLT">OLT</option>
-              </select>
-              <p className="text-[10px] text-base-content/50 mt-1">Hardware telemetry profile category.</p>
+            {/* Row 2: Device Type & Brand */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
+                  Device Architecture Type
+                </label>
+                <select
+                  value={deviceType}
+                  onChange={(e) => setDeviceType(e.target.value as DeviceType)}
+                  disabled={isSubmitting}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
+                >
+                  <option value="Server">Server</option>
+                  <option value="Router">Router</option>
+                  <option value="Switch">Switch</option>
+                  <option value="OLT">OLT</option>
+                </select>
+                <p className="text-[10px] text-base-content/50 mt-1">Hardware telemetry profile category.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
+                  Device Brand / Vendor
+                </label>
+                <select
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
+                >
+                  <option value="Auto">Auto-Detect</option>
+                  {BRAND_OPTIONS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-base-content/50 mt-1">Hardware vendor OID profile.</p>
+              </div>
             </div>
 
             {/* Row 3: Assigned Datacenter and Location */}

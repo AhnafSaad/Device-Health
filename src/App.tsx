@@ -254,16 +254,30 @@ export default function App() {
               ramUsage: Number(d.ram_usage ?? d.ramUsage ?? 0),
               diskUsage: Number(d.disk_usage ?? d.diskUsage ?? 0),
               connectedUsers: d.connected_users !== undefined && d.connected_users !== null ? Number(d.connected_users) : (d.connectedUsers ?? null),
-              temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (d.temperature ?? null),
-              powerSupplies: Array.isArray(d.power_supplies) ? d.power_supplies : (Array.isArray(d.powerSupplies) ? d.powerSupplies : null),
-              fans: Array.isArray(d.fans)
-                ? ((/bd-?com/i.test(d.brand || '') || /p3616|bdcom/i.test(d.device_model || '') || d.device_type === 'OLT') && d.fans.length > 2)
-                  ? [
-                      { name: 'Fan 1', status: 'ok', rpm: null },
-                      { name: 'Fan 2', status: 'ok', rpm: null },
-                    ]
-                  : d.fans
-                : null,
+              powerSupplies: Array.isArray(d.power_supplies)
+                ? d.power_supplies
+                : typeof d.power_supplies === 'string'
+                ? (() => { try { const p = JSON.parse(d.power_supplies); return Array.isArray(p) ? p : null; } catch { return null; } })()
+                : (Array.isArray(d.powerSupplies) ? d.powerSupplies : null),
+              fans: (() => {
+                let parsedFans = Array.isArray(d.fans)
+                  ? d.fans
+                  : typeof d.fans === 'string'
+                  ? (() => { try { const p = JSON.parse(d.fans); return Array.isArray(p) ? p : null; } catch { return null; } })()
+                  : null;
+                const isVsol = /v-?sol/i.test(d.brand || '') || /v-?sol|v1600/i.test(d.device_model || '');
+                if (
+                  Array.isArray(parsedFans) &&
+                  !isVsol &&
+                  ((/bd-?com/i.test(d.brand || '') || /p3616|bdcom/i.test(d.device_model || '') || d.device_type === 'OLT') && parsedFans.length > 2)
+                ) {
+                  return [
+                    { name: 'Fan 1', status: 'ok', rpm: null },
+                    { name: 'Fan 2', status: 'ok', rpm: null },
+                  ];
+                }
+                return parsedFans;
+              })(),
               deviceModel: d.device_model ?? d.deviceModel ?? null,
               deviceSerial: d.device_serial ?? d.deviceSerial ?? null,
               softwareId: d.software_id ?? d.softwareId ?? null,
@@ -650,11 +664,21 @@ export default function App() {
                 diskUsage: Number(live.disk_usage ?? live.diskUsage ?? existing?.diskUsage ?? 0),
                 connectedUsers: live.connected_users !== undefined && live.connected_users !== null ? Number(live.connected_users) : (live.connectedUsers ?? existing?.connectedUsers ?? null),
                 temperature: live.temperature !== undefined && live.temperature !== null ? Number(live.temperature) : (live.temperature ?? existing?.temperature ?? null),
-                powerSupplies: Array.isArray(live.power_supplies) ? live.power_supplies : (Array.isArray(live.powerSupplies) ? live.powerSupplies : (existing?.powerSupplies ?? null)),
+                powerSupplies: Array.isArray(live.power_supplies)
+                  ? live.power_supplies
+                  : typeof live.power_supplies === 'string'
+                  ? (() => { try { const p = JSON.parse(live.power_supplies); return Array.isArray(p) ? p : (existing?.powerSupplies ?? null); } catch { return existing?.powerSupplies ?? null; } })()
+                  : (Array.isArray(live.powerSupplies) ? live.powerSupplies : (existing?.powerSupplies ?? null)),
                 fans: (() => {
-                  const resolvedFans = Array.isArray(live.fans) ? live.fans : (existing?.fans ?? null);
+                  let resolvedFans = Array.isArray(live.fans)
+                    ? live.fans
+                    : typeof live.fans === 'string'
+                    ? (() => { try { const p = JSON.parse(live.fans); return Array.isArray(p) ? p : (existing?.fans ?? null); } catch { return existing?.fans ?? null; } })()
+                    : (existing?.fans ?? null);
+                  const isVsol = /v-?sol/i.test(live.brand || existing?.brand || '') || /v-?sol|v1600/i.test(live.device_model || existing?.deviceModel || '');
                   if (
                     Array.isArray(resolvedFans) &&
+                    !isVsol &&
                     ((/bd-?com/i.test(live.brand || existing?.brand || '') ||
                       /p3616|bdcom/i.test(live.device_model || existing?.deviceModel || '') ||
                       live.device_type === 'OLT' ||

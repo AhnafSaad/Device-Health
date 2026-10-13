@@ -1279,7 +1279,27 @@ const updateDatacenterHandler = async (req: Request, res: Response) => {
 app.put('/api/datacenters/:id', requireAdmin, updateDatacenterHandler);
 export function sanitizeDeviceRow(r: any) {
   if (!r) return r;
-  if (/bd-?com/i.test(r.brand || '') || /p3616|bdcom/i.test(r.device_model || '') || r.device_type === 'OLT') {
+
+  // Safely parse JSON strings for hardware structures if returned as text from DB
+  if (typeof r.fans === 'string') {
+    try { r.fans = JSON.parse(r.fans); } catch {}
+  }
+  if (typeof r.power_supplies === 'string') {
+    try { r.power_supplies = JSON.parse(r.power_supplies); } catch {}
+  }
+  if (typeof r.storage === 'string') {
+    try { r.storage = JSON.parse(r.storage); } catch {}
+  }
+  if (typeof r.disks === 'string') {
+    try { r.disks = JSON.parse(r.disks); } catch {}
+  }
+  if (typeof r.interfaces === 'string') {
+    try { r.interfaces = JSON.parse(r.interfaces); } catch {}
+  }
+
+  const isVsol = /v-?sol/i.test(r.brand || '') || /v-?sol|v1600/i.test(r.device_model || '');
+
+  if (/bd-?com/i.test(r.brand || '') || /p3616|bdcom/i.test(r.device_model || '') || (r.device_type === 'OLT' && !isVsol)) {
     if (Array.isArray(r.fans) && r.fans.length > 2) {
       r.fans = [
         { name: 'Fan 1', status: 'ok', rpm: null },
@@ -1665,7 +1685,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
                   ? JSON.stringify(
                       ((/bd-?com/i.test(devRow.brand || freshTel.detected_brand || '') ||
                         /p3616|bdcom/i.test(freshTel.device_model || '') ||
-                        devRow.device_type === 'OLT') &&
+                        (devRow.device_type === 'OLT' && !/v-?sol/i.test(devRow.brand || freshTel.detected_brand || ''))) &&
                         Array.isArray(freshTel.fans) &&
                         freshTel.fans.length > 2)
                         ? [

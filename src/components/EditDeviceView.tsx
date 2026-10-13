@@ -21,7 +21,7 @@ import {
   Activity,
   Tag
 } from 'lucide-react';
-import { Server, DeviceType, Datacenter } from '../types';
+import { Server, DeviceType, Datacenter, BRAND_OPTIONS } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
 import { formatRack } from '../utils/rack';
@@ -56,6 +56,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
     ip_address: '',
     hostname: '',
     device_type: 'Server' as DeviceType,
+    brand: 'Auto',
     snmp_community: 'public',
     datacenter_id: '',
     location: '',

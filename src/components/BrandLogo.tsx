@@ -9,6 +9,7 @@ export const BRAND_DOMAINS: Record<string, string> = {
   'Arista': 'arista.com',
   'BDCOM': 'bdcom.cn',
   'V-SOL': 'vsolcn.com',
+  'VSOL': 'vsolcn.com',
   'TP-Link': 'tp-link.com',
   'Dell': 'dell.com',
   'HP': 'hp.com',
@@ -38,8 +39,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
   const cleanBrand = (brand || '').trim();
   const isDetecting = !cleanBrand || cleanBrand.toLowerCase() === 'auto';
-  const displayLabel = isDetecting ? 'Detecting...' : cleanBrand;
-  const domain = !isDetecting ? BRAND_DOMAINS[cleanBrand] : null;
+  const displayLabel = isDetecting
+    ? 'Detecting...'
+    : cleanBrand.toUpperCase() === 'VSOL'
+    ? 'V-SOL'
+    : cleanBrand;
+  const domain = !isDetecting ? (BRAND_DOMAINS[cleanBrand] || BRAND_DOMAINS[cleanBrand.toUpperCase() === 'VSOL' ? 'V-SOL' : cleanBrand]) : null;
 
   // Explicit overrides for brands lacking configured favicons or custom styling
   let logoSrc: string | null = null;
@@ -48,6 +53,8 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       logoSrc = 'https://ui-avatars.com/api/?name=BDCOM&background=0284c7&color=fff&bold=true&font-size=0.33';
     } else if (cleanBrand.toUpperCase() === 'DBC') {
       logoSrc = 'https://ui-avatars.com/api/?name=DBC&background=059669&color=fff&bold=true&font-size=0.4';
+    } else if (cleanBrand.toUpperCase() === 'VSOL' || cleanBrand.toUpperCase() === 'V-SOL') {
+      logoSrc = 'https://ui-avatars.com/api/?name=VSOL&background=0284c7&color=fff&bold=true&font-size=0.33';
     } else if (domain) {
       logoSrc = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
     }
