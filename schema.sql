@@ -97,6 +97,7 @@ ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_uncorrected INTEGER;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS ram_ecc_controllers JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS disks JSONB;
 ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS interfaces JSONB;
+ALTER TABLE telemetry_data ADD COLUMN IF NOT EXISTS metrics_available BOOLEAN DEFAULT true;
 
 -- 6. Raw I/O counters table for per-disk rate computation across polls
 CREATE TABLE IF NOT EXISTS disk_io_raw_v2 (

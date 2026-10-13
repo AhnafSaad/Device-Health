@@ -1305,26 +1305,25 @@ export function sanitizeDeviceRow(r: any) {
     r.device_serial = null;
   }
 
-  // Ensure Huawei OLT brand, model, and serial are properly normalized
-  if (/huawei/i.test(r.brand || '') || /huawei|smartax|ma5683|frame-300/i.test(r.device_model || '') || r.ip_address === '172.16.1.42') {
-    r.brand = 'Huawei';
-    if (!r.device_model || /v-?sol/i.test(r.device_model)) {
-      r.device_model = 'SmartAX MA5683T (FRAME-300)';
+  // Prefer real SNMP sys_name as hostname if current hostname is placeholder or IP
+  if (r.sys_name && typeof r.sys_name === 'string' && r.sys_name.trim().length > 0) {
+    const sName = r.sys_name.trim();
+    if (!r.hostname || r.hostname === r.ip_address || r.hostname.includes('node-') || /^\d+\.\d+\.\d+\.\d+$/.test(r.hostname)) {
+      r.hostname = sName;
     }
+  }
+
+  // Ensure Huawei OLT brand is properly normalized without hardcoded mock models
+  if (/huawei/i.test(r.brand || '') || /huawei|smartax/i.test(r.device_model || '') || /huawei|smartax/i.test(r.sys_descr || '')) {
+    r.brand = 'Huawei';
     if (/v-?sol/i.test(r.device_serial || '')) {
       r.device_serial = null;
     }
-    r.fans = null;
-    r.power_supplies = null;
   }
 
-  // For private IP OLTs (172.16.1.x, 10.254.x.x) unreachable without local collector, remove fake hardware
-  if (r.ip_address === '172.16.1.78' || r.ip_address === '10.254.3.10') {
-    if (r.device_serial === 'VSOL88A4F2C901') {
-      r.device_serial = null;
-    }
-    r.power_supplies = null;
-    r.fans = null;
+  // For private IP devices without local SNMP collector, ensure no stale fake serial
+  if (r.device_serial === 'VSOL88A4F2C901') {
+    r.device_serial = null;
   }
 
   const isVsol = /v-?sol/i.test(r.brand || '') || /v-?sol|v1600/i.test(r.device_model || '');

@@ -59,7 +59,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const [liveServer, setLiveServer] = useState<Server>(propServer);
   const server = liveServer;
   const [isLiveActive, setIsLiveActive] = useState<boolean>(true);
-  const [liveIntervalSec, setLiveIntervalSec] = useState<number>(2);
+  const [liveIntervalSec, setLiveIntervalSec] = useState<number>(propServer.deviceType === 'OLT' ? 30 : 15);
   const [isPollingNow, setIsPollingNow] = useState<boolean>(false);
   const [copiedSsh, setCopiedSsh] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
@@ -210,6 +210,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 })()
               : (cur.fans ?? null),
             brand: d.brand || cur.brand,
+            hostname: d.sys_name || d.hostname || cur.hostname,
             deviceModel: d.device_model !== undefined ? d.device_model : (d.deviceModel !== undefined ? d.deviceModel : (cur.deviceModel ?? null)),
             deviceSerial: d.device_serial !== undefined ? d.device_serial : (d.deviceSerial !== undefined ? d.deviceSerial : (cur.deviceSerial ?? null)),
             softwareId: d.software_id !== undefined ? d.software_id : (d.softwareId !== undefined ? d.softwareId : (cur.softwareId ?? null)),
