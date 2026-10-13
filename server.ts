@@ -214,27 +214,7 @@ export interface DatacenterRecord {
   node_count?: number;
 }
 
-const memoryDatacenters: DatacenterRecord[] = [
-  { id: 'dc-1', name: 'DC-US-East', location: 'US-East (N. Virginia)', created_at: new Date().toISOString() },
-  { id: 'dc-2', name: 'DC-US-West', location: 'US-West (Oregon)', created_at: new Date().toISOString() },
-  { id: 'dc-3', name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', created_at: new Date().toISOString() },
-  { id: 'dc-4', name: 'DC-EU-West', location: 'EU-West (London)', created_at: new Date().toISOString() },
-  { id: 'dc-5', name: 'DC-AP-East', location: 'AP-East (Tokyo)', created_at: new Date().toISOString() },
-  { id: 'dc-6', name: 'DC-AP-South', location: 'AP-Southeast (Singapore)', created_at: new Date().toISOString() },
-  { id: 'dc-7', name: 'DC-SA-East', location: 'SA-East (São Paulo)', created_at: new Date().toISOString() },
-  { id: 'dc-8', name: 'DC-AF-South', location: 'AF-South (Cape Town)', created_at: new Date().toISOString() },
-];
-
-const INITIAL_NODES = [
-  { id: 'dev-1001', ip_address: '10.0.1.1', hostname: 'srv-postgres-db-01', device_type: 'Server', brand: 'Cisco', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-02 (U10)', snmp_community: 'public' },
-  { id: 'dev-1002', ip_address: '192.168.10.1', hostname: 'mtik-edge-router-02', device_type: 'Router', brand: 'MikroTik', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-01 (U14)', snmp_community: 'public' },
-  { id: 'dev-1003', ip_address: '172.20.10.5', hostname: 'sw-spine-switch-03', device_type: 'Switch', brand: 'Juniper', datacenter_id: 'dc-4', datacenter_name: 'DC-EU-West', location: 'EU-West (London)', rack_number: 'Rack L-06 (U20)', snmp_community: 'public' },
-  { id: 'dev-1004', ip_address: '172.31.20.2', hostname: 'olt-gpon-chassis-04', device_type: 'OLT', brand: 'Huawei', datacenter_id: 'dc-1', datacenter_name: 'DC-US-East', location: 'US-East (N. Virginia)', rack_number: 'Rack A-01 (U12)', snmp_community: 'public' },
-  { id: 'dev-1005', ip_address: '10.0.4.15', hostname: 'srv-k8s-worker-05', device_type: 'Server', brand: 'Arista', datacenter_id: 'dc-6', datacenter_name: 'DC-AP-South', location: 'AP-Southeast (Singapore)', rack_number: 'Rack S-02 (U18)', snmp_community: 'public' },
-  { id: 'dev-1006', ip_address: '192.168.20.1', hostname: 'mtik-bgp-border-06', device_type: 'Router', brand: 'MikroTik', datacenter_id: 'dc-5', datacenter_name: 'DC-AP-East', location: 'AP-East (Tokyo)', rack_number: 'Rack T-01 (U16)', snmp_community: 'public' },
-  { id: 'dev-1007', ip_address: '172.20.30.12', hostname: 'sw-leaf-tor-07', device_type: 'Switch', brand: 'BDCOM', datacenter_id: 'dc-3', datacenter_name: 'DC-EU-Central', location: 'EU-Central (Frankfurt)', rack_number: 'Rack F-12 (U24)', snmp_community: 'public' },
-  { id: 'dev-1008', ip_address: '172.31.50.6', hostname: 'olt-xgspon-fiber-08', device_type: 'OLT', brand: 'V-SOL', datacenter_id: 'dc-2', datacenter_name: 'DC-US-West', location: 'US-West (Oregon)', rack_number: 'Rack W-01 (U14)', snmp_community: 'public' },
-];
+const memoryDatacenters: DatacenterRecord[] = [];
 
 interface DeviceRecord {
   id: string;
@@ -283,16 +263,7 @@ export interface NormalizedTelemetry {
   sys_descr?: string;
 }
 
-const memoryDevices: DeviceRecord[] = INITIAL_NODES.map((n) => ({
-  ...n,
-  created_at: new Date().toISOString(),
-  cpu_usage: 0,
-  ram_usage: 0,
-  disk_usage: 0,
-  status: 'offline',
-  health: 'Critical',
-  uptime: '0d 0h (Pending Poll)',
-}));
+const memoryDevices: DeviceRecord[] = [];
 
 // Register memory devices with SNMP background scheduler
 registerMemoryDevicesProvider(() => memoryDevices);
@@ -1300,9 +1271,26 @@ export function sanitizeDeviceRow(r: any) {
     try { r.ram_ecc_controllers = JSON.parse(r.ram_ecc_controllers); } catch {}
   }
 
-  // Strip the contaminated fake mock serial number VSOL88A4F2C901
-  if (r.device_serial === 'VSOL88A4F2C901') {
-    r.device_serial = null;
+  // Ensure real hardware serial is never confused with hostname, sys_name, IP, or network role suffixes
+  if (r.device_serial && typeof r.device_serial === 'string') {
+    const sLower = r.device_serial.trim().toLowerCase();
+    const sysLower = (r.sys_name || '').trim().toLowerCase();
+    const hostLower = (r.hostname || '').trim().toLowerCase();
+    const ipLower = (r.ip_address || '').trim().toLowerCase();
+
+    if (
+      sLower === 'vsol88a4f2c901' ||
+      sLower === 'manikganj-olt' ||
+      (sysLower && sLower === sysLower) ||
+      (hostLower && sLower === hostLower) ||
+      (ipLower && sLower === ipLower) ||
+      /-(?:olt|router|sw|switch|server|node|gw|ap)(?:-\d+)?$/i.test(sLower) ||
+      /^(?:olt|router|sw|switch|srv)-/i.test(sLower) ||
+      (sysLower && (sLower.includes(sysLower) || sysLower.includes(sLower)) && (sysLower.includes('-') || sysLower.includes('_'))) ||
+      (hostLower && (sLower.includes(hostLower) || hostLower.includes(sLower)) && (hostLower.includes('-') || hostLower.includes('_')))
+    ) {
+      r.device_serial = null;
+    }
   }
 
   // Prefer real SNMP sys_name as hostname if current hostname is placeholder or IP
@@ -1321,9 +1309,22 @@ export function sanitizeDeviceRow(r: any) {
     }
   }
 
-  // For private IP devices without local SNMP collector, ensure no stale fake serial
-  if (r.device_serial === 'VSOL88A4F2C901') {
-    r.device_serial = null;
+  // Physical chassis limits for power supplies:
+  // An OLT chassis (Huawei FRAME-300 / SmartAX MA5680T / MA5683T / MA5608T / MA5800, V-SOL, BDCOM)
+  // physically only has 1 or 2 modular power supply units (dual redundant power supplies: Power Supply 1 and Power Supply 2).
+  // A table walk of ports or unequipped slots must never show 36+ power supplies.
+  const isOlt = r.device_type === 'OLT' ||
+                /olt|huawei|smartax|v-?sol|bd-?com/i.test(r.brand || '') ||
+                /olt|frame-300|ma568|v1600/i.test(r.device_model || '');
+
+  if (isOlt && Array.isArray(r.power_supplies)) {
+    if (r.power_supplies.length > 2) {
+      r.power_supplies = r.power_supplies.slice(0, 2).map((p: any, idx: number) => ({
+        ...p,
+        name: `Power Supply ${idx + 1}`,
+        status: p.status === 'warning' ? 'ok' : p.status,
+      }));
+    }
   }
 
   const isVsol = /v-?sol/i.test(r.brand || '') || /v-?sol|v1600/i.test(r.device_model || '');

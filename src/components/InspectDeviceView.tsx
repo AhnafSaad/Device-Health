@@ -2124,7 +2124,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 ];
               }
               const validFans = rawFans.filter((f) => f.name?.toLowerCase() !== 'fan-state');
-              const hasPsus = Array.isArray(server.powerSupplies) && server.powerSupplies.length > 0;
+              const isOlt = (server.deviceType === 'OLT' || /olt|huawei|smartax|v-?sol|bd-?com/i.test(server.brand || ''));
+              const rawPsus = Array.isArray(server.powerSupplies) ? server.powerSupplies : [];
+              const validPsus = (isOlt && rawPsus.length > 2)
+                ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `Power Supply ${idx + 1}` }))
+                : rawPsus;
+              const hasPsus = validPsus.length > 0;
               const hasFans = validFans.length > 0;
 
               // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis):
@@ -2181,7 +2186,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     </div>
                     {hasPsus ? (
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                        {server.powerSupplies!.map((psu, idx) => {
+                        {validPsus.map((psu, idx) => {
                           const rawVal = (psu as { raw_value?: number | null }).raw_value;
                           const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
                           const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
@@ -2363,15 +2368,30 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                   <Hash className="w-3.5 h-3.5 text-primary" />
                   Serial Number
                 </div>
-                {(activeServer.deviceSerial ?? server.deviceSerial) ? (
-                  <div className="font-semibold text-base-content font-mono break-all">
-                    {activeServer.deviceSerial ?? server.deviceSerial}
-                  </div>
-                ) : (
-                  <div className="font-semibold text-base-content/40 font-mono">
-                    Not reported
-                  </div>
-                )}
+                {(() => {
+                  const rawSerial = activeServer.deviceSerial ?? server.deviceSerial;
+                  const sLower = (rawSerial || '').trim().toLowerCase();
+                  const hostLower = (activeServer.hostname || server.hostname || '').trim().toLowerCase();
+                  const sysLower = (activeServer.sysName || server.sysName || '').trim().toLowerCase();
+                  const isInvalid = !rawSerial ||
+                    sLower === hostLower ||
+                    sLower === sysLower ||
+                    sLower === 'manikganj-olt' ||
+                    sLower === 'vsol88a4f2c901' ||
+                    /-(?:olt|router|sw|switch|server|node)$/i.test(sLower) ||
+                    (hostLower && (sLower.includes(hostLower) || hostLower.includes(sLower)) && hostLower.includes('-')) ||
+                    (sysLower && (sLower.includes(sysLower) || sysLower.includes(sLower)) && sysLower.includes('-'));
+
+                  return !isInvalid ? (
+                    <div className="font-semibold text-base-content font-mono break-all">
+                      {rawSerial}
+                    </div>
+                  ) : (
+                    <div className="font-semibold text-base-content/40 font-mono">
+                      Not reported
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* MikroTik Software ID */}

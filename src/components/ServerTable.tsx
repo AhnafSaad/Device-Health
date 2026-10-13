@@ -358,25 +358,41 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       </div>
 
                       {/* Serial Number & Software ID tags */}
-                      {(server.deviceSerial || server.softwareId) && (
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono text-base-content/50">
-                          {server.deviceSerial && (
-                            <span
-                              className={`inline-flex items-center gap-1 transition-colors ${
-                                searchQuery && server.deviceSerial.toLowerCase().includes(searchQuery.toLowerCase().trim())
-                                  ? 'text-primary font-bold bg-primary/10 px-1 py-0.5 rounded border border-primary/20'
-                                  : 'hover:text-base-content'
-                              }`}
-                              title={`Serial Number: ${server.deviceSerial}`}
-                            >
-                              <span className="text-base-content/40 font-sans">SN:</span>
-                              <span className="text-base-content/70">{server.deviceSerial}</span>
-                            </span>
-                          )}
-                          {server.deviceSerial && server.softwareId && (
-                            <span className="text-base-content/30">•</span>
-                          )}
-                          {server.softwareId && (
+                      {(() => {
+                        const rawSn = server.deviceSerial;
+                        const sLower = (rawSn || '').trim().toLowerCase();
+                        const hLower = (server.hostname || '').trim().toLowerCase();
+                        const sysLower = (server.sysName || '').trim().toLowerCase();
+                        const isSnValid = Boolean(
+                          rawSn &&
+                          sLower !== hLower &&
+                          sLower !== sysLower &&
+                          sLower !== 'manikganj-olt' &&
+                          sLower !== 'vsol88a4f2c901' &&
+                          !/-(?:olt|router|sw|switch|server|node)$/i.test(sLower)
+                        );
+
+                        if (!isSnValid && !server.softwareId) return null;
+
+                        return (
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono text-base-content/50">
+                            {isSnValid && rawSn && (
+                              <span
+                                className={`inline-flex items-center gap-1 transition-colors ${
+                                  searchQuery && rawSn.toLowerCase().includes(searchQuery.toLowerCase().trim())
+                                    ? 'text-primary font-bold bg-primary/10 px-1 py-0.5 rounded border border-primary/20'
+                                    : 'hover:text-base-content'
+                                }`}
+                                title={`Serial Number: ${rawSn}`}
+                              >
+                                <span className="text-base-content/40 font-sans">SN:</span>
+                                <span className="text-base-content/70">{rawSn}</span>
+                              </span>
+                            )}
+                            {isSnValid && server.softwareId && (
+                              <span className="text-base-content/30">•</span>
+                            )}
+                            {server.softwareId && (
                             <span
                               className={`inline-flex items-center gap-1 transition-colors ${
                                 searchQuery && server.softwareId.toLowerCase().includes(searchQuery.toLowerCase().trim())
@@ -390,8 +406,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                             </span>
                           )}
                         </div>
-                      )}
-                    </td>
+                      );
+                    })()}
+                  </td>
 
                     {/* 2. Status: Glowing UP/DOWN badge */}
                     <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
