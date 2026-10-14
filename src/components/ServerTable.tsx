@@ -485,8 +485,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                                 </div>
                               </div>
 
-                              {/* RAM Meter (Server only) */}
-                              {server.deviceType === 'Server' && (
+                              {/* RAM Meter (Server, or any device reporting RAM like OLT / Switch) */}
+                              {(server.deviceType === 'Server' || (typeof server.ramUsage === 'number' && server.ramUsage > 0)) && (
                                 <div>
                                   <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
                                     <span className="text-base-content/50">RAM</span>
@@ -543,8 +543,14 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                               <div className="flex flex-wrap justify-end gap-1">
                                 {server.powerSupplies.map((psu, idx) => {
                                   const rawVal = (psu as { raw_value?: number | null }).raw_value;
-                                  const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
-                                  const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
+                                  const rawName = psu.name || '';
+                                  const numMatch = rawName.match(/(?:power\s*supply|psu)[-\s_]*(\d+)/i);
+                                  const stateMatch = rawName.match(/^psu(\d+)-state$/i);
+                                  const displayLabel = numMatch
+                                    ? `PSU ${numMatch[1]}`
+                                    : stateMatch
+                                    ? `PSU ${stateMatch[1]}`
+                                    : (rawName.replace(/power\s*supply/gi, 'PSU') || `PSU ${idx + 1}`);
                                   const chipColor =
                                     psu.status === 'ok'
                                       ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'

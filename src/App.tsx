@@ -202,9 +202,9 @@ export default function App() {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   }, []);
 
-  // Pagination state
+  // Pagination state (minimum 20 rows per page)
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(20);
 
   // Live simulation telemetry state
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);

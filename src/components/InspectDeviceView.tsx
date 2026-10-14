@@ -2127,7 +2127,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               const isOlt = (server.deviceType === 'OLT' || /olt|huawei|smartax|v-?sol|bd-?com/i.test(server.brand || ''));
               const rawPsus = Array.isArray(server.powerSupplies) ? server.powerSupplies : [];
               const validPsus = (isOlt && rawPsus.length > 2)
-                ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `Power Supply ${idx + 1}` }))
+                ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `PSU ${idx + 1}` }))
                 : rawPsus;
               const hasPsus = validPsus.length > 0;
               const hasFans = validFans.length > 0;
@@ -2188,8 +2188,14 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
                         {validPsus.map((psu, idx) => {
                           const rawVal = (psu as { raw_value?: number | null }).raw_value;
-                          const rawMatch = psu.name?.match(/^psu(\d+)-state$/i);
-                          const displayLabel = rawMatch ? `PSU ${rawMatch[1]}` : (psu.name || `PSU ${idx + 1}`);
+                          const rawName = psu.name || '';
+                          const numMatch = rawName.match(/(?:power\s*supply|psu)[-\s_]*(\d+)/i);
+                          const stateMatch = rawName.match(/^psu(\d+)-state$/i);
+                          const displayLabel = numMatch
+                            ? `PSU ${numMatch[1]}`
+                            : stateMatch
+                            ? `PSU ${stateMatch[1]}`
+                            : (rawName.replace(/power\s*supply/gi, 'PSU') || `PSU ${idx + 1}`);
                           const statusBadge =
                             psu.status === 'ok'
                               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'

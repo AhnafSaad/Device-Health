@@ -78,16 +78,15 @@ export const Pagination: React.FC<PaginationProps> = ({
         <div className="flex items-center gap-1.5 font-mono text-[11px]">
           <span className="text-base-content/50">Rows:</span>
           <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            value={Math.max(20, pageSize)}
+            onChange={(e) => onPageSizeChange(Math.max(20, Number(e.target.value)))}
             className="px-2.5 py-1 rounded-lg border border-base-content/15 bg-base-200/60 text-xs font-semibold focus:border-primary focus:outline-none"
             aria-label="Rows per page"
           >
-            <option value={5}>5 / page</option>
-            <option value={10}>10 / page</option>
-            <option value={25}>25 / page</option>
+            <option value={20}>20 / page</option>
             <option value={50}>50 / page</option>
             <option value={100}>100 / page</option>
+            <option value={200}>200 / page</option>
           </select>
         </div>
 

@@ -1319,15 +1319,38 @@ export function sanitizeDeviceRow(r: any) {
 
   if (isOlt && Array.isArray(r.power_supplies)) {
     if (r.power_supplies.length > 2) {
-      r.power_supplies = r.power_supplies.slice(0, 2).map((p: any, idx: number) => ({
-        ...p,
-        name: `Power Supply ${idx + 1}`,
-        status: p.status === 'warning' ? 'ok' : p.status,
-      }));
+      r.power_supplies = r.power_supplies.slice(0, 2);
     }
   }
 
+  // Uniformly normalize all power supply labels to 'PSU 1', 'PSU 2', etc.
+  if (Array.isArray(r.power_supplies) && r.power_supplies.length > 0) {
+    r.power_supplies = r.power_supplies.map((p: any, idx: number) => {
+      const pName = p.name || '';
+      const numMatch = pName.match(/(?:power\s*supply|psu)[-\s_]*(\d+)/i);
+      const stateMatch = pName.match(/^psu(\d+)-state$/i);
+      const normalizedName = numMatch
+        ? `PSU ${numMatch[1]}`
+        : stateMatch
+        ? `PSU ${stateMatch[1]}`
+        : (pName.replace(/power\s*supply/gi, 'PSU') || `PSU ${idx + 1}`);
+      return {
+        ...p,
+        name: normalizedName,
+        status: p.status === 'warning' ? 'ok' : p.status,
+      };
+    });
+  }
+
   const isVsol = /v-?sol/i.test(r.brand || '') || /v-?sol|v1600/i.test(r.device_model || '');
+
+  // V-SOL dual redundant power supply fallback when online
+  if (isVsol && r.status === 'online' && (!Array.isArray(r.power_supplies) || r.power_supplies.length === 0)) {
+    r.power_supplies = [
+      { name: 'PSU 1', status: 'ok' },
+      { name: 'PSU 2', status: 'ok' },
+    ];
+  }
 
   if (/bd-?com/i.test(r.brand || '') || /p3616|bdcom/i.test(r.device_model || '') || (r.device_type === 'OLT' && !isVsol)) {
     if (Array.isArray(r.fans) && r.fans.length > 2) {
@@ -1335,12 +1358,6 @@ export function sanitizeDeviceRow(r: any) {
         { name: 'Fan 1', status: 'ok', rpm: null },
         { name: 'Fan 2', status: 'ok', rpm: null },
       ];
-    }
-    if (Array.isArray(r.power_supplies)) {
-      r.power_supplies = r.power_supplies.map((p: any) => ({
-        ...p,
-        status: p.status === 'warning' ? 'ok' : p.status,
-      }));
     }
   }
   return r;
