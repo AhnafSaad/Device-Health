@@ -2125,6 +2125,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               }
               const validFans = rawFans.filter((f) => f.name?.toLowerCase() !== 'fan-state');
               const isOlt = (server.deviceType === 'OLT' || /olt|huawei|smartax|v-?sol|bd-?com/i.test(server.brand || ''));
+              const isVsolOlt = server.deviceType === 'OLT' && (server.brand === 'V-SOL' || /^v-?sol$/i.test(server.brand || ''));
               const rawPsus = Array.isArray(server.powerSupplies) ? server.powerSupplies : [];
               const validPsus = (isOlt && rawPsus.length > 2)
                 ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `PSU ${idx + 1}` }))
@@ -2133,7 +2134,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
               const hasFans = validFans.length > 0;
 
               // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis):
-              if (!hasPsus && !hasFans) {
+              if (!hasPsus && !hasFans && !isVsolOlt) {
                 return (
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5">
                     <div className="flex items-center gap-3">
@@ -2230,7 +2231,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     ) : (
                       <div className="text-xs font-mono text-base-content/40">
-                        Not reported by this device
+                        {isVsolOlt
+                          ? 'Not exposed via SNMP on this hardware — fan/power telemetry requires CLI access on V-SOL OLTs.'
+                          : 'Not reported by this device'}
                       </div>
                     )}
                   </div>
@@ -2286,7 +2289,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     ) : (
                       <div className="text-xs font-mono text-base-content/40">
-                        Not reported by this device
+                        {isVsolOlt
+                          ? 'Not exposed via SNMP on this hardware — fan/power telemetry requires CLI access on V-SOL OLTs.'
+                          : 'Not reported by this device'}
                       </div>
                     )}
                   </div>
