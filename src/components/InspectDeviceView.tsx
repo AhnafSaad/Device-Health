@@ -2113,17 +2113,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
             {/* Environmental Sensors (Power Supplies, Fans & Temperature) */}
             {(() => {
-              let rawFans = Array.isArray(server.fans) ? server.fans : [];
-              if (
-                (/bd-?com/i.test(server.brand || '') || /p3616|bdcom/i.test(server.deviceModel || '') || server.deviceType === 'OLT') &&
-                rawFans.length > 2
-              ) {
-                rawFans = [
-                  { name: 'Fan 1', status: 'ok', rpm: null },
-                  { name: 'Fan 2', status: 'ok', rpm: null },
-                ];
-              }
-              const validFans = rawFans.filter((f) => f.name?.toLowerCase() !== 'fan-state');
+              const fansList = Array.isArray(server.fans) ? server.fans : [];
               const isOlt = (server.deviceType === 'OLT' || /olt|huawei|smartax|v-?sol|bd-?com/i.test(server.brand || ''));
               const isVsolOlt = server.deviceType === 'OLT' && (server.brand === 'V-SOL' || /^v-?sol$/i.test(server.brand || ''));
               const rawPsus = Array.isArray(server.powerSupplies) ? server.powerSupplies : [];
@@ -2131,7 +2121,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `PSU ${idx + 1}` }))
                 : rawPsus;
               const hasPsus = validPsus.length > 0;
-              const hasFans = validFans.length > 0;
+              const hasFans = fansList.length > 0;
 
               // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis):
               if (!hasPsus && !hasFans && !isVsolOlt) {
@@ -2247,7 +2237,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           <span>Fans</span>
                         </span>
                       </div>
-                      {validFans.some((f) => typeof f.percent === 'number' && Number.isFinite(f.percent)) && (
+                      {fansList.some((f) => typeof f.percent === 'number' && Number.isFinite(f.percent)) && (
                         <p className="text-[10px] text-base-content/50 font-sans mt-0.5">
                           Fan speed reported as duty cycle (%) by this hardware
                         </p>
@@ -2255,7 +2245,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     </div>
                     {hasFans ? (
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
-                        {validFans.map((fan, idx) => {
+                        {fansList.map((fan, idx) => {
                           const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
                           const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
                           const statusBadge =
@@ -2289,9 +2279,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       </div>
                     ) : (
                       <div className="text-xs font-mono text-base-content/40">
-                        {isVsolOlt
-                          ? 'Not exposed via SNMP on this hardware — fan/power telemetry requires CLI access on V-SOL OLTs.'
-                          : 'Not reported by this device'}
+                        Not reported by this device
                       </div>
                     )}
                   </div>
