@@ -261,6 +261,14 @@ export interface NormalizedTelemetry {
   error?: string;
   recorded_at?: string;
   sys_descr?: string;
+  sys_name?: string | null;
+  power_supplies?: any;
+  fans?: any;
+  device_model?: string | null;
+  device_serial?: string | null;
+  software_id?: string | null;
+  storage?: any;
+  disks?: any;
 }
 
 const memoryDevices: DeviceRecord[] = [];
@@ -1482,7 +1490,17 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
           temperature: latest.temperature ?? null,
           optical_tx: latest.optical_tx ?? null,
           optical_rx: latest.optical_rx ?? null,
+          sys_name: latest.sys_name ?? (d as any).sys_name ?? null,
+          power_supplies: latest.power_supplies ?? (d as any).power_supplies ?? null,
+          fans: latest.fans ?? (d as any).fans ?? null,
+          device_model: latest.device_model ?? (d as any).device_model ?? null,
+          device_serial: latest.device_serial ?? (d as any).device_serial ?? null,
+          software_id: latest.software_id ?? (d as any).software_id ?? null,
+          sys_descr: latest.sys_descr ?? (d as any).sys_descr ?? null,
+          storage: latest.storage ?? (d as any).storage ?? null,
+          disks: latest.disks ?? (d as any).disks ?? null,
           interfaces: latest.interfaces ?? null,
+          metrics_available: latest.metrics_available ?? (d as any).metrics_available ?? true,
           uptime: latest.uptime,
           status: latest.status,
           health: latest.health,
@@ -1642,7 +1660,17 @@ app.get('/api/devices', async (_req: Request, res: Response) => {
         temperature: latest.temperature ?? null,
         optical_tx: latest.optical_tx ?? null,
         optical_rx: latest.optical_rx ?? null,
+        sys_name: latest.sys_name ?? (d as any).sys_name ?? null,
+        power_supplies: latest.power_supplies ?? (d as any).power_supplies ?? null,
+        fans: latest.fans ?? (d as any).fans ?? null,
+        device_model: latest.device_model ?? (d as any).device_model ?? null,
+        device_serial: latest.device_serial ?? (d as any).device_serial ?? null,
+        software_id: latest.software_id ?? (d as any).software_id ?? null,
+        sys_descr: latest.sys_descr ?? (d as any).sys_descr ?? null,
+        storage: latest.storage ?? (d as any).storage ?? null,
+        disks: latest.disks ?? (d as any).disks ?? null,
         interfaces: latest.interfaces ?? null,
+        metrics_available: latest.metrics_available ?? (d as any).metrics_available ?? true,
         uptime: latest.uptime,
         status: latest.status,
         health: latest.health,
@@ -1677,95 +1705,123 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
     const isNumeric = /^\d+$/.test(id);
     const shouldRefresh = req.query.refresh === 'true';
 
-    if (shouldRefresh && isDbConnected()) {
-      try {
-        const devRecordRes = await query(
-          `SELECT s.id, s.ip_address, s.hostname, s.device_type, s.brand, s.snmp_community
-           FROM servers_info s
-           WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
-           LIMIT 1;`,
-          [id]
-        );
+    if (shouldRefresh) {
+      if (isDbConnected()) {
+        try {
+          const devRecordRes = await query(
+            `SELECT s.id, s.ip_address, s.hostname, s.device_type, s.brand, s.snmp_community
+             FROM servers_info s
+             WHERE ${isNumeric ? 's.id = $1' : 's.ip_address = $1 OR s.id::text = $1'}
+             LIMIT 1;`,
+            [id]
+          );
 
-        if (devRecordRes && devRecordRes.rows && devRecordRes.rows.length > 0) {
-          const devRow = devRecordRes.rows[0];
-          const freshTel = (await pollDevice({
-            id: devRow.id,
-            ip_address: devRow.ip_address,
-            snmp_community: devRow.snmp_community,
-            brand: devRow.brand,
-            device_type: devRow.device_type,
-          })) as any;
+          if (devRecordRes && devRecordRes.rows && devRecordRes.rows.length > 0) {
+            const devRow = devRecordRes.rows[0];
+            const freshTel = (await pollDevice({
+              id: devRow.id,
+              ip_address: devRow.ip_address,
+              snmp_community: devRow.snmp_community,
+              brand: devRow.brand,
+              device_type: devRow.device_type,
+            })) as any;
 
-          if (freshTel) {
-            getLatestTelemetryMap().set(devRow.ip_address, freshTel);
+            if (freshTel) {
+              getLatestTelemetryMap().set(devRow.ip_address, freshTel);
 
-            if (freshTel.detected_brand && (!devRow.brand || devRow.brand.toLowerCase() === 'auto')) {
-              await query('UPDATE servers_info SET brand = $1, updated_at = NOW() WHERE ip_address = $2', [
-                freshTel.detected_brand,
-                devRow.ip_address,
-              ]);
+              if (freshTel.detected_brand && (!devRow.brand || devRow.brand.toLowerCase() === 'auto')) {
+                await query('UPDATE servers_info SET brand = $1, updated_at = NOW() WHERE ip_address = $2', [
+                  freshTel.detected_brand,
+                  devRow.ip_address,
+                ]);
+              }
+
+              await query(
+                `INSERT INTO telemetry_data (
+                  ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, connected_users,
+                  temperature, optical_tx, optical_rx, sys_name, power_supplies, fans, device_model, device_serial,
+                  software_id, sys_descr, storage, disks, interfaces,
+                  ram_ecc_corrected, ram_ecc_uncorrected, ram_ecc_controllers,
+                  disk_percentage_used, disk_power_on_hours, disk_lifetime_bytes_read, disk_lifetime_bytes_written, disk_estimated_eol_days,
+                  recorded_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW());`,
+                [
+                  devRow.ip_address,
+                  freshTel.cpu_usage,
+                  freshTel.ram_usage,
+                  freshTel.disk_usage,
+                  freshTel.uptime,
+                  freshTel.status,
+                  freshTel.health,
+                  freshTel.load_average,
+                  freshTel.connected_users ?? null,
+                  freshTel.temperature ?? null,
+                  freshTel.optical_tx ?? null,
+                  freshTel.optical_rx ?? null,
+                  freshTel.sys_name ?? null,
+                  freshTel.power_supplies ? JSON.stringify(freshTel.power_supplies) : null,
+                  freshTel.fans
+                    ? JSON.stringify(
+                        ((/bd-?com/i.test(devRow.brand || freshTel.detected_brand || '') ||
+                          /p3616|bdcom/i.test(freshTel.device_model || '') ||
+                          (devRow.device_type === 'OLT' && !/v-?sol/i.test(devRow.brand || freshTel.detected_brand || ''))) &&
+                          Array.isArray(freshTel.fans) &&
+                          freshTel.fans.length > 2)
+                          ? [
+                              { name: 'Fan 1', status: 'ok', rpm: null },
+                              { name: 'Fan 2', status: 'ok', rpm: null },
+                            ]
+                          : freshTel.fans
+                      )
+                    : null,
+                  freshTel.device_model ?? null,
+                  freshTel.device_serial ?? null,
+                  freshTel.software_id ?? null,
+                  freshTel.sys_descr ?? null,
+                  freshTel.storage ? JSON.stringify(freshTel.storage) : null,
+                  freshTel.disks ? JSON.stringify(freshTel.disks) : null,
+                  freshTel.interfaces ? JSON.stringify(freshTel.interfaces) : null,
+                  freshTel.ram_ecc_corrected ?? null,
+                  freshTel.ram_ecc_uncorrected ?? null,
+                  freshTel.ram_ecc_controllers ? JSON.stringify(freshTel.ram_ecc_controllers) : null,
+                  freshTel.disk_percentage_used ?? null,
+                  freshTel.disk_power_on_hours ?? null,
+                  freshTel.disk_lifetime_bytes_read ?? null,
+                  freshTel.disk_lifetime_bytes_written ?? null,
+                  freshTel.disk_estimated_eol_days ?? null,
+                ]
+              );
             }
-
-            await query(
-              `INSERT INTO telemetry_data (
-                ip_address, cpu_usage, ram_usage, disk_usage, uptime, status, health, load_average, connected_users,
-                temperature, optical_tx, optical_rx, sys_name, power_supplies, fans, device_model, device_serial,
-                software_id, sys_descr, storage, disks, interfaces,
-                ram_ecc_corrected, ram_ecc_uncorrected, ram_ecc_controllers,
-                disk_percentage_used, disk_power_on_hours, disk_lifetime_bytes_read, disk_lifetime_bytes_written, disk_estimated_eol_days,
-                recorded_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW());`,
-              [
-                devRow.ip_address,
-                freshTel.cpu_usage,
-                freshTel.ram_usage,
-                freshTel.disk_usage,
-                freshTel.uptime,
-                freshTel.status,
-                freshTel.health,
-                freshTel.load_average,
-                freshTel.connected_users ?? null,
-                freshTel.temperature ?? null,
-                freshTel.optical_tx ?? null,
-                freshTel.optical_rx ?? null,
-                freshTel.sys_name ?? null,
-                freshTel.power_supplies ? JSON.stringify(freshTel.power_supplies) : null,
-                freshTel.fans
-                  ? JSON.stringify(
-                      ((/bd-?com/i.test(devRow.brand || freshTel.detected_brand || '') ||
-                        /p3616|bdcom/i.test(freshTel.device_model || '') ||
-                        (devRow.device_type === 'OLT' && !/v-?sol/i.test(devRow.brand || freshTel.detected_brand || ''))) &&
-                        Array.isArray(freshTel.fans) &&
-                        freshTel.fans.length > 2)
-                        ? [
-                            { name: 'Fan 1', status: 'ok', rpm: null },
-                            { name: 'Fan 2', status: 'ok', rpm: null },
-                          ]
-                        : freshTel.fans
-                    )
-                  : null,
-                freshTel.device_model ?? null,
-                freshTel.device_serial ?? null,
-                freshTel.software_id ?? null,
-                freshTel.sys_descr ?? null,
-                freshTel.storage ? JSON.stringify(freshTel.storage) : null,
-                freshTel.disks ? JSON.stringify(freshTel.disks) : null,
-                freshTel.interfaces ? JSON.stringify(freshTel.interfaces) : null,
-                freshTel.ram_ecc_corrected ?? null,
-                freshTel.ram_ecc_uncorrected ?? null,
-                freshTel.ram_ecc_controllers ? JSON.stringify(freshTel.ram_ecc_controllers) : null,
-                freshTel.disk_percentage_used ?? null,
-                freshTel.disk_power_on_hours ?? null,
-                freshTel.disk_lifetime_bytes_read ?? null,
-                freshTel.disk_lifetime_bytes_written ?? null,
-                freshTel.disk_estimated_eol_days ?? null,
-              ]
-            );
+          }
+        } catch (err: any) {
+          console.warn('[server.ts] on-demand poll error in GET /api/devices/:id:', err?.message);
+        }
+      } else {
+        // In-memory mode on-demand refresh
+        const memDev = memoryDevices.find((d) => String(d.id) === String(id) || d.ip_address === String(id));
+        if (memDev) {
+          try {
+            const activeThresholds = await loadAlertThresholds();
+            const freshTel = (await pollDevice(
+              {
+                id: memDev.id,
+                ip_address: memDev.ip_address,
+                snmp_community: memDev.snmp_community,
+                brand: memDev.brand,
+                device_type: memDev.device_type,
+              },
+              activeThresholds
+            )) as any;
+            if (freshTel) {
+              getLatestTelemetryMap().set(memDev.ip_address, freshTel);
+              if (freshTel.detected_brand && (!memDev.brand || memDev.brand.toLowerCase() === 'auto')) {
+                memDev.brand = freshTel.detected_brand;
+              }
+            }
+          } catch (pollErr: any) {
+            console.warn('[server.ts] on-demand poll error in memory mode:', pollErr?.message);
           }
         }
-      } catch (err: any) {
-        console.warn('[server.ts] on-demand poll error in GET /api/devices/:id:', err?.message);
       }
     }
 
@@ -1848,12 +1904,39 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
     const dev = memoryDevices.find((d) => String(d.id) === String(id) || d.ip_address === String(id));
     if (dev) {
       const latest = (getLatestTelemetryMap() as Map<string, any>).get(dev.ip_address);
+      const mergedDevice = {
+        ...dev,
+        ...(latest
+          ? {
+              cpu_usage: latest.cpu_usage,
+              ram_usage: latest.ram_usage,
+              disk_usage: latest.disk_usage,
+              uptime: latest.uptime,
+              status: latest.status,
+              health: latest.health,
+              load_average: latest.load_average,
+              connected_users: latest.connected_users ?? (dev as any).connected_users ?? null,
+              temperature: latest.temperature ?? (dev as any).temperature ?? null,
+              optical_tx: latest.optical_tx ?? (dev as any).optical_tx ?? null,
+              optical_rx: latest.optical_rx ?? (dev as any).optical_rx ?? null,
+              sys_name: latest.sys_name ?? (dev as any).sys_name ?? null,
+              power_supplies: latest.power_supplies ?? (dev as any).power_supplies ?? null,
+              fans: latest.fans ?? (dev as any).fans ?? null,
+              device_model: latest.device_model ?? (dev as any).device_model ?? null,
+              device_serial: latest.device_serial ?? (dev as any).device_serial ?? null,
+              software_id: latest.software_id ?? (dev as any).software_id ?? null,
+              sys_descr: latest.sys_descr ?? (dev as any).sys_descr ?? null,
+              storage: latest.storage ?? (dev as any).storage ?? null,
+              disks: latest.disks ?? (dev as any).disks ?? null,
+              interfaces: latest.interfaces ?? (dev as any).interfaces ?? null,
+              metrics_available: latest.metrics_available ?? (dev as any).metrics_available ?? true,
+              recorded_at: latest.recorded_at ?? (dev as any).recorded_at ?? new Date().toISOString(),
+            }
+          : {}),
+      };
       return res.json({
         status: 'success',
-        device: {
-          ...dev,
-          ...(latest ? { interfaces: latest.interfaces ?? (dev as any).interfaces ?? null } : {}),
-        },
+        device: sanitizeDeviceRow(mergedDevice),
       });
     }
 
@@ -2011,6 +2094,15 @@ app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
     newRecord.optical_tx = pollResult.optical_tx ?? null;
     newRecord.optical_rx = pollResult.optical_rx ?? null;
     newRecord.uptime = pollResult.uptime;
+    (newRecord as any).storage = pollResult.storage ?? null;
+    (newRecord as any).fans = pollResult.fans ?? null;
+    (newRecord as any).power_supplies = pollResult.power_supplies ?? null;
+    (newRecord as any).device_model = pollResult.device_model ?? null;
+    (newRecord as any).device_serial = pollResult.device_serial ?? null;
+    (newRecord as any).software_id = pollResult.software_id ?? null;
+    (newRecord as any).sys_descr = pollResult.sys_descr ?? null;
+    (newRecord as any).sys_name = pollResult.sys_name ?? null;
+    (newRecord as any).interfaces = pollResult.interfaces ?? null;
 
     // Persist real telemetry in database if available
     try {
