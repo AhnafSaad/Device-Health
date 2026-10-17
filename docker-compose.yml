@@ -65,3 +65,8 @@ volumes:
 networks:
   healthstream-net:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.200.0.0/16
+        
