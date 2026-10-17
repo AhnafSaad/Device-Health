@@ -153,6 +153,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             )}
           </button>
         </form>
+
+        <div className="mt-4 p-3 rounded-xl bg-base-200/60 border border-base-content/5 text-center text-xs text-base-content/70">
+          Default credentials: <span className="font-mono font-semibold text-primary">admin</span> / <span className="font-mono font-semibold text-primary">adminpassword123</span>
+        </div>
       </div>
     </div>
   );
