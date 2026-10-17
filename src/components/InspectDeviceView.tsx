@@ -92,6 +92,48 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const deviceType = activeServer.deviceType || 'Server';
+  const isCiscoSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco');
+  const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch;
+
+  const rawOpticalSensors =
+    (activeServer as any).optical_sensors ??
+    (server as any).optical_sensors ??
+    (propServer as any).optical_sensors ??
+    (activeServer as any).opticalSensors ??
+    (server as any).opticalSensors ??
+    (propServer as any).opticalSensors;
+  const opticalSensors: Array<{ index: number | string; dbm: number }> = Array.isArray(rawOpticalSensors)
+    ? rawOpticalSensors
+    : typeof rawOpticalSensors === 'string'
+    ? (() => {
+        try {
+          const parsed = JSON.parse(rawOpticalSensors);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })()
+    : [];
+
+  const rawTempSensors =
+    (activeServer as any).temperature_sensors ??
+    (server as any).temperature_sensors ??
+    (propServer as any).temperature_sensors ??
+    (activeServer as any).temperatureSensors ??
+    (server as any).temperatureSensors ??
+    (propServer as any).temperatureSensors;
+  const temperatureSensors: Array<{ index: number | string; celsius: number }> = Array.isArray(rawTempSensors)
+    ? rawTempSensors
+    : typeof rawTempSensors === 'string'
+    ? (() => {
+        try {
+          const parsed = JSON.parse(rawTempSensors);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })()
+    : [];
 
   const pollingRef = useRef<boolean>(false);
   const activeServerRef = useRef<Server>(liveServer);
@@ -216,6 +258,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             softwareId: d.software_id !== undefined ? d.software_id : (d.softwareId !== undefined ? d.softwareId : (cur.softwareId ?? null)),
             sysDescr: d.sys_descr || cur.sysDescr,
             sysName: d.sys_name || cur.sysName,
+            ...((d.optical_sensors !== undefined || (cur as any).optical_sensors !== undefined)
+              ? { optical_sensors: d.optical_sensors !== undefined ? d.optical_sensors : (cur as any).optical_sensors }
+              : {}),
+            ...((d.temperature_sensors !== undefined || (cur as any).temperature_sensors !== undefined)
+              ? { temperature_sensors: d.temperature_sensors !== undefined ? d.temperature_sensors : (cur as any).temperature_sensors }
+              : {}),
           };
           setLiveServer(updated);
           onUpdateServerRef.current?.(updated);
@@ -677,7 +725,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-stretch">
           
           {/* Resource Utilization Card */}
-          <div className={`p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col ${deviceType === 'OLT' ? 'lg:col-span-2' : ''}`}>
+          <div className={`p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col ${skipStorageCard ? 'lg:col-span-2' : ''}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -926,7 +974,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </div>
               )}
 
-              {/* Switch: Optical Power (TX/RX in dBm) Card */}
+              {/* Switch: Optical Power (DOM/DDM) Card */}
               {deviceType === 'Switch' && (
                 <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 space-y-2.5">
                   <div className="flex justify-between items-center text-xs font-semibold">
@@ -934,33 +982,53 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       <Zap className="w-4 h-4 text-cyan-500" />
                       <span>Optical Power (DOM/DDM)</span>
                     </span>
-                    <span className="text-[11px] font-mono text-base-content/50">dBm</span>
+                    <span className="text-[11px] font-mono text-base-content/50">
+                      {opticalSensors.length > 0 ? `${opticalSensors.length} Readings` : 'dBm'}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5 pt-1">
-                    <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
-                      <div className="text-[10px] uppercase font-bold text-base-content/50">Optical TX Power</div>
-                      <div className="font-mono text-sm font-black text-base-content mt-0.5">
-                        {!isOnline || isMetricsUnavailable || server.opticalTx === null || server.opticalTx === undefined
-                          ? 'N/A'
-                          : `${server.opticalTx} dBm`}
+                  {opticalSensors.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
+                      {opticalSensors.map((s, idx) => (
+                        <div
+                          key={`${s.index}-${idx}`}
+                          className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between"
+                        >
+                          <span className="text-xs font-mono text-base-content/70">
+                            Sensor [{s.index}]:
+                          </span>
+                          <span className="font-mono text-sm font-bold text-base-content">
+                            {Number(s.dbm).toFixed(2)} dBm
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2.5 pt-1">
+                      <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
+                        <div className="text-[10px] uppercase font-bold text-base-content/50">Optical TX Power</div>
+                        <div className="font-mono text-sm font-black text-base-content mt-0.5">
+                          {!isOnline || isMetricsUnavailable || server.opticalTx === null || server.opticalTx === undefined
+                            ? 'N/A'
+                            : `${server.opticalTx} dBm`}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
+                        <div className="text-[10px] uppercase font-bold text-base-content/50">Optical RX Power</div>
+                        <div className="font-mono text-sm font-black text-base-content mt-0.5">
+                          {!isOnline || isMetricsUnavailable || server.opticalRx === null || server.opticalRx === undefined
+                            ? 'N/A'
+                            : `${server.opticalRx} dBm`}
+                        </div>
                       </div>
                     </div>
-                    <div className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10">
-                      <div className="text-[10px] uppercase font-bold text-base-content/50">Optical RX Power</div>
-                      <div className="font-mono text-sm font-black text-base-content mt-0.5">
-                        {!isOnline || isMetricsUnavailable || server.opticalRx === null || server.opticalRx === undefined
-                          ? 'N/A'
-                          : `${server.opticalRx} dBm`}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Storage & Memory (Server, Router, Switch — skipped for OLT) */}
-          {deviceType !== 'OLT' && (
+          {/* Storage & Memory (Server, Router, Switch — skipped for OLT and Cisco switches) */}
+          {!skipStorageCard && (
             <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
@@ -2113,18 +2181,52 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
 
             {/* Environmental Sensors (Power Supplies, Fans & Temperature) */}
             {(() => {
-              const fansList = Array.isArray(server.fans) ? server.fans : [];
+              const fansList: Array<{ name: string; status: string; rpm?: number | null; percent?: number | null; raw_value?: number | null }> = Array.isArray(server.fans)
+                ? server.fans
+                : typeof (server as any).fans === 'string'
+                ? (() => {
+                    try {
+                      const p = JSON.parse((server as any).fans);
+                      return Array.isArray(p) ? p : [];
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : [];
               const isOlt = (server.deviceType === 'OLT' || /olt|huawei|smartax|v-?sol|bd-?com/i.test(server.brand || ''));
               const isVsolOlt = server.deviceType === 'OLT' && (server.brand === 'V-SOL' || /^v-?sol$/i.test(server.brand || ''));
-              const rawPsus = Array.isArray(server.powerSupplies) ? server.powerSupplies : [];
-              const validPsus = (isOlt && rawPsus.length > 2)
-                ? rawPsus.slice(0, 2).map((p, idx) => ({ ...p, name: `PSU ${idx + 1}` }))
+              const rawPsus: Array<{ name: string; status: string; watts?: number | null; raw_value?: number | null }> = Array.isArray(server.powerSupplies)
+                ? server.powerSupplies
+                : typeof (server as any).powerSupplies === 'string'
+                ? (() => {
+                    try {
+                      const p = JSON.parse((server as any).powerSupplies);
+                      return Array.isArray(p) ? p : [];
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : typeof (server as any).power_supplies === 'string'
+                ? (() => {
+                    try {
+                      const p = JSON.parse((server as any).power_supplies);
+                      return Array.isArray(p) ? p : [];
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : Array.isArray((server as any).power_supplies)
+                ? (server as any).power_supplies
+                : [];
+              const validPsus: Array<{ name: string; status: string; watts?: number | null; raw_value?: number | null }> = (isOlt && rawPsus.length > 2)
+                ? rawPsus.slice(0, 2).map((p: { name: string; status: string; watts?: number | null; raw_value?: number | null }, idx: number) => ({ ...p, name: `PSU ${idx + 1}` }))
                 : rawPsus;
               const hasPsus = validPsus.length > 0;
               const hasFans = fansList.length > 0;
 
-              // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis):
-              if (!hasPsus && !hasFans && !isVsolOlt) {
+              // If neither modular PSUs nor Fans are reported (standard MikroTik or compact router chassis),
+              // and there are no multi-sensor temperature readings:
+              if (!hasPsus && !hasFans && !isVsolOlt && temperatureSensors.length === 0) {
                 return (
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl bg-base-200/40 border border-base-content/5">
                     <div className="flex items-center gap-3">
@@ -2291,27 +2393,61 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                         <Thermometer className="w-4 h-4 text-amber-500" />
                         <span>Temperature (°C)</span>
                       </span>
+                      {temperatureSensors.length > 0 && (
+                        <span className="text-[11px] font-mono text-base-content/50">
+                          {temperatureSensors.length} Sensors
+                        </span>
+                      )}
                     </div>
-                    <div className="my-1">
-                      <span
-                        className={`font-mono text-xl font-black ${
-                          !isOnline || server.temperature === null || server.temperature === undefined
-                            ? 'text-base-content/40'
-                            : server.temperature >= 85
-                            ? 'text-rose-500'
-                            : server.temperature >= 70
-                            ? 'text-amber-500'
-                            : 'text-emerald-500'
-                        }`}
-                      >
-                        {!isOnline || server.temperature === null || server.temperature === undefined
-                          ? 'N/A'
-                          : `${server.temperature} °C`}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-base-content/60 font-mono mt-1">
-                      Chassis Thermal Sensor
-                    </div>
+                    {temperatureSensors.length > 0 ? (
+                      <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70 max-h-48 overflow-y-auto">
+                        {temperatureSensors.map((ts, idx) => {
+                          const cVal = ts.celsius;
+                          const tColor =
+                            cVal >= 85
+                              ? 'text-rose-500'
+                              : cVal >= 70
+                              ? 'text-amber-500'
+                              : 'text-emerald-500';
+                          return (
+                            <div
+                              key={`${ts.index}-${idx}`}
+                              className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono"
+                            >
+                              <span className="font-semibold text-base-content whitespace-nowrap">
+                                Sensor [{ts.index}]
+                              </span>
+                              <span className={`font-mono font-bold ${tColor}`}>
+                                {Number(cVal).toFixed(2)} °C
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="my-1">
+                          <span
+                            className={`font-mono text-xl font-black ${
+                              !isOnline || server.temperature === null || server.temperature === undefined
+                                ? 'text-base-content/40'
+                                : server.temperature >= 85
+                                ? 'text-rose-500'
+                                : server.temperature >= 70
+                                ? 'text-amber-500'
+                                : 'text-emerald-500'
+                            }`}
+                          >
+                            {!isOnline || server.temperature === null || server.temperature === undefined
+                              ? 'N/A'
+                              : `${server.temperature} °C`}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-base-content/60 font-mono mt-1">
+                          Chassis Thermal Sensor
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               );
