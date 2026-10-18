@@ -92,8 +92,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const deviceType = activeServer.deviceType || 'Server';
-  const isCiscoDevice = String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco';
-  const isCiscoSwitch = deviceType === 'Switch' && isCiscoDevice;
+  const isCiscoSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco');
   const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch;
 
   const rawOpticalSensors =
@@ -995,22 +994,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between"
                         >
                           <span className="text-xs font-mono text-base-content/70">
-                            Sensor {s.index}:
+                            Sensor [{s.index}]:
                           </span>
                           <span className="font-mono text-sm font-bold text-base-content">
                             {Number(s.dbm).toFixed(2)} dBm
                           </span>
                         </div>
                       ))}
-                    </div>
-                  ) : isCiscoDevice ? (
-                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10 text-xs font-mono text-base-content/60 flex items-center justify-between">
-                      <span>Optical Sensors (DOM/DDM)</span>
-                      <span className="text-base-content/50">
-                        {server.opticalRx !== null && server.opticalRx !== undefined
-                          ? `${server.opticalRx} dBm`
-                          : 'Optical telemetry standby'}
-                      </span>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -2268,7 +2258,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                             : 'text-emerald-500'
                         }`}>
                           {!isOnline || server.temperature === null || server.temperature === undefined
-                            ? isCiscoDevice ? 'Standby' : 'N/A'
+                            ? 'N/A'
                             : `${server.temperature} °C`}
                         </div>
                       </div>
@@ -2311,7 +2301,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                             <div key={`${displayLabel}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="font-semibold text-base-content whitespace-nowrap">{displayLabel}</span>
-                                {typeof psu.watts === 'number' && Number.isFinite(psu.watts) && (
+                                {typeof psu.watts === 'number' && Number.isFinite(psu.watts) && psu.watts > 0 && psu.watts <= 2000 && (
                                   <span className="text-[11px] text-base-content/50 font-normal whitespace-nowrap">
                                     {psu.watts} W
                                   </span>
@@ -2412,7 +2402,15 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     {temperatureSensors.length > 0 ? (
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70 max-h-48 overflow-y-auto">
                         {temperatureSensors.map((ts, idx) => {
-                          const cVal = ts.celsius;
+                          const rawC = ts.celsius;
+                          const cVal =
+                            typeof rawC === 'number' && Number.isFinite(rawC)
+                              ? Math.abs(rawC) >= 10000
+                                ? rawC / 1000
+                                : Math.abs(rawC) > 150
+                                ? rawC / 10
+                                : rawC
+                              : 0;
                           const tColor =
                             cVal >= 85
                               ? 'text-rose-500'
@@ -2425,7 +2423,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                               className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono"
                             >
                               <span className="font-semibold text-base-content whitespace-nowrap">
-                                Sensor {ts.index}:
+                                Sensor [{ts.index}]
                               </span>
                               <span className={`font-mono font-bold ${tColor}`}>
                                 {Number(cVal).toFixed(2)} °C
@@ -2437,24 +2435,37 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     ) : (
                       <>
                         <div className="my-1">
-                          <span
-                            className={`font-mono text-xl font-black ${
-                              !isOnline || server.temperature === null || server.temperature === undefined
-                                ? 'text-base-content/40'
-                                : server.temperature >= 85
-                                ? 'text-rose-500'
-                                : server.temperature >= 70
-                                ? 'text-amber-500'
-                                : 'text-emerald-500'
-                            }`}
-                          >
-                            {!isOnline || server.temperature === null || server.temperature === undefined
-                              ? isCiscoDevice ? 'Standby' : 'N/A'
-                              : `${server.temperature} °C`}
-                          </span>
+                          {(() => {
+                            const rawT = server.temperature;
+                            const normT =
+                              typeof rawT === 'number' && Number.isFinite(rawT)
+                                ? Math.abs(rawT) >= 10000
+                                  ? rawT / 1000
+                                  : Math.abs(rawT) > 150
+                                  ? rawT / 10
+                                  : rawT
+                                : null;
+                            return (
+                              <span
+                                className={`font-mono text-xl font-black ${
+                                  !isOnline || normT === null
+                                    ? 'text-base-content/40'
+                                    : normT >= 85
+                                    ? 'text-rose-500'
+                                    : normT >= 70
+                                    ? 'text-amber-500'
+                                    : 'text-emerald-500'
+                                }`}
+                              >
+                                {!isOnline || normT === null
+                                  ? 'N/A'
+                                  : `${Number(normT).toFixed(1)} °C`}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="text-[11px] text-base-content/60 font-mono mt-1">
-                          {isCiscoDevice ? 'Chassis Sensor Telemetry' : 'Chassis Thermal Sensor'}
+                          Chassis Thermal Sensor
                         </div>
                       </>
                     )}

@@ -10,7 +10,7 @@ import { DatacenterModal } from './components/DatacenterModal';
 import { DatacenterPageView } from './components/DatacenterPageView';
 import { EditDeviceModal } from './components/EditDeviceModal';
 import { DeleteDeviceModal } from './components/DeleteDeviceModal';
-import { InspectDeviceView } from './components/InspectDeviceView';
+import { DeviceRenderer } from './components/devices/DeviceRenderer';
 import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { ThresholdsView } from './components/ThresholdsView';
@@ -926,12 +926,13 @@ export default function App() {
         
         {currentView === 'inspect' ? (
           currentInspectServer ? (
-            <InspectDeviceView
+            <DeviceRenderer
               server={currentInspectServer}
               onBack={() => router.push('/')}
               onEditServer={handleOpenEditModal}
               onDeleteServer={handleOpenDeleteModal}
               onRebootServer={handleRebootServer}
+              onUpdateServer={handleDeviceUpdated}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-8">
