@@ -92,7 +92,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const deviceType = activeServer.deviceType || 'Server';
-  const isCiscoSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco');
+  const isCiscoDevice = String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco';
+  const isCiscoSwitch = deviceType === 'Switch' && isCiscoDevice;
   const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch;
 
   const rawOpticalSensors =
@@ -994,13 +995,22 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                           className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between"
                         >
                           <span className="text-xs font-mono text-base-content/70">
-                            Sensor [{s.index}]:
+                            Sensor {s.index}:
                           </span>
                           <span className="font-mono text-sm font-bold text-base-content">
                             {Number(s.dbm).toFixed(2)} dBm
                           </span>
                         </div>
                       ))}
+                    </div>
+                  ) : isCiscoDevice ? (
+                    <div className="p-3 rounded-lg bg-base-100/70 border border-base-content/10 text-xs font-mono text-base-content/60 flex items-center justify-between">
+                      <span>Optical Sensors (DOM/DDM)</span>
+                      <span className="text-base-content/50">
+                        {server.opticalRx !== null && server.opticalRx !== undefined
+                          ? `${server.opticalRx} dBm`
+                          : 'Optical telemetry standby'}
+                      </span>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -2258,7 +2268,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                             : 'text-emerald-500'
                         }`}>
                           {!isOnline || server.temperature === null || server.temperature === undefined
-                            ? 'N/A'
+                            ? isCiscoDevice ? 'Standby' : 'N/A'
                             : `${server.temperature} °C`}
                         </div>
                       </div>
@@ -2415,7 +2425,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                               className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono"
                             >
                               <span className="font-semibold text-base-content whitespace-nowrap">
-                                Sensor [{ts.index}]
+                                Sensor {ts.index}:
                               </span>
                               <span className={`font-mono font-bold ${tColor}`}>
                                 {Number(cVal).toFixed(2)} °C
@@ -2439,12 +2449,12 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                             }`}
                           >
                             {!isOnline || server.temperature === null || server.temperature === undefined
-                              ? 'N/A'
+                              ? isCiscoDevice ? 'Standby' : 'N/A'
                               : `${server.temperature} °C`}
                           </span>
                         </div>
                         <div className="text-[11px] text-base-content/60 font-mono mt-1">
-                          Chassis Thermal Sensor
+                          {isCiscoDevice ? 'Chassis Sensor Telemetry' : 'Chassis Thermal Sensor'}
                         </div>
                       </>
                     )}

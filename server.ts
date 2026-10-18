@@ -1278,6 +1278,12 @@ export function sanitizeDeviceRow(r: any) {
   if (typeof r.ram_ecc_controllers === 'string') {
     try { r.ram_ecc_controllers = JSON.parse(r.ram_ecc_controllers); } catch {}
   }
+  if (typeof r.optical_sensors === 'string') {
+    try { r.optical_sensors = JSON.parse(r.optical_sensors); } catch {}
+  }
+  if (typeof r.temperature_sensors === 'string') {
+    try { r.temperature_sensors = JSON.parse(r.temperature_sensors); } catch {}
+  }
 
   // Ensure real hardware serial is never confused with hostname, sys_name, IP, or network role suffixes
   if (r.device_serial && typeof r.device_serial === 'string') {
@@ -1743,8 +1749,9 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
                   software_id, sys_descr, storage, disks, interfaces,
                   ram_ecc_corrected, ram_ecc_uncorrected, ram_ecc_controllers,
                   disk_percentage_used, disk_power_on_hours, disk_lifetime_bytes_read, disk_lifetime_bytes_written, disk_estimated_eol_days,
+                  optical_sensors, temperature_sensors,
                   recorded_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW());`,
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, NOW());`,
                 [
                   devRow.ip_address,
                   freshTel.cpu_usage,
@@ -1789,6 +1796,8 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
                   freshTel.disk_lifetime_bytes_read ?? null,
                   freshTel.disk_lifetime_bytes_written ?? null,
                   freshTel.disk_estimated_eol_days ?? null,
+                  freshTel.optical_sensors ? JSON.stringify(freshTel.optical_sensors) : null,
+                  freshTel.temperature_sensors ? JSON.stringify(freshTel.temperature_sensors) : null,
                 ]
               );
             }
@@ -1867,7 +1876,9 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         COALESCE(t.ram_ecc_uncorrected, hw.ram_ecc_uncorrected) AS ram_ecc_uncorrected,
         COALESCE(t.ram_ecc_controllers, hw.ram_ecc_controllers) AS ram_ecc_controllers,
         COALESCE(t.disks, hw.disks) AS disks,
-        COALESCE(t.interfaces, hw.interfaces) AS interfaces
+        COALESCE(t.interfaces, hw.interfaces) AS interfaces,
+        COALESCE(t.optical_sensors, hw.optical_sensors) AS optical_sensors,
+        COALESCE(t.temperature_sensors, hw.temperature_sensors) AS temperature_sensors
       FROM servers_info s
       LEFT JOIN datacenters d ON s.datacenter_id = d.id
       LEFT JOIN telemetry_data t ON s.ip_address = t.ip_address
@@ -1875,6 +1886,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
         SELECT 
           h.temperature, h.sys_name, h.power_supplies, h.fans, h.device_model,
           h.device_serial, h.software_id, h.sys_descr, h.storage, h.disks, h.interfaces,
+          h.optical_sensors, h.temperature_sensors,
           h.ram_ecc_controllers, h.ram_ecc_corrected, h.ram_ecc_uncorrected
         FROM telemetry_data h
         WHERE h.ip_address = s.ip_address AND (h.fans IS NOT NULL OR h.device_model IS NOT NULL OR h.ram_ecc_controllers IS NOT NULL)
@@ -1929,6 +1941,8 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
               storage: latest.storage ?? (dev as any).storage ?? null,
               disks: latest.disks ?? (dev as any).disks ?? null,
               interfaces: latest.interfaces ?? (dev as any).interfaces ?? null,
+              optical_sensors: latest.optical_sensors ?? (dev as any).optical_sensors ?? null,
+              temperature_sensors: latest.temperature_sensors ?? (dev as any).temperature_sensors ?? null,
               metrics_available: latest.metrics_available ?? (dev as any).metrics_available ?? true,
               recorded_at: latest.recorded_at ?? (dev as any).recorded_at ?? new Date().toISOString(),
             }

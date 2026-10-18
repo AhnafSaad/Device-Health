@@ -113,6 +113,10 @@ export interface Server {
     write_bytes_per_sec: number | null;
   }[] | null;
   interfaces?: NetworkInterface[] | null;
+  optical_sensors?: { index: number | string; dbm: number }[] | null;
+  temperature_sensors?: { index: number | string; celsius: number }[] | null;
+  opticalSensors?: { index: number | string; dbm: number }[] | null;
+  temperatureSensors?: { index: number | string; celsius: number }[] | null;
 }
 
 export interface NetworkInterface {
