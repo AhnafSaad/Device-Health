@@ -269,6 +269,8 @@ export interface NormalizedTelemetry {
   software_id?: string | null;
   storage?: any;
   disks?: any;
+  optical_sensors?: any;
+  temperature_sensors?: any;
 }
 
 const memoryDevices: DeviceRecord[] = [];
@@ -1432,6 +1434,8 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
         t.ram_ecc_controllers,
         t.disks,
         t.interfaces,
+        t.optical_sensors,
+        t.temperature_sensors,
         COALESCE(t.uptime, '0d 0h (Offline)') AS uptime,
         COALESCE(t.status, 'offline') AS status,
         COALESCE(t.health, 'Critical') AS health,
@@ -1506,6 +1510,8 @@ app.get('/api/telemetry', async (req: Request, res: Response) => {
           storage: latest.storage ?? (d as any).storage ?? null,
           disks: latest.disks ?? (d as any).disks ?? null,
           interfaces: latest.interfaces ?? null,
+          optical_sensors: latest.optical_sensors ?? (d as any).optical_sensors ?? null,
+          temperature_sensors: latest.temperature_sensors ?? (d as any).temperature_sensors ?? null,
           metrics_available: latest.metrics_available ?? (d as any).metrics_available ?? true,
           uptime: latest.uptime,
           status: latest.status,

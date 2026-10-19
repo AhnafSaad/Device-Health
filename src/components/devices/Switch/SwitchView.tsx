@@ -505,15 +505,14 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                 {opticalSensors.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
                     {opticalSensors.map((s, idx) => {
-                      const sensor = s as any;
-                      const hasPortAndLabel = Boolean(sensor.port && sensor.label);
+                      const hasPortAndLabel = Boolean(s.port && s.label);
                       return (
                         <div
                           key={`${s.index}-${idx}`}
                           className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between"
                         >
                           <span className="text-xs font-mono text-base-content/70">
-                            {hasPortAndLabel ? `${sensor.port} ${sensor.label}` : `Sensor [${s.index}]:`}
+                            {hasPortAndLabel ? `${s.port} ${s.label}` : `Sensor [${s.index}]:`}
                           </span>
                           <span className="font-mono text-sm font-bold text-base-content">
                             {Number(s.dbm).toFixed(2)} dBm

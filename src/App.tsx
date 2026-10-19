@@ -348,6 +348,30 @@ export default function App() {
                     }
                   })()
                 : (d.interfaces ?? null),
+              optical_sensors: Array.isArray(d.optical_sensors)
+                ? d.optical_sensors
+                : typeof d.optical_sensors === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.optical_sensors);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.optical_sensors ?? null),
+              temperature_sensors: Array.isArray(d.temperature_sensors)
+                ? d.temperature_sensors
+                : typeof d.temperature_sensors === 'string'
+                ? (() => {
+                    try {
+                      const parsed = JSON.parse(d.temperature_sensors);
+                      return Array.isArray(parsed) ? parsed : null;
+                    } catch {
+                      return null;
+                    }
+                  })()
+                : (d.temperature_sensors ?? null),
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
               lastPolledAt: d.recorded_at ?? d.lastPolledAt,
               status: (d.status as any) || 'offline',
@@ -762,6 +786,30 @@ export default function App() {
                       }
                     })()
                   : (live.interfaces !== undefined ? live.interfaces : (existing?.interfaces ?? null)),
+                optical_sensors: Array.isArray(live.optical_sensors)
+                  ? live.optical_sensors
+                  : typeof live.optical_sensors === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.optical_sensors);
+                        return Array.isArray(parsed) ? parsed : ((existing as any)?.optical_sensors ?? null);
+                      } catch {
+                        return (existing as any)?.optical_sensors ?? null;
+                      }
+                    })()
+                  : (live.optical_sensors !== undefined ? live.optical_sensors : ((existing as any)?.optical_sensors ?? null)),
+                temperature_sensors: Array.isArray(live.temperature_sensors)
+                  ? live.temperature_sensors
+                  : typeof live.temperature_sensors === 'string'
+                  ? (() => {
+                      try {
+                        const parsed = JSON.parse(live.temperature_sensors);
+                        return Array.isArray(parsed) ? parsed : ((existing as any)?.temperature_sensors ?? null);
+                      } catch {
+                        return (existing as any)?.temperature_sensors ?? null;
+                      }
+                    })()
+                  : (live.temperature_sensors !== undefined ? live.temperature_sensors : ((existing as any)?.temperature_sensors ?? null)),
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
                 lastPolledAt: live.recorded_at ?? live.lastPolledAt ?? existing?.lastPolledAt,
                 status: (live.status as any) || existing?.status || 'offline',

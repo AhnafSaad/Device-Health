@@ -30,7 +30,7 @@ export const skipStorageForSwitch = (brand?: string): boolean => {
   return isCiscoSwitch(brand);
 };
 
-export const parseOpticalSensors = (raw: any): Array<{ index: number | string; dbm: number }> => {
+export const parseOpticalSensors = (raw: any): Array<{ index: number | string; dbm: number; port?: string | null; label?: string | null }> => {
   if (Array.isArray(raw)) return raw;
   if (typeof raw === 'string') {
     try {
