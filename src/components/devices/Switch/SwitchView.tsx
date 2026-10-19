@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Server, NetworkInterface } from '../../../types';
 import { DeviceHeader } from '../shared/DeviceHeader';
 import { isCiscoSwitch, parseOpticalSensors, parseTemperatureSensors } from './SwitchBrands';
@@ -90,6 +90,115 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
     (server as any).opticalSensors ??
     (propServer as any).opticalSensors;
   const opticalSensors = parseOpticalSensors(rawOptical);
+
+  const groupedOptical = useMemo(() => {
+    if (!opticalSensors || opticalSensors.length === 0) {
+      return { ports: [], fallbacks: [], totalCount: 0 };
+    }
+
+    const groupMap = new Map<
+      string,
+      {
+        baseKey: string;
+        displayPort: string;
+        sensors: Array<{
+          index: number | string;
+          dbm: number;
+          port?: string | null;
+          label?: string | null;
+          lane?: string | null;
+        }>;
+      }
+    >();
+
+    const fallbacks: Array<{
+      index: number | string;
+      dbm: number;
+      port?: string | null;
+      label?: string | null;
+    }> = [];
+
+    for (const s of opticalSensors) {
+      const rawPort = s.port;
+      const rawLabel = s.label;
+
+      if (!rawPort || !rawLabel) {
+        fallbacks.push(s);
+        continue;
+      }
+
+      const trimmed = String(rawPort).trim();
+
+      // Extract base port (without Lane) and optional Lane
+      const m = trimmed.match(/^(?:Eth|Ethernet)\s*(\d+(?:\/\d+)+)(?:\s+(?:L|Lane)\s*(\d+))?$/i);
+      let baseKey = '';
+      let displayPort = '';
+      let lane: string | null = null;
+
+      if (m) {
+        const portNum = m[1];
+        lane = m[2] || null;
+        baseKey = `Eth${portNum}`;
+        displayPort = `Ethernet ${portNum}`;
+      } else {
+        const laneMatch = trimmed.match(/\s+(?:L|Lane)\s*(\d+)$/i);
+        lane = laneMatch ? laneMatch[1] : null;
+        const stripped = laneMatch ? trimmed.replace(/\s+(?:L|Lane)\s*\d+$/i, '').trim() : trimmed;
+        baseKey = stripped;
+        displayPort = stripped.replace(/^(?:Eth|Ethernet)\s*(\d+(?:\/\d+)+|\d+)/i, 'Ethernet $1');
+      }
+
+      if (!groupMap.has(baseKey)) {
+        groupMap.set(baseKey, {
+          baseKey,
+          displayPort,
+          sensors: [],
+        });
+      }
+      groupMap.get(baseKey)!.sensors.push({ ...s, lane });
+    }
+
+    const ports = Array.from(groupMap.values()).map((g) => {
+      const tx = g.sensors.find((s) => String(s.label).trim().toLowerCase() === 'tx');
+      const rx = g.sensors.find((s) => String(s.label).trim().toLowerCase() === 'rx');
+
+      const lanes = Array.from(new Set(g.sensors.map((s) => s.lane).filter(Boolean)));
+      let displayName = g.displayPort;
+      if (lanes.length > 1) {
+        displayName += ` (Lanes ${lanes.join(', ')})`;
+      } else if (lanes.length === 1 && lanes[0] !== '1') {
+        displayName += ` Lane ${lanes[0]}`;
+      }
+
+      const formatDbm = (val: number | null | undefined): string => {
+        if (typeof val !== 'number' || !Number.isFinite(val)) return '—';
+        const formatted = Number.isInteger(val) ? String(val) : String(Number(val.toFixed(2)));
+        return `${formatted} dBm`;
+      };
+
+      const txStr = tx && typeof tx.dbm === 'number' && Number.isFinite(tx.dbm) ? formatDbm(tx.dbm) : '—';
+      const rxStr = rx && typeof rx.dbm === 'number' && Number.isFinite(rx.dbm) ? formatDbm(rx.dbm) : '—';
+      const valueText = `${txStr}/${rxStr}`;
+
+      return {
+        key: g.baseKey,
+        displayName,
+        valueText,
+        tx,
+        rx,
+      };
+    });
+
+    ports.sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    return {
+      ports,
+      fallbacks,
+      totalCount: ports.length + fallbacks.length,
+    };
+  }, [opticalSensors]);
 
   const rawTemp =
     (activeServer as any).temperature_sensors ??
@@ -499,22 +608,37 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                     <span>Optical Power (DOM/DDM)</span>
                   </span>
                   <span className="text-[11px] font-mono text-base-content/50">
-                    {opticalSensors.length > 0 ? `${opticalSensors.length} Readings` : 'dBm'}
+                    {groupedOptical.totalCount > 0
+                      ? `${groupedOptical.totalCount} ${groupedOptical.ports.length > 0 ? (groupedOptical.totalCount === 1 ? 'Port' : 'Ports') : 'Readings'}`
+                      : 'dBm'}
                   </span>
                 </div>
-                {opticalSensors.length > 0 ? (
+                {groupedOptical.totalCount > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
-                    {opticalSensors.map((s, idx) => {
+                    {groupedOptical.ports.map((p) => (
+                      <div
+                        key={p.key}
+                        className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between gap-3"
+                      >
+                        <span className="text-xs font-mono font-medium text-base-content/80 whitespace-nowrap">
+                          {p.displayName}
+                        </span>
+                        <span className="font-mono text-sm font-bold text-base-content whitespace-nowrap">
+                          {p.valueText}
+                        </span>
+                      </div>
+                    ))}
+                    {groupedOptical.fallbacks.map((s, idx) => {
                       const hasPortAndLabel = Boolean(s.port && s.label);
                       return (
                         <div
-                          key={`${s.index}-${idx}`}
-                          className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between"
+                          key={`fallback-${s.index}-${idx}`}
+                          className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between gap-3"
                         >
-                          <span className="text-xs font-mono text-base-content/70">
+                          <span className="text-xs font-mono text-base-content/70 whitespace-nowrap">
                             {hasPortAndLabel ? `${s.port} ${s.label}` : `Sensor [${s.index}]:`}
                           </span>
-                          <span className="font-mono text-sm font-bold text-base-content">
+                          <span className="font-mono text-sm font-bold text-base-content whitespace-nowrap">
                             {Number(s.dbm).toFixed(2)} dBm
                           </span>
                         </div>
