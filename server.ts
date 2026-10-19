@@ -621,6 +621,8 @@ const VALID_THRESHOLD_METRICS = new Set([
   'connected_users',
   'ram_ecc_corrected',
   'ram_ecc_uncorrected',
+  'optical_tx',
+  'optical_rx',
 ]);
 const VALID_THRESHOLD_DEVICE_TYPES = new Set(['All', 'Server', 'Router', 'Switch', 'OLT']);
 
@@ -709,7 +711,7 @@ const upsertThresholdsHandler = async (req: Request, res: Response) => {
       if (!VALID_THRESHOLD_METRICS.has(metric)) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users, ram_ecc_corrected, ram_ecc_uncorrected.`,
+          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users, ram_ecc_corrected, ram_ecc_uncorrected, optical_tx, optical_rx.`,
         });
       }
 
@@ -720,14 +722,27 @@ const upsertThresholdsHandler = async (req: Request, res: Response) => {
         });
       }
 
-      if (Number.isNaN(warn) || Number.isNaN(crit) || warn < 0 || crit < 0) {
+      const isOptical = metric === 'optical_tx' || metric === 'optical_rx';
+
+      if (Number.isNaN(warn) || Number.isNaN(crit) || (!isOptical && (warn < 0 || crit < 0))) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: `warning_value and critical_value for "${metric}" (${deviceType}) must be non-negative numbers.`,
+          message: isOptical
+            ? `warning_value and critical_value for "${metric}" (${deviceType}) must be valid numbers.`
+            : `warning_value and critical_value for "${metric}" (${deviceType}) must be non-negative numbers.`,
         });
       }
 
-      if (metric === 'ram_ecc_uncorrected') {
+      if (isOptical) {
+        // In optical power, more negative / lower is worse.
+        // Therefore, warning_value must be greater than critical_value (e.g. -8 dBm > -12 dBm)
+        if (warn <= crit) {
+          return res.status(400).json({
+            error: 'Bad Request',
+            message: `warning_value (${warn}) must be greater than critical_value (${crit}) (less negative) for "${metric}" (${deviceType}).`,
+          });
+        }
+      } else if (metric === 'ram_ecc_uncorrected') {
         if (warn > crit) {
           return res.status(400).json({
             error: 'Bad Request',
@@ -923,6 +938,8 @@ app.post('/api/thresholds/reset', requireAdmin, async (_req: Request, res: Respo
            ('ram', 'All', 80, 90, true),
            ('disk', 'All', 70, 85, true),
            ('temperature', 'All', 60, 75, true),
+           ('optical_tx', 'All', -8, -12, true),
+           ('optical_rx', 'All', -8, -20, true),
            ('ram_ecc_corrected', 'All', 10, 50, true),
            ('ram_ecc_uncorrected', 'All', 1, 1, true)
          ON CONFLICT (metric, device_type) DO NOTHING;`

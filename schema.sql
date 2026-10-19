@@ -140,7 +140,7 @@ ON CONFLICT (key) DO NOTHING;
 -- 9. Create alert_thresholds table for configurable alert thresholds
 CREATE TABLE IF NOT EXISTS alert_thresholds (
   id SERIAL PRIMARY KEY,
-  metric VARCHAR(32) NOT NULL,        -- 'cpu' | 'ram' | 'disk' | 'temperature' | 'connected_users'
+  metric VARCHAR(32) NOT NULL,        -- 'cpu' | 'ram' | 'disk' | 'temperature' | 'connected_users' | 'optical_tx' | 'optical_rx'
   device_type VARCHAR(32) NOT NULL DEFAULT 'All',  -- 'All' | 'Server' | 'Router' | 'Switch' | 'OLT'
   warning_value NUMERIC NOT NULL,
   critical_value NUMERIC NOT NULL,
@@ -154,6 +154,8 @@ VALUES
   ('ram', 'All', 80, 90, true),
   ('disk', 'All', 70, 85, true),
   ('temperature', 'All', 60, 75, true),
+  ('optical_tx', 'All', -8, -12, true),
+  ('optical_rx', 'All', -8, -20, true),
   ('ram_ecc_corrected', 'All', 10, 50, true),
   ('ram_ecc_uncorrected', 'All', 1, 1, true)
 ON CONFLICT (metric, device_type) DO NOTHING;

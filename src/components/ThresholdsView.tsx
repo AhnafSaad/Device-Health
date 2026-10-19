@@ -16,6 +16,7 @@ import {
   Plus,
   ChevronDown,
   MemoryStick,
+  Radio,
   X as CloseIcon,
 } from 'lucide-react';
 import { PollingSettingsSection } from './PollingSettingsSection';
@@ -28,7 +29,9 @@ export type ThresholdMetric =
   | 'temperature'
   | 'connected_users'
   | 'ram_ecc_corrected'
-  | 'ram_ecc_uncorrected';
+  | 'ram_ecc_uncorrected'
+  | 'optical_tx'
+  | 'optical_rx';
 export type ThresholdDeviceType = 'All' | 'Server' | 'Router' | 'Switch' | 'OLT';
 
 const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
@@ -39,6 +42,8 @@ const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
   'connected_users',
   'ram_ecc_corrected',
   'ram_ecc_uncorrected',
+  'optical_tx',
+  'optical_rx',
 ];
 
 export interface ThresholdRow {
@@ -132,7 +137,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingMetric, setSavingMetric] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [openDropdownMetric, setOpenDropdownMetric] = useState<ThresholdMetric | 'ecc' | null>(null);
+  const [openDropdownMetric, setOpenDropdownMetric] = useState<ThresholdMetric | 'ecc' | 'optical' | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const dropdownContainerRef = useRef<HTMLDivElement | null>(null);
@@ -225,6 +230,28 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
       });
     }
 
+    // Ensure optical_tx and optical_rx have 'All' rows
+    if (!normalized.some((r) => r.metric === 'optical_tx' && r.device_type === 'All')) {
+      normalized.push({
+        id: undefined,
+        metric: 'optical_tx',
+        device_type: 'All',
+        warning_value: -8,
+        critical_value: -12,
+        enabled: true,
+      });
+    }
+    if (!normalized.some((r) => r.metric === 'optical_rx' && r.device_type === 'All')) {
+      normalized.push({
+        id: undefined,
+        metric: 'optical_rx',
+        device_type: 'All',
+        warning_value: -8,
+        critical_value: -20,
+        enabled: true,
+      });
+    }
+
     return normalized;
   }, []);
 
@@ -268,7 +295,14 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
     )
       ? 1
       : 0;
-    return regularCount + eccCustomized;
+    const opticalCustomized = rows.some(
+      (r) =>
+        (r.metric === 'optical_tx' || r.metric === 'optical_rx') &&
+        r.device_type !== 'All'
+    )
+      ? 1
+      : 0;
+    return regularCount + eccCustomized + opticalCustomized;
   }, [rows]);
 
   const updateRowField = (
@@ -366,10 +400,15 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
     ) {
       return 'Warning and Critical values must be valid numbers.';
     }
-    if (Number(row.warning_value) < 0 || Number(row.critical_value) < 0) {
+    const isOptical = row.metric === 'optical_tx' || row.metric === 'optical_rx';
+    if (!isOptical && (Number(row.warning_value) < 0 || Number(row.critical_value) < 0)) {
       return 'Threshold values cannot be negative.';
     }
-    if (row.metric === 'ram_ecc_uncorrected') {
+    if (isOptical) {
+      if (Number(row.warning_value) <= Number(row.critical_value)) {
+        return 'Warning value must be greater than Critical value (less negative) for optical power.';
+      }
+    } else if (row.metric === 'ram_ecc_uncorrected') {
       if (Number(row.warning_value) > Number(row.critical_value)) {
         return 'Warning value cannot be greater than Critical value.';
       }
@@ -540,6 +579,178 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
       setToast({
         type: 'success',
         message: `Removed ${deviceType} override for ECC Memory Errors.`,
+      });
+    } catch (err: any) {
+      setToast({
+        type: 'error',
+        message: err?.message || 'Failed to remove override.',
+      });
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
+  const handleSaveOpticalCard = async () => {
+    const opticalRows = rows.filter(
+      (r) => r.metric === 'optical_tx' || r.metric === 'optical_rx'
+    );
+    const invalidRow = opticalRows.find((r) => getRowValidationError(r) !== null);
+    if (invalidRow) {
+      setToast({
+        type: 'error',
+        message: getRowValidationError(invalidRow) || 'Please fix validation errors before saving.',
+      });
+      return;
+    }
+
+    setSavingMetric('optical');
+    try {
+      const payload = opticalRows.map((r) => ({
+        metric: r.metric,
+        device_type: r.device_type,
+        warning_value: Number(r.warning_value),
+        critical_value: Number(r.critical_value),
+        enabled: Boolean(r.enabled),
+      }));
+
+      const res = await fetchWithAuth('/api/thresholds', {
+        method: 'PUT',
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      if (res.status === 401) {
+        if (onUnauthorized) onUnauthorized();
+        setToast({ type: 'error', message: 'Admin authentication required.' });
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to save Optical Power thresholds.');
+      }
+
+      const savedList = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.thresholds)
+        ? data.thresholds
+        : null;
+
+      if (savedList) {
+        const normalizedServer = normalizeLoadedRows(savedList);
+        setRows((prev) => {
+          const nonOpticalRows = prev.filter(
+            (r) => r.metric !== 'optical_tx' && r.metric !== 'optical_rx'
+          );
+          const updatedOpticalRows = normalizedServer.filter(
+            (r) => r.metric === 'optical_tx' || r.metric === 'optical_rx'
+          );
+          return [...nonOpticalRows, ...updatedOpticalRows];
+        });
+      }
+
+      setToast({
+        type: 'success',
+        message: 'Optical Power thresholds saved successfully.',
+      });
+    } catch (err: any) {
+      setToast({
+        type: 'error',
+        message: err?.message || 'Failed to save Optical Power thresholds.',
+      });
+    } finally {
+      setSavingMetric(null);
+    }
+  };
+
+  const handleAddOpticalOverride = (deviceType: ThresholdDeviceType) => {
+    if (!deviceType || deviceType === 'All') return;
+    setRows((prev) => {
+      const next = [...prev];
+      const hasTx = next.some((r) => r.metric === 'optical_tx' && r.device_type === deviceType);
+      const hasRx = next.some((r) => r.metric === 'optical_rx' && r.device_type === deviceType);
+      const allTx = next.find((r) => r.metric === 'optical_tx' && r.device_type === 'All');
+      const allRx = next.find((r) => r.metric === 'optical_rx' && r.device_type === 'All');
+
+      if (!hasTx) {
+        next.push({
+          id: undefined,
+          metric: 'optical_tx',
+          device_type: deviceType,
+          warning_value: allTx ? allTx.warning_value : -8,
+          critical_value: allTx ? allTx.critical_value : -12,
+          enabled: allTx ? allTx.enabled : true,
+        });
+      }
+      if (!hasRx) {
+        next.push({
+          id: undefined,
+          metric: 'optical_rx',
+          device_type: deviceType,
+          warning_value: allRx ? allRx.warning_value : -8,
+          critical_value: allRx ? allRx.critical_value : -20,
+          enabled: allRx ? allRx.enabled : true,
+        });
+      }
+      return next;
+    });
+    setOpenDropdownMetric(null);
+  };
+
+  const handleRemoveOpticalOverride = async (deviceType: ThresholdDeviceType) => {
+    if (deviceType === 'All') return;
+    const key = `optical:${deviceType}`;
+    const targetRows = rows.filter(
+      (r) =>
+        (r.metric === 'optical_tx' || r.metric === 'optical_rx') &&
+        r.device_type === deviceType
+    );
+
+    const unsavedOnly = targetRows.every((r) => r.id === undefined || r.id === null);
+    if (unsavedOnly) {
+      setRows((prev) =>
+        prev.filter(
+          (r) =>
+            !(
+              (r.metric === 'optical_tx' || r.metric === 'optical_rx') &&
+              r.device_type === deviceType
+            )
+        )
+      );
+      setToast({
+        type: 'success',
+        message: `Removed unsaved ${deviceType} override for Optical Power.`,
+      });
+      return;
+    }
+
+    setDeletingKey(key);
+    try {
+      for (const row of targetRows) {
+        if (row.id !== undefined && row.id !== null) {
+          const res = await fetchWithAuth(`/api/thresholds/${row.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || `Failed to delete ${row.metric} override.`);
+          }
+        }
+      }
+
+      setRows((prev) =>
+        prev.filter(
+          (r) =>
+            !(
+              (r.metric === 'optical_tx' || r.metric === 'optical_rx') &&
+              r.device_type === deviceType
+            )
+        )
+      );
+      setToast({
+        type: 'success',
+        message: `Removed ${deviceType} override for Optical Power.`,
       });
     } catch (err: any) {
       setToast({
@@ -1499,6 +1710,425 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
                       <>
                         <span className="loading loading-spinner loading-xs" />
                         <span>Saving ECC Memory Errors...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Combined Optical Power (DOM/DDM) Card */}
+          {(() => {
+            const opticalTxRows = rows.filter((r) => r.metric === 'optical_tx');
+            const opticalRxRows = rows.filter((r) => r.metric === 'optical_rx');
+            const allTxRow = opticalTxRows.find((r) => r.device_type === 'All') || {
+              metric: 'optical_tx' as const,
+              device_type: 'All' as const,
+              warning_value: -8,
+              critical_value: -12,
+              enabled: true,
+            };
+            const allRxRow = opticalRxRows.find((r) => r.device_type === 'All') || {
+              metric: 'optical_rx' as const,
+              device_type: 'All' as const,
+              warning_value: -8,
+              critical_value: -20,
+              enabled: true,
+            };
+
+            const overrideDeviceTypes = Array.from(
+              new Set([
+                ...opticalTxRows.filter((r) => r.device_type !== 'All').map((r) => r.device_type),
+                ...opticalRxRows.filter((r) => r.device_type !== 'All').map((r) => r.device_type),
+              ])
+            ) as ThresholdDeviceType[];
+
+            const availableOverrideTypes = OVERRIDE_DEVICE_TYPES.filter(
+              (dtype) => !overrideDeviceTypes.includes(dtype)
+            );
+
+            const allDtypes: ThresholdDeviceType[] = ['All', ...overrideDeviceTypes];
+
+            const allOpticalRows = rows.filter(
+              (r) => r.metric === 'optical_tx' || r.metric === 'optical_rx'
+            );
+            const hasValidationError = allOpticalRows.some((r) => getRowValidationError(r) !== null);
+            const isSavingThisCard = savingMetric === 'optical';
+            const isDropdownOpen = openDropdownMetric === 'optical';
+
+            return (
+              <div
+                key="optical-power-card"
+                className="bg-base-100 border border-base-content/10 rounded-2xl p-5 sm:p-6 shadow-lg flex flex-col justify-between min-h-[320px] gap-5"
+              >
+                {/* Top & Middle Section */}
+                <div className="space-y-4">
+                  {/* Card Header with Tinted Icon Tile */}
+                  <div className="flex items-center justify-between gap-3 border-b border-base-content/10 pb-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 bg-cyan-500/10 border-cyan-500/25 text-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.12)]">
+                        <Radio className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm sm:text-base font-extrabold text-base-content tracking-tight">
+                          Optical Power (DOM/DDM)
+                        </h2>
+                        <div className="flex items-center gap-2 text-[11px] text-base-content/50 font-mono">
+                          <span>dBm threshold</span>
+                          <span>•</span>
+                          <span>
+                            {overrideDeviceTypes.length === 0
+                              ? 'Global default only'
+                              : `${overrideDeviceTypes.length} device ${overrideDeviceTypes.length === 1 ? 'override' : 'overrides'}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Threshold Sections Container with Alternating Backgrounds */}
+                  <div className="rounded-xl border border-base-content/10 overflow-hidden divide-y divide-base-content/10">
+                    {allDtypes.map((dtype, sectionIdx) => {
+                      const isAll = dtype === 'All';
+                      const txRow =
+                        rows.find((r) => r.metric === 'optical_tx' && r.device_type === dtype) ||
+                        allTxRow;
+                      const rxRow =
+                        rows.find((r) => r.metric === 'optical_rx' && r.device_type === dtype) ||
+                        allRxRow;
+
+                      const txError = getRowValidationError(txRow);
+                      const rxError = getRowValidationError(rxRow);
+
+                      const sectionKey = `optical:${dtype}`;
+                      const isDeleting = deletingKey === sectionKey;
+                      const isUnsaved = !isAll && (txRow.id === undefined || rxRow.id === undefined);
+
+                      // Tx scale calculations (dBm: higher is better, lower/more negative is worse)
+                      const rawTxWarn = Number.isNaN(Number(txRow.warning_value)) ? -8 : Number(txRow.warning_value);
+                      const rawTxCrit = Number.isNaN(Number(txRow.critical_value)) ? -12 : Number(txRow.critical_value);
+                      const txMaxScale = Math.max(5, Math.ceil(Math.max(rawTxWarn, rawTxCrit) + 5));
+                      const txMinScale = Math.min(-25, Math.floor(Math.min(rawTxWarn, rawTxCrit) - 5));
+                      const txSpan = Math.max(1, txMaxScale - txMinScale);
+                      const txGreenWidth = Math.min(100, Math.max(0, ((txMaxScale - rawTxWarn) / txSpan) * 100));
+                      const txCritPos = Math.min(100, Math.max(txGreenWidth, ((txMaxScale - rawTxCrit) / txSpan) * 100));
+                      const txAmberWidth = Math.max(0, txCritPos - txGreenWidth);
+                      const txRedWidth = Math.max(0, 100 - txCritPos);
+
+                      // Rx scale calculations
+                      const rawRxWarn = Number.isNaN(Number(rxRow.warning_value)) ? -8 : Number(rxRow.warning_value);
+                      const rawRxCrit = Number.isNaN(Number(rxRow.critical_value)) ? -20 : Number(rxRow.critical_value);
+                      const rxMaxScale = Math.max(5, Math.ceil(Math.max(rawRxWarn, rawRxCrit) + 5));
+                      const rxMinScale = Math.min(-35, Math.floor(Math.min(rawRxWarn, rawRxCrit) - 5));
+                      const rxSpan = Math.max(1, rxMaxScale - rxMinScale);
+                      const rxGreenWidth = Math.min(100, Math.max(0, ((rxMaxScale - rawRxWarn) / rxSpan) * 100));
+                      const rxCritPos = Math.min(100, Math.max(rxGreenWidth, ((rxMaxScale - rawRxCrit) / rxSpan) * 100));
+                      const rxAmberWidth = Math.max(0, rxCritPos - rxGreenWidth);
+                      const rxRedWidth = Math.max(0, 100 - rxCritPos);
+
+                      const alternatingBg = sectionIdx % 2 === 0 ? 'bg-base-100' : 'bg-base-200/45';
+
+                      return (
+                        <div key={sectionKey} className={`p-3.5 sm:p-4 space-y-3.5 transition-colors ${alternatingBg}`}>
+                          {/* Device Type Header Row */}
+                          <div className="flex items-center justify-between pb-2 border-b border-base-content/10">
+                            {renderDeviceTypeBadge(dtype, isUnsaved)}
+                            {!isAll ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOpticalOverride(dtype)}
+                                disabled={isDeleting}
+                                className="p-1.5 rounded-lg text-base-content/50 hover:text-rose-500 hover:bg-rose-500/10 transition-colors focus-visible:ring-2 focus-visible:ring-rose-500/50"
+                                title={`Remove override for ${dtype}`}
+                                aria-label={`Remove override for ${dtype}`}
+                              >
+                                {isDeleting ? (
+                                  <span className="loading loading-spinner loading-xs text-rose-500" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            ) : (
+                              <div className="text-[11px] font-mono text-base-content/40 font-medium">Default</div>
+                            )}
+                          </div>
+
+                          {/* Sub-metric 1: Transmit Power (Tx) */}
+                          <div className={`space-y-2 rounded-lg p-2.5 bg-base-200/30 border border-base-content/5 transition-opacity ${txRow.enabled ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                                <span className="text-xs font-bold text-base-content">
+                                  Transmit Power (Tx)
+                                </span>
+                              </div>
+                              <label
+                                htmlFor={`toggle-tx-${dtype}`}
+                                className="inline-flex items-center gap-1.5 cursor-pointer select-none"
+                                title={txRow.enabled ? 'Threshold active' : 'Threshold disabled'}
+                              >
+                                <input
+                                  id={`toggle-tx-${dtype}`}
+                                  type="checkbox"
+                                  checked={txRow.enabled}
+                                  onChange={(e) => updateRowField('optical_tx', dtype, 'enabled', e.target.checked)}
+                                  className="toggle toggle-xs toggle-primary focus-visible:ring-2 focus-visible:ring-primary/50"
+                                />
+                                <span className={`text-[10px] font-mono font-semibold w-12 ${txRow.enabled ? 'text-base-content/80' : 'text-base-content/40'}`}>
+                                  {txRow.enabled ? 'Enabled' : 'Muted'}
+                                </span>
+                              </label>
+                            </div>
+
+                            {/* Gradient bar for Tx */}
+                            <div className="space-y-1">
+                              <div className="relative h-2 w-full rounded-full bg-base-300/70 overflow-hidden flex shadow-inner">
+                                <div
+                                  className="h-full bg-gradient-to-r from-emerald-500/80 to-emerald-500 transition-all duration-200"
+                                  style={{ width: `${txGreenWidth}%` }}
+                                  title={`Normal: > ${txRow.warning_value} dBm`}
+                                />
+                                <div
+                                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-200"
+                                  style={{ width: `${txAmberWidth}%` }}
+                                  title={`Warning: ≤ ${txRow.warning_value} dBm`}
+                                />
+                                <div
+                                  className="h-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-200"
+                                  style={{ width: `${txRedWidth}%` }}
+                                  title={`Critical: ≤ ${txRow.critical_value} dBm`}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] font-mono text-base-content/45">
+                                <span>{txMaxScale} dBm</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                  Warn: {Number.isNaN(Number(txRow.warning_value)) ? '—' : `${txRow.warning_value} dBm`}
+                                </span>
+                                <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                                  Crit: {Number.isNaN(Number(txRow.critical_value)) ? '—' : `${txRow.critical_value} dBm`}
+                                </span>
+                                <span>{txMinScale} dBm</span>
+                              </div>
+                            </div>
+
+                            {/* Inputs for Tx */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div className="relative flex items-center rounded-lg border border-base-content/15 border-l-4 border-l-amber-500 bg-base-100 px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-amber-500/40 focus-within:border-amber-500/50">
+                                <div className="flex-1 min-w-0">
+                                  <label htmlFor={`warn-tx-${dtype}`} className="block text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 leading-none mb-1">
+                                    Warning (dBm)
+                                  </label>
+                                  <input
+                                    id={`warn-tx-${dtype}`}
+                                    type="number"
+                                    step="any"
+                                    value={Number.isNaN(Number(txRow.warning_value)) ? '' : txRow.warning_value}
+                                    onChange={(e) => updateRowField('optical_tx', dtype, 'warning_value', e.target.value === '' ? NaN : Number(e.target.value))}
+                                    className="w-full bg-transparent font-mono text-xs sm:text-sm font-bold text-base-content outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="relative flex items-center rounded-lg border border-base-content/15 border-l-4 border-l-rose-500 bg-base-100 px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-rose-500/40 focus-within:border-rose-500/50">
+                                <div className="flex-1 min-w-0">
+                                  <label htmlFor={`crit-tx-${dtype}`} className="block text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 leading-none mb-1">
+                                    Critical (dBm)
+                                  </label>
+                                  <input
+                                    id={`crit-tx-${dtype}`}
+                                    type="number"
+                                    step="any"
+                                    value={Number.isNaN(Number(txRow.critical_value)) ? '' : txRow.critical_value}
+                                    onChange={(e) => updateRowField('optical_tx', dtype, 'critical_value', e.target.value === '' ? NaN : Number(e.target.value))}
+                                    className="w-full bg-transparent font-mono text-xs sm:text-sm font-bold text-base-content outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            {txError && (
+                              <div role="alert" className="mt-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-[11px] font-semibold flex items-center gap-1.5">
+                                <AlertCircle className="w-3 h-3 shrink-0" />
+                                <span>{txError}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Sub-metric 2: Receive Power (Rx) */}
+                          <div className={`space-y-2 rounded-lg p-2.5 bg-base-200/30 border border-base-content/5 transition-opacity ${rxRow.enabled ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                                <span className="text-xs font-bold text-base-content">
+                                  Receive Power (Rx)
+                                </span>
+                              </div>
+                              <label
+                                htmlFor={`toggle-rx-${dtype}`}
+                                className="inline-flex items-center gap-1.5 cursor-pointer select-none"
+                                title={rxRow.enabled ? 'Threshold active' : 'Threshold disabled'}
+                              >
+                                <input
+                                  id={`toggle-rx-${dtype}`}
+                                  type="checkbox"
+                                  checked={rxRow.enabled}
+                                  onChange={(e) => updateRowField('optical_rx', dtype, 'enabled', e.target.checked)}
+                                  className="toggle toggle-xs toggle-primary focus-visible:ring-2 focus-visible:ring-primary/50"
+                                />
+                                <span className={`text-[10px] font-mono font-semibold w-12 ${rxRow.enabled ? 'text-base-content/80' : 'text-base-content/40'}`}>
+                                  {rxRow.enabled ? 'Enabled' : 'Muted'}
+                                </span>
+                              </label>
+                            </div>
+
+                            {/* Gradient bar for Rx */}
+                            <div className="space-y-1">
+                              <div className="relative h-2 w-full rounded-full bg-base-300/70 overflow-hidden flex shadow-inner">
+                                <div
+                                  className="h-full bg-gradient-to-r from-emerald-500/80 to-emerald-500 transition-all duration-200"
+                                  style={{ width: `${rxGreenWidth}%` }}
+                                  title={`Normal: > ${rxRow.warning_value} dBm`}
+                                />
+                                <div
+                                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-200"
+                                  style={{ width: `${rxAmberWidth}%` }}
+                                  title={`Warning: ≤ ${rxRow.warning_value} dBm`}
+                                />
+                                <div
+                                  className="h-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-200"
+                                  style={{ width: `${rxRedWidth}%` }}
+                                  title={`Critical: ≤ ${rxRow.critical_value} dBm`}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] font-mono text-base-content/45">
+                                <span>{rxMaxScale} dBm</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                  Warn: {Number.isNaN(Number(rxRow.warning_value)) ? '—' : `${rxRow.warning_value} dBm`}
+                                </span>
+                                <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                                  Crit: {Number.isNaN(Number(rxRow.critical_value)) ? '—' : `${rxRow.critical_value} dBm`}
+                                </span>
+                                <span>{rxMinScale} dBm</span>
+                              </div>
+                            </div>
+
+                            {/* Inputs for Rx */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div className="relative flex items-center rounded-lg border border-base-content/15 border-l-4 border-l-amber-500 bg-base-100 px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-amber-500/40 focus-within:border-amber-500/50">
+                                <div className="flex-1 min-w-0">
+                                  <label htmlFor={`warn-rx-${dtype}`} className="block text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 leading-none mb-1">
+                                    Warning (dBm)
+                                  </label>
+                                  <input
+                                    id={`warn-rx-${dtype}`}
+                                    type="number"
+                                    step="any"
+                                    value={Number.isNaN(Number(rxRow.warning_value)) ? '' : rxRow.warning_value}
+                                    onChange={(e) => updateRowField('optical_rx', dtype, 'warning_value', e.target.value === '' ? NaN : Number(e.target.value))}
+                                    className="w-full bg-transparent font-mono text-xs sm:text-sm font-bold text-base-content outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="relative flex items-center rounded-lg border border-base-content/15 border-l-4 border-l-rose-500 bg-base-100 px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-rose-500/40 focus-within:border-rose-500/50">
+                                <div className="flex-1 min-w-0">
+                                  <label htmlFor={`crit-rx-${dtype}`} className="block text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 leading-none mb-1">
+                                    Critical (dBm)
+                                  </label>
+                                  <input
+                                    id={`crit-rx-${dtype}`}
+                                    type="number"
+                                    step="any"
+                                    value={Number.isNaN(Number(rxRow.critical_value)) ? '' : rxRow.critical_value}
+                                    onChange={(e) => updateRowField('optical_rx', dtype, 'critical_value', e.target.value === '' ? NaN : Number(e.target.value))}
+                                    className="w-full bg-transparent font-mono text-xs sm:text-sm font-bold text-base-content outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            {rxError && (
+                              <div role="alert" className="mt-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-[11px] font-semibold flex items-center gap-1.5">
+                                <AlertCircle className="w-3 h-3 shrink-0" />
+                                <span>{rxError}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Dashed button: + Add device type override for Optical */}
+                  {availableOverrideTypes.length > 0 && (
+                    <div
+                      ref={isDropdownOpen ? dropdownContainerRef : undefined}
+                      className="relative inline-block"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenDropdownMetric((prev) => (prev === 'optical' ? null : 'optical'))
+                        }
+                        aria-expanded={isDropdownOpen}
+                        aria-haspopup="listbox"
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-base-content/25 hover:border-primary/50 hover:bg-primary/5 text-xs font-semibold text-base-content/70 hover:text-primary transition-all focus-visible:ring-2 focus-visible:ring-primary/50"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-primary" />
+                        <span>+ Add device type override</span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 opacity-60 transition-transform ${
+                            isDropdownOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {isDropdownOpen && (
+                        <div
+                          role="listbox"
+                          aria-label="Select device type override for Optical Power"
+                          className="absolute left-0 mt-1.5 w-48 rounded-xl bg-base-100 border border-base-content/15 shadow-xl py-1.5 z-30 animate-fadeIn"
+                        >
+                          <div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-base-content/45 border-b border-base-content/10">
+                            Select Device Type
+                          </div>
+                          {availableOverrideTypes.map((dtype) => (
+                            <button
+                              key={dtype}
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              onClick={() => handleAddOpticalOverride(dtype)}
+                              className="w-full text-left px-3 py-2 text-xs font-semibold text-base-content/80 hover:bg-primary/10 hover:text-primary flex items-center justify-between transition-colors focus-visible:bg-primary/10 focus-visible:text-primary outline-none"
+                            >
+                              <span>{dtype}</span>
+                              <Plus className="w-3.5 h-3.5 opacity-60" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Footer: Save Changes button */}
+                <div className="pt-2 border-t border-base-content/10">
+                  <button
+                    type="button"
+                    onClick={handleSaveOpticalCard}
+                    disabled={isSavingThisCard || hasValidationError}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                      hasValidationError
+                        ? 'bg-base-200 text-base-content/40 border border-base-content/10 cursor-not-allowed'
+                        : 'bg-primary text-primary-content hover:brightness-105 shadow-sm shadow-primary/20'
+                    }`}
+                  >
+                    {isSavingThisCard ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs" />
+                        <span>Saving Optical Power...</span>
                       </>
                     ) : (
                       <>
