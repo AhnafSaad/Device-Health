@@ -1163,7 +1163,7 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                           className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-mono"
                         >
                           <span className="font-semibold text-base-content whitespace-nowrap">
-                            Sensor [{ts.index}]
+                            {ts.label ? ts.label : `Sensor [${ts.index}]`}
                           </span>
                           <span className={`font-mono font-bold ${tColor}`}>
                             {Number(cVal).toFixed(2)} °C

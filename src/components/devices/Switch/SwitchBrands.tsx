@@ -43,7 +43,7 @@ export const parseOpticalSensors = (raw: any): Array<{ index: number | string; d
   return [];
 };
 
-export const parseTemperatureSensors = (raw: any): Array<{ index: number | string; celsius: number }> => {
+export const parseTemperatureSensors = (raw: any): Array<{ index: number | string; celsius: number; label?: string | null }> => {
   if (Array.isArray(raw)) return raw;
   if (typeof raw === 'string') {
     try {

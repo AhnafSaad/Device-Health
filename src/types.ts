@@ -114,9 +114,9 @@ export interface Server {
   }[] | null;
   interfaces?: NetworkInterface[] | null;
   optical_sensors?: { index: number | string; dbm: number; port?: string | null; label?: string | null }[] | null;
-  temperature_sensors?: { index: number | string; celsius: number }[] | null;
+  temperature_sensors?: { index: number | string; celsius: number; label?: string | null }[] | null;
   opticalSensors?: { index: number | string; dbm: number; port?: string | null; label?: string | null }[] | null;
-  temperatureSensors?: { index: number | string; celsius: number }[] | null;
+  temperatureSensors?: { index: number | string; celsius: number; label?: string | null }[] | null;
 }
 
 export interface NetworkInterface {
