@@ -184,6 +184,8 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
         key: g.baseKey,
         displayName,
         valueText,
+        txStr,
+        rxStr,
         tx,
         rx,
       };
@@ -614,36 +616,84 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                   </span>
                 </div>
                 {groupedOptical.totalCount > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
-                    {groupedOptical.ports.map((p) => (
-                      <div
-                        key={p.key}
-                        className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between gap-3"
-                      >
-                        <span className="text-xs font-mono font-medium text-base-content/80 whitespace-nowrap">
-                          {p.displayName}
-                        </span>
-                        <span className="font-mono text-sm font-bold text-base-content whitespace-nowrap">
-                          {p.valueText}
-                        </span>
-                      </div>
-                    ))}
-                    {groupedOptical.fallbacks.map((s, idx) => {
-                      const hasPortAndLabel = Boolean(s.port && s.label);
-                      return (
+                  <div className="rounded-lg border border-base-content/10 bg-base-100/70 overflow-hidden">
+                    {/* Table Header Row */}
+                    <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider text-base-content/50 bg-base-200/50 border-b border-base-content/10">
+                      <span className="col-span-6">Interface</span>
+                      <span className="col-span-3 text-right">Tx</span>
+                      <span className="col-span-3 text-right">Rx</span>
+                    </div>
+                    {/* Scrollable Data Rows */}
+                    <div className="divide-y divide-base-content/10 max-h-56 overflow-y-auto">
+                      {groupedOptical.ports.map((p) => (
                         <div
-                          key={`fallback-${s.index}-${idx}`}
-                          className="p-2.5 rounded-lg bg-base-100/70 border border-base-content/10 flex items-center justify-between gap-3"
+                          key={p.key}
+                          className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs font-mono hover:bg-base-200/30 transition-colors"
                         >
-                          <span className="text-xs font-mono text-base-content/70 whitespace-nowrap">
-                            {hasPortAndLabel ? `${s.port} ${s.label}` : `Sensor [${s.index}]:`}
+                          <span className="col-span-6 font-semibold text-base-content truncate" title={p.displayName}>
+                            {p.displayName}
                           </span>
-                          <span className="font-mono text-sm font-bold text-base-content whitespace-nowrap">
-                            {Number(s.dbm).toFixed(2)} dBm
+                          <span
+                            className={`col-span-3 text-right font-bold whitespace-nowrap ${
+                              p.txStr === '—' ? 'text-base-content/40 font-normal' : 'text-base-content'
+                            }`}
+                          >
+                            {p.txStr}
+                          </span>
+                          <span
+                            className={`col-span-3 text-right font-bold whitespace-nowrap ${
+                              p.rxStr === '—' ? 'text-base-content/40 font-normal' : 'text-base-content'
+                            }`}
+                          >
+                            {p.rxStr}
                           </span>
                         </div>
-                      );
-                    })}
+                      ))}
+                      {groupedOptical.fallbacks.map((s, idx) => {
+                        const hasPortAndLabel = Boolean(s.port && s.label);
+                        const formattedVal =
+                          typeof s.dbm === 'number' && Number.isFinite(s.dbm)
+                            ? Number.isInteger(s.dbm)
+                              ? `${s.dbm} dBm`
+                              : `${Number(s.dbm.toFixed(2))} dBm`
+                            : '—';
+                        const isTx = s.label && String(s.label).trim().toLowerCase() === 'tx';
+                        const isRx = s.label && String(s.label).trim().toLowerCase() === 'rx';
+                        return (
+                          <div
+                            key={`fallback-${s.index}-${idx}`}
+                            className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs font-mono hover:bg-base-200/30 transition-colors"
+                          >
+                            <span className="col-span-6 text-base-content/70 truncate">
+                              {hasPortAndLabel ? `${s.port} ${s.label}` : `Sensor [${s.index}]:`}
+                            </span>
+                            {isTx ? (
+                              <>
+                                <span className="col-span-3 text-right font-bold text-base-content whitespace-nowrap">
+                                  {formattedVal}
+                                </span>
+                                <span className="col-span-3 text-right text-base-content/40 font-normal whitespace-nowrap">
+                                  —
+                                </span>
+                              </>
+                            ) : isRx ? (
+                              <>
+                                <span className="col-span-3 text-right text-base-content/40 font-normal whitespace-nowrap">
+                                  —
+                                </span>
+                                <span className="col-span-3 text-right font-bold text-base-content whitespace-nowrap">
+                                  {formattedVal}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="col-span-6 text-right font-bold text-base-content whitespace-nowrap">
+                                {formattedVal}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2.5 pt-1">
