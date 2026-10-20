@@ -221,14 +221,6 @@ export const ServerView: React.FC<ServerViewProps> = ({
     }
   }, []);
 
-  useEffect(() => {
-    if (!isLiveActive || liveIntervalSec <= 0) return;
-    performLivePoll();
-    const timer = setInterval(() => {
-      performLivePoll();
-    }, liveIntervalSec * 1000);
-    return () => clearInterval(timer);
-  }, [isLiveActive, liveIntervalSec, server.id, performLivePoll]);
 
   const getMetricColor = (val: number) => {
     if (val < 70) return 'text-emerald-500';
@@ -386,8 +378,6 @@ export const ServerView: React.FC<ServerViewProps> = ({
         onDeleteServer={onDeleteServer}
         onPollNow={performLivePoll}
         isPollingNow={isPollingNow}
-        onPing={handlePing}
-        isPinging={isPinging}
       />
 
       {/* 2. Smart Diagnostic Alerts & Health Banner */}

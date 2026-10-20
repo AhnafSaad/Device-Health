@@ -277,19 +277,6 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
     }
   }, []);
 
-  // Recurring live interval for real-time telemetry (especially disk I/O)
-  useEffect(() => {
-    if (!isLiveActive || liveIntervalSec <= 0) return;
-
-    // Trigger an initial poll on mount or server change immediately
-    performLivePoll();
-
-    const timer = setInterval(() => {
-      performLivePoll();
-    }, liveIntervalSec * 1000);
-
-    return () => clearInterval(timer);
-  }, [isLiveActive, liveIntervalSec, server.id, performLivePoll]);
 
   const formatLastPolled = (iso?: string) => {
     if (!iso) return 'Never polled';

@@ -206,18 +206,6 @@ export const DeviceHeader: React.FC<DeviceHeaderProps> = ({
             </button>
           )}
 
-          {onPing && (
-            <button
-              type="button"
-              onClick={onPing}
-              disabled={isPinging}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-base-200/70 hover:bg-base-200 border border-base-content/10 text-base-content transition-all shadow-xs disabled:opacity-50"
-              title="ICMP Ping test"
-            >
-              <Radio className={`w-3.5 h-3.5 ${isPinging ? 'animate-pulse text-amber-500' : 'text-base-content/70'}`} />
-              <span className="hidden sm:inline">{isPinging ? 'Pinging...' : 'Ping'}</span>
-            </button>
-          )}
 
           {onEditServer && (
             <button
