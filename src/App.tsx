@@ -218,6 +218,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [pollIntervalMs, setPollIntervalMs] = useState<number>(5000);
+  const [pollingDeviceIds, setPollingDeviceIds] = useState<Set<string>>(new Set());
 
   // Fetch initial datacenters from API
   useEffect(() => {
@@ -864,6 +865,98 @@ export default function App() {
     }
   }, []);
 
+  // Individual device live SNMP poll handler
+  const handlePollSingleDevice = useCallback(async (device: Server) => {
+    if (!device?.id) return;
+    setPollingDeviceIds((prev) => new Set(prev).add(device.id));
+    try {
+      const res = await fetchWithAuth(`/api/devices/${encodeURIComponent(device.id)}/poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: device.id, ip_address: device.ip }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const d = data.device || data.telemetry;
+        if (d) {
+          const updated: Server = {
+            ...device,
+            cpuUsage: Number(d.cpu_usage ?? d.cpuUsage ?? device.cpuUsage ?? 0),
+            ramUsage: Number(d.ram_usage ?? d.ramUsage ?? device.ramUsage ?? 0),
+            diskUsage: Number(d.disk_usage ?? d.diskUsage ?? device.diskUsage ?? 0),
+            status: (d.status as any) || device.status,
+            health: (d.health as any) || device.health,
+            uptime: d.uptime || device.uptime,
+            loadAverage: d.load_average || d.loadAverage || device.loadAverage,
+            lastPolledAt: d.recorded_at || new Date().toISOString(),
+            connectedUsers: d.connected_users !== undefined && d.connected_users !== null ? Number(d.connected_users) : (device.connectedUsers ?? null),
+            temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : (device.temperature ?? null),
+            opticalTx: d.optical_tx !== undefined && d.optical_tx !== null ? Number(d.optical_tx) : (device.opticalTx ?? null),
+            opticalRx: d.optical_rx !== undefined && d.optical_rx !== null ? Number(d.optical_rx) : (device.opticalRx ?? null),
+            powerSupplies: Array.isArray(d.power_supplies)
+              ? d.power_supplies
+              : typeof d.power_supplies === 'string'
+              ? (() => { try { const p = JSON.parse(d.power_supplies); return Array.isArray(p) ? p : (device.powerSupplies ?? null); } catch { return device.powerSupplies ?? null; } })()
+              : (device.powerSupplies ?? null),
+            fans: Array.isArray(d.fans)
+              ? d.fans
+              : typeof d.fans === 'string'
+              ? (() => { try { const p = JSON.parse(d.fans); return Array.isArray(p) ? p : (device.fans ?? null); } catch { return device.fans ?? null; } })()
+              : (device.fans ?? null),
+            deviceModel: d.device_model ?? d.deviceModel ?? device.deviceModel,
+            deviceSerial: d.device_serial ?? d.deviceSerial ?? device.deviceSerial,
+            softwareId: d.software_id ?? d.softwareId ?? device.softwareId,
+            sysDescr: d.sys_descr ?? d.sysDescr ?? device.sysDescr,
+            sysName: d.sys_name ?? d.sysName ?? device.sysName,
+            storage: Array.isArray(d.storage)
+              ? d.storage
+              : typeof d.storage === 'string'
+              ? (() => { try { return JSON.parse(d.storage); } catch { return device.storage; } })()
+              : (device.storage ?? null),
+            disks: Array.isArray(d.disks)
+              ? d.disks
+              : typeof d.disks === 'string'
+              ? (() => { try { return JSON.parse(d.disks); } catch { return device.disks; } })()
+              : (device.disks ?? null),
+            interfaces: Array.isArray(d.interfaces)
+              ? d.interfaces
+              : typeof d.interfaces === 'string'
+              ? (() => { try { return JSON.parse(d.interfaces); } catch { return device.interfaces; } })()
+              : (device.interfaces ?? null),
+          };
+
+          setServers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+          if (selectedServer?.id === updated.id) {
+            setSelectedServer((prev) => (prev ? { ...prev, ...updated } : updated));
+          }
+
+          setToast({
+            type: 'success',
+            message: `Device "${updated.hostname}" (${updated.ip}) polled live — Status: ${String(updated.status).toUpperCase()} (${updated.health}).`,
+          });
+          return;
+        }
+      }
+
+      setToast({
+        type: 'error',
+        message: `Failed to live poll "${device.hostname}" (${device.ip}). Check SNMP configuration.`,
+      });
+    } catch (err: any) {
+      setToast({
+        type: 'error',
+        message: `Error polling device: ${err?.message || 'Network request failed'}`,
+      });
+    } finally {
+      setPollingDeviceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(device.id);
+        return next;
+      });
+    }
+  }, [selectedServer?.id]);
+
   // Sync selectedServer if metrics update in the background
   useEffect(() => {
     if (selectedServer) {
@@ -1124,6 +1217,8 @@ export default function App() {
                 onInspectServer={handleInspectServer}
                 onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
                 onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
+                onPollDevice={handlePollSingleDevice}
+                pollingDeviceIds={pollingDeviceIds}
                 searchQuery={searchQuery}
                 setSearchQuery={handleSearchChange}
                 totalFilteredCount={filteredServers.length}

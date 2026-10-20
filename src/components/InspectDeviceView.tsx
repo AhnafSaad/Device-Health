@@ -574,8 +574,19 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           </div>
         </div>
 
-        {/* SINGLE EXCLUSIVE LOCATION FOR EDIT AND DELETE BUTTONS */}
+        {/* ACTION BUTTONS: LIVE POLL, EDIT, DELETE */}
         <div className="flex items-center gap-2.5 self-start md:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={performLivePoll}
+            disabled={isPollingNow}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-primary/10 hover:bg-primary hover:text-primary-content border border-primary/30 text-primary transition-all duration-150 shadow-xs disabled:opacity-50"
+            title={`Poll ${server.hostname} (${server.ip}) live now via SNMP`}
+          >
+            <RefreshCw className={`w-4 h-4 ${isPollingNow ? 'animate-spin' : ''}`} />
+            <span>{isPollingNow ? 'Polling Device...' : 'Poll Device Live'}</span>
+          </button>
+
           {onEditServer && (
             <button
               type="button"

@@ -49,7 +49,7 @@ export const OLTView: React.FC<OLTViewProps> = ({
   const server = liveServer;
   const [isLiveActive] = useState<boolean>(true);
   const [liveIntervalSec] = useState<number>(30); // 30s default for OLT
-  const [, setIsPollingNow] = useState<boolean>(false);
+  const [isPollingNow, setIsPollingNow] = useState<boolean>(false);
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
 
@@ -269,6 +269,10 @@ export const OLTView: React.FC<OLTViewProps> = ({
         onBack={onBack}
         onEditServer={onEditServer}
         onDeleteServer={onDeleteServer}
+        onPollNow={performLivePoll}
+        isPollingNow={isPollingNow}
+        onPing={handlePing}
+        isPinging={isPinging}
       />
 
       {/* 2. Smart Diagnostic Alerts & Health Banner */}

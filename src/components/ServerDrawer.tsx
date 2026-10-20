@@ -28,6 +28,8 @@ interface ServerDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onRebootServer?: (serverId: string) => void;
+  onPollDevice?: (server: Server) => void;
+  isPollingNow?: boolean;
 }
 
 export const ServerDrawer: React.FC<ServerDrawerProps> = ({
@@ -35,6 +37,8 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
   isOpen,
   onClose,
   onRebootServer,
+  onPollDevice,
+  isPollingNow = false,
 }) => {
   const [copiedSsh, setCopiedSsh] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
@@ -396,6 +400,18 @@ export const ServerDrawer: React.FC<ServerDrawerProps> = ({
               </h3>
 
               <div className="flex flex-wrap gap-2">
+                {onPollDevice && (
+                  <button
+                    onClick={() => onPollDevice(server)}
+                    disabled={isPollingNow}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-primary-content transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    title={`Live poll ${server.hostname} (${server.ip}) via SNMP`}
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isPollingNow ? 'animate-spin' : ''}`} />
+                    {isPollingNow ? 'Polling Live...' : 'Poll Device Live'}
+                  </button>
+                )}
+
                 <button
                   onClick={handlePing}
                   disabled={isPinging}

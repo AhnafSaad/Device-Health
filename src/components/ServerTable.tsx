@@ -16,7 +16,8 @@ import {
   Building2,
   Pencil,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  RefreshCw
 } from 'lucide-react';
 
 interface ServerTableProps {
@@ -26,6 +27,8 @@ interface ServerTableProps {
   onInspectServer?: (server: Server) => void;
   onEditServer?: (server: Server) => void;
   onDeleteServer?: (server: Server) => void;
+  onPollDevice?: (server: Server) => void;
+  pollingDeviceIds?: Set<string>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   totalFilteredCount: number;
@@ -47,6 +50,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   onInspectServer,
   onEditServer,
   onDeleteServer,
+  onPollDevice,
+  pollingDeviceIds,
   searchQuery,
   setSearchQuery,
   totalFilteredCount,
@@ -601,9 +606,23 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       </div>
                     </td>
 
-                    {/* 6. Action: Inspect button + 3-dot dropdown menu */}
+                    {/* 6. Action: Poll button + Inspect button + 3-dot dropdown menu */}
                     <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {onPollDevice && (
+                          <button
+                            type="button"
+                            onClick={() => onPollDevice(server)}
+                            disabled={pollingDeviceIds?.has(server.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-base-200/80 hover:bg-base-200 hover:text-primary border border-base-content/10 text-base-content transition-all duration-150 shadow-xs disabled:opacity-50"
+                            title={`Live poll ${server.hostname} (${server.ip}) via SNMP`}
+                            aria-label={`Poll ${server.hostname}`}
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${pollingDeviceIds?.has(server.id) ? 'animate-spin text-primary' : 'text-base-content/70'}`} />
+                            <span className="hidden xl:inline">{pollingDeviceIds?.has(server.id) ? 'Polling...' : 'Poll'}</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => handleInspect(server)}

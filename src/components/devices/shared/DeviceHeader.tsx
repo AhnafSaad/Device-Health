@@ -186,11 +186,11 @@ export const DeviceHeader: React.FC<DeviceHeaderProps> = ({
               type="button"
               onClick={onPollNow}
               disabled={isPollingNow}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-base-200/70 hover:bg-base-200 border border-base-content/10 text-base-content transition-all shadow-xs disabled:opacity-50"
-              title="Poll device live now via SNMP"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-primary/10 hover:bg-primary hover:text-primary-content border border-primary/30 text-primary transition-all duration-150 shadow-xs disabled:opacity-50"
+              title={`Poll ${server.hostname} (${server.ip}) live now via SNMP`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isPollingNow ? 'animate-spin text-primary' : 'text-base-content/70'}`} />
-              <span className="hidden sm:inline">{isPollingNow ? 'Polling...' : 'Poll Now'}</span>
+              <RefreshCw className={`w-4 h-4 ${isPollingNow ? 'animate-spin' : ''}`} />
+              <span>{isPollingNow ? 'Polling Device...' : 'Poll Device Live'}</span>
             </button>
           )}
 

@@ -57,7 +57,7 @@ export const ServerView: React.FC<ServerViewProps> = ({
   const server = liveServer;
   const [isLiveActive] = useState<boolean>(true);
   const [liveIntervalSec] = useState<number>(15);
-  const [, setIsPollingNow] = useState<boolean>(false);
+  const [isPollingNow, setIsPollingNow] = useState<boolean>(false);
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
   const [isEccDetailsExpanded, setIsEccDetailsExpanded] = useState<boolean>(false);
@@ -384,6 +384,10 @@ export const ServerView: React.FC<ServerViewProps> = ({
         onBack={onBack}
         onEditServer={onEditServer}
         onDeleteServer={onDeleteServer}
+        onPollNow={performLivePoll}
+        isPollingNow={isPollingNow}
+        onPing={handlePing}
+        isPinging={isPinging}
       />
 
       {/* 2. Smart Diagnostic Alerts & Health Banner */}
