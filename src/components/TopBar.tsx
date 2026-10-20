@@ -31,6 +31,7 @@ interface TopBarProps {
   onOpenUsersModal?: () => void;
   onNavigateThresholds?: () => void;
   currentUsername?: string;
+  role?: 'admin' | 'editor' | 'viewer';
   onLogout?: () => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
@@ -53,6 +54,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenUsersModal,
   onNavigateThresholds,
   currentUsername = 'admin',
+  role = 'admin',
   onLogout,
   theme = 'dark',
   onToggleTheme,
@@ -127,19 +129,21 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span>Dashboard</span>
           </button>
 
-          <button
-            onClick={() => onNavigate('add-device')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-              currentView === 'add-device' || currentView === 'add-server'
-                ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
-                : 'text-base-content/60 hover:text-base-content hover:bg-base-100/50'
-            }`}
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Add Device</span>
-          </button>
+          {role !== 'viewer' && (
+            <button
+              onClick={() => onNavigate('add-device')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                currentView === 'add-device' || currentView === 'add-server'
+                  ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
+                  : 'text-base-content/60 hover:text-base-content hover:bg-base-100/50'
+              }`}
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Add Device</span>
+            </button>
+          )}
 
-          {onOpenDcModal && (
+          {role === 'admin' && onOpenDcModal && (
             <button
               onClick={onOpenDcModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-base-content/70 hover:text-primary hover:bg-base-100/60 transition-all duration-200 cursor-pointer"
@@ -155,24 +159,25 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
           )}
 
-          {/* Settings Menu with Users and Thresholds options */}
-          <div ref={settingsRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer ${
-                isSettingsActive
-                  ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
-                  : 'text-base-content/70 hover:text-primary hover:bg-base-100/60'
-              }`}
-              title="System Settings"
-              aria-expanded={isSettingsOpen}
-              aria-haspopup="true"
-            >
-              <Settings className="w-3.5 h-3.5 text-primary" />
-              <span>Settings</span>
-              <ChevronDown className={`w-3 h-3 opacity-60 transition-transform duration-200 ${isSettingsOpen ? 'rotate-180' : ''}`} />
-            </button>
+          {/* Settings Menu with Users and Thresholds options (Admin only) */}
+          {role === 'admin' && (
+            <div ref={settingsRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                  isSettingsActive
+                    ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
+                    : 'text-base-content/70 hover:text-primary hover:bg-base-100/60'
+                }`}
+                title="System Settings"
+                aria-expanded={isSettingsOpen}
+                aria-haspopup="true"
+              >
+                <Settings className="w-3.5 h-3.5 text-primary" />
+                <span>Settings</span>
+                <ChevronDown className={`w-3 h-3 opacity-60 transition-transform duration-200 ${isSettingsOpen ? 'rotate-180' : ''}`} />
+              </button>
 
             {isSettingsOpen && (
               <div 
@@ -233,6 +238,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Right Section: Telemetry Pulse, Cluster Health & Operator Status */}
@@ -294,8 +300,17 @@ export const TopBar: React.FC<TopBarProps> = ({
               {currentUsername.charAt(0) || 'U'}
             </div>
             <div className="text-left">
-              <div className="text-xs font-semibold leading-tight flex items-center gap-1">
+              <div className="text-xs font-semibold leading-tight flex items-center gap-1.5">
                 <span className="max-w-[90px] truncate">{currentUsername}</span>
+                <span className={`px-1.5 py-0.2 text-[9px] font-mono font-bold uppercase rounded ${
+                  role === 'admin'
+                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                    : role === 'editor'
+                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                    : 'bg-primary/15 text-primary border border-primary/30'
+                }`}>
+                  {role}
+                </span>
                 <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
               </div>
               <div className="text-[10px] text-base-content/50 font-mono leading-tight">

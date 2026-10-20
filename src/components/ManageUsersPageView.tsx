@@ -48,6 +48,7 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
   // New user form state
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState<'viewer' | 'editor' | 'admin'>('viewer');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
@@ -129,7 +130,11 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
     try {
       const res = await fetchWithAuth('/api/auth/users', {
         method: 'POST',
-        body: JSON.stringify({ username: cleanUser, password: newPassword }),
+        body: JSON.stringify({
+          username: cleanUser,
+          password: newPassword,
+          role: newRole,
+        }),
       });
       const data = await res.json();
 
@@ -140,9 +145,10 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
       }
 
       if (res.ok) {
-        setSuccessMsg(`User "${cleanUser}" registered successfully!`);
+        setSuccessMsg(`User "${cleanUser}" (${newRole.toUpperCase()}) registered successfully!`);
         setNewUsername('');
         setNewPassword('');
+        setNewRole('viewer');
         fetchUsers();
       } else {
         setError(data.message || 'Failed to create user.');
@@ -307,7 +313,7 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
             </div>
 
             <form onSubmit={handleAddUser} className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
-              <div className="sm:col-span-5">
+              <div className="sm:col-span-4">
                 <label className="block text-xs font-semibold text-base-content/70 mb-1.5 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-primary" />
                   <span>Username</span>
@@ -322,7 +328,7 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
                 />
               </div>
 
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-3">
                 <label className="block text-xs font-semibold text-base-content/70 mb-1.5 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-primary" />
                   <span>Password (min 8 chars)</span>
@@ -339,6 +345,22 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
               </div>
 
               <div className="sm:col-span-3">
+                <label className="block text-xs font-semibold text-base-content/70 mb-1.5 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  <span>Role</span>
+                </label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as 'viewer' | 'editor' | 'admin')}
+                  className="select select-bordered w-full text-xs rounded-xl bg-base-200/50 focus:bg-base-100 font-medium"
+                >
+                  <option value="viewer">Viewer (Read-only)</option>
+                  <option value="editor">Editor (Add/Edit devices)</option>
+                  <option value="admin">Admin (Full privileges)</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
                 <button
                   type="submit"
                   disabled={isSubmitting || !newUsername.trim() || newPassword.length < 8}
@@ -428,8 +450,14 @@ export const ManageUsersPageView: React.FC<ManageUsersPageViewProps> = ({
                             </div>
                           </td>
                           <td>
-                            <span className="badge badge-sm badge-neutral font-mono uppercase text-[10px]">
-                              {user.role || 'admin'}
+                            <span className={`badge badge-sm font-mono uppercase text-[10px] font-bold ${
+                              (user.role || '').toLowerCase() === 'admin'
+                                ? 'badge-error text-error-content shadow-xs'
+                                : (user.role || '').toLowerCase() === 'editor'
+                                ? 'badge-warning text-warning-content shadow-xs'
+                                : 'badge-neutral text-base-content/90 border border-base-content/20'
+                            }`}>
+                              {(user.role || 'viewer').toUpperCase()}
                             </span>
                           </td>
                           <td className="text-base-content/60 text-[11px]">

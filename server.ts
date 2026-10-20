@@ -30,6 +30,7 @@ declare module 'express-session' {
     userId?: number | string;
     isAdmin?: boolean;
     username?: string;
+    role?: string;
   }
 }
 
@@ -81,10 +82,11 @@ const activeTokens = new Map<string, { userId: number | string; username: string
  * Generate a cryptographically signed authentication bearer token for iframe and API usage
  */
 export function generateAuthToken(user: { id: number | string; username: string; role?: string }): string {
+  const userRole = user.role || 'viewer';
   const payload = {
     userId: user.id,
     username: user.username,
-    role: user.role || 'admin',
+    role: userRole,
     exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
   };
   const payloadStr = JSON.stringify(payload);
@@ -93,7 +95,7 @@ export function generateAuthToken(user: { id: number | string; username: string;
   activeTokens.set(token, {
     userId: user.id,
     username: user.username,
-    role: user.role || 'admin',
+    role: userRole,
     expiresAt: payload.exp,
   });
   return token;
@@ -123,7 +125,7 @@ export function verifyAuthToken(token: string): { userId: number | string; usern
     return {
       userId: payload.userId,
       username: payload.username,
-      role: payload.role || 'admin',
+      role: payload.role || 'viewer',
     };
   } catch {
     return null;
@@ -131,12 +133,22 @@ export function verifyAuthToken(token: string): { userId: number | string; usern
 }
 
 /**
- * requireAdmin middleware checking express session and/or Authorization: Bearer <token>
+ * requireAdmin middleware checking express session and/or Authorization: Bearer <token>.
+ * Allows ONLY 'admin' role. Blocks non-admin users with 403 Forbidden.
  */
 export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   // 1. Check active express session
-  if (req.session && req.session.isAdmin) {
-    return next();
+  if (req.session) {
+    const role = req.session.role || (req.session.isAdmin ? 'admin' : undefined);
+    if (role === 'admin') {
+      return next();
+    }
+    if (req.session.userId || req.session.username || req.session.role) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin privileges required. Access denied.',
+      });
+    }
   }
 
   // 2. Check Authorization Bearer header (critical for cross-site iframes with third-party cookie restrictions)
@@ -144,19 +156,73 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction) =>
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7).trim();
     const tokenUser = verifyAuthToken(token);
-    if (tokenUser && tokenUser.role === 'admin') {
+    if (tokenUser) {
       if (req.session) {
-        req.session.isAdmin = true;
+        req.session.role = tokenUser.role;
+        req.session.isAdmin = tokenUser.role === 'admin';
         req.session.userId = tokenUser.userId;
         req.session.username = tokenUser.username;
       }
-      return next();
+      if (tokenUser.role === 'admin') {
+        return next();
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin privileges required. Access denied.',
+      });
     }
   }
 
   return res.status(401).json({
     error: 'Unauthorized',
     message: 'Admin authentication required. Please log in.',
+  });
+};
+
+/**
+ * requireEditor middleware checking express session and/or Authorization: Bearer <token>.
+ * Allows 'editor' and 'admin' roles. Blocks 'viewer' users with 403 Forbidden.
+ */
+export const requireEditor = (req: Request, res: Response, next: NextFunction) => {
+  // 1. Check active express session
+  if (req.session) {
+    const role = req.session.role || (req.session.isAdmin ? 'admin' : undefined);
+    if (role === 'editor' || role === 'admin') {
+      return next();
+    }
+    if (req.session.userId || req.session.username || req.session.role) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Editor or Admin privileges required. Viewers cannot perform this action.',
+      });
+    }
+  }
+
+  // 2. Check Authorization Bearer header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    const tokenUser = verifyAuthToken(token);
+    if (tokenUser) {
+      if (req.session) {
+        req.session.role = tokenUser.role;
+        req.session.isAdmin = tokenUser.role === 'admin';
+        req.session.userId = tokenUser.userId;
+        req.session.username = tokenUser.username;
+      }
+      if (tokenUser.role === 'editor' || tokenUser.role === 'admin') {
+        return next();
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Editor or Admin privileges required. Viewers cannot perform this action.',
+      });
+    }
+  }
+
+  return res.status(401).json({
+    error: 'Unauthorized',
+    message: 'Authentication required. Please log in.',
   });
 };
 
@@ -318,11 +384,13 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid username or password' });
     }
 
+    const userRole = user.role || 'viewer';
     req.session.userId = user.id;
-    req.session.isAdmin = true;
+    req.session.role = userRole;
+    req.session.isAdmin = userRole === 'admin';
     req.session.username = user.username;
 
-    const token = generateAuthToken(user);
+    const token = generateAuthToken({ ...user, role: userRole });
 
     // Explicitly persist session to storage to prevent race condition with subsequent client API requests
     req.session.save((err) => {
@@ -334,7 +402,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         authenticated: true,
         token,
         username: user.username,
-        role: user.role || 'admin',
+        role: userRole,
         userId: user.id,
       });
     });
@@ -366,11 +434,13 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 // GET /api/auth/me
 app.get('/api/auth/me', (req: Request, res: Response) => {
   // 1. Session check
-  if (req.session && req.session.isAdmin) {
+  if (req.session && (req.session.role || req.session.userId || req.session.isAdmin)) {
+    const role = req.session.role || (req.session.isAdmin ? 'admin' : 'viewer');
     return res.json({
       authenticated: true,
       username: req.session.username || 'admin',
       userId: req.session.userId,
+      role,
     });
   }
 
@@ -379,9 +449,10 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7).trim();
     const tokenUser = verifyAuthToken(token);
-    if (tokenUser && tokenUser.role === 'admin') {
+    if (tokenUser) {
       if (req.session) {
-        req.session.isAdmin = true;
+        req.session.role = tokenUser.role;
+        req.session.isAdmin = tokenUser.role === 'admin';
         req.session.userId = tokenUser.userId;
         req.session.username = tokenUser.username;
       }
@@ -389,6 +460,7 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
         authenticated: true,
         username: tokenUser.username,
         userId: tokenUser.userId,
+        role: tokenUser.role,
       });
     }
   }
@@ -399,9 +471,11 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
 // POST /api/auth/users - Create a new user (admin required)
 app.post('/api/auth/users', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { username, password } = req.body || {};
+    const { username, password, role } = req.body || {};
     const cleanUsername = (username ? String(username) : '').trim();
     const cleanPassword = password ? String(password) : '';
+    const rawRole = (role ? String(role) : '').trim().toLowerCase();
+    const cleanRole = (rawRole === 'admin' || rawRole === 'editor' || rawRole === 'viewer') ? rawRole : 'viewer';
 
     if (!cleanUsername) {
       return res.status(400).json({ error: 'Bad Request', message: 'Username cannot be empty.' });
@@ -432,8 +506,8 @@ app.post('/api/auth/users', requireAdmin, async (req: Request, res: Response) =>
 
     try {
       const insertRes = await query(
-        `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin') RETURNING id, username, role, created_at;`,
-        [cleanUsername, passwordHash]
+        `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at;`,
+        [cleanUsername, passwordHash, cleanRole]
       );
       if (insertRes && insertRes.rows && insertRes.rows[0]) {
         createdUser = insertRes.rows[0];
@@ -446,7 +520,7 @@ app.post('/api/auth/users', requireAdmin, async (req: Request, res: Response) =>
       createdUser = {
         id: memoryUsers.length + 1,
         username: cleanUsername,
-        role: 'admin',
+        role: cleanRole,
         created_at: new Date().toISOString(),
       };
     }
@@ -464,6 +538,7 @@ app.post('/api/auth/users', requireAdmin, async (req: Request, res: Response) =>
       user: {
         id: createdUser.id,
         username: createdUser.username,
+        role: createdUser.role,
         created_at: createdUser.created_at,
       },
     });
@@ -1990,7 +2065,7 @@ app.get('/api/devices/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/devices
-app.post('/api/devices', requireAdmin, async (req: Request, res: Response) => {
+app.post('/api/devices', requireEditor, async (req: Request, res: Response) => {
   try {
     const { ip_address, hostname, device_type, brand, snmp_community, location, rack_number, datacenter_id, datacenter_name } = req.body || {};
 
@@ -2380,8 +2455,8 @@ const updateDeviceHandler = async (req: Request, res: Response) => {
   }
 };
 
-app.put('/api/devices/:id', requireAdmin, updateDeviceHandler);
-app.put('/api/devices', requireAdmin, updateDeviceHandler);
+app.put('/api/devices/:id', requireEditor, updateDeviceHandler);
+app.put('/api/devices', requireEditor, updateDeviceHandler);
 
 // DELETE /api/devices/:id - Delete device from fleet
 const deleteDeviceHandler = async (req: Request, res: Response) => {
@@ -2439,7 +2514,7 @@ app.delete('/api/devices/:id', requireAdmin, deleteDeviceHandler);
 app.delete('/api/devices', requireAdmin, deleteDeviceHandler);
 
 // POST /api/servers (alias compatibility)
-app.post('/api/servers', requireAdmin, async (req: Request, res: Response) => {
+app.post('/api/servers', requireEditor, async (req: Request, res: Response) => {
   const { ip_address, device_type, snmp_community, location, rack_number, datacenter_id } = req.body || {};
   req.body.hostname = req.body.hostname || `${(device_type || 'srv').toLowerCase()}-${(ip_address || '').replace(/\./g, '-')}`;
   const cleanIp = (ip_address || '').trim();

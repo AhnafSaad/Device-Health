@@ -3,7 +3,7 @@ import { Server as ServerIcon, ShieldCheck, Lock, User, AlertCircle, ArrowRight,
 import { setAuthToken } from '../utils/auth';
 
 interface LoginViewProps {
-  onLoginSuccess: (username: string, userId?: string | number, token?: string) => void;
+  onLoginSuccess: (username: string, userId?: string | number, token?: string, role?: string) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
@@ -35,14 +35,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       const data = await res.json();
 
       if (res.ok && data.authenticated) {
+        const userRole = data.role || 'viewer';
         if (data.token) {
           setAuthToken(data.token, {
             username: data.username || cleanUser,
             userId: data.userId,
-            role: data.role || 'admin',
+            role: userRole,
           });
         }
-        onLoginSuccess(data.username || cleanUser, data.userId, data.token);
+        onLoginSuccess(data.username || cleanUser, data.userId, data.token, userRole);
       } else {
         setErrorMessage(data.message || 'Invalid username or password. Access denied.');
       }

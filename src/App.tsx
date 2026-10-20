@@ -15,7 +15,7 @@ import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { ThresholdsView } from './components/ThresholdsView';
 import { fetchWithAuth, clearAuth } from './utils/auth';
-import { CheckCircle2, AlertCircle, X as CloseIcon } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ShieldAlert, X as CloseIcon } from 'lucide-react';
 
 function cronToMs(cron: string): number {
   if (!cron || typeof cron !== 'string') return 60000;
@@ -46,6 +46,7 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
   const [currentUsername, setCurrentUsername] = useState<string>('admin');
   const [currentUserId, setCurrentUserId] = useState<string | number>('');
+  const [currentUserRole, setCurrentUserRole] = useState<'admin' | 'editor' | 'viewer'>('viewer');
 
   const checkAuth = useCallback(async () => {
     setAuthStatus('checking');
@@ -56,6 +57,8 @@ export default function App() {
         setAuthStatus('authenticated');
         if (data.username) setCurrentUsername(data.username);
         if (data.userId) setCurrentUserId(data.userId);
+        const resolvedRole = (data.role === 'admin' || data.role === 'editor' || data.role === 'viewer') ? data.role : 'viewer';
+        setCurrentUserRole(resolvedRole);
       } else {
         setAuthStatus('unauthenticated');
       }
@@ -68,11 +71,13 @@ export default function App() {
     checkAuth();
   }, [checkAuth]);
 
-  const handleLoginSuccess = (username: string, userId?: string | number) => {
+  const handleLoginSuccess = (username: string, userId?: string | number, _token?: string, role?: string) => {
     setAuthStatus('authenticated');
     setCurrentUsername(username);
     if (userId) setCurrentUserId(userId);
-    setToast({ type: 'success', message: `Authenticated as ${username}` });
+    const resolvedRole = (role === 'admin' || role === 'editor' || role === 'viewer') ? role : 'viewer';
+    setCurrentUserRole(resolvedRole);
+    setToast({ type: 'success', message: `Authenticated as ${username} (${resolvedRole.toUpperCase()})` });
   };
 
   const handleLogout = async () => {
@@ -82,12 +87,14 @@ export default function App() {
       console.error('Logout error:', err);
     }
     clearAuth();
+    setCurrentUserRole('viewer');
     setAuthStatus('unauthenticated');
     setToast({ type: 'info', message: 'Logged out of session.' });
   };
 
   const handleUnauthorized = useCallback(() => {
     clearAuth();
+    setCurrentUserRole('viewer');
     setAuthStatus('unauthenticated');
   }, []);
 
@@ -956,14 +963,19 @@ export default function App() {
         currentView={currentView}
         onNavigate={(view) => {
           if (view === 'dashboard') router.push('/');
-          else if (view === 'add-device') router.push('/add-device');
+          else if (view === 'add-device') {
+            if (currentUserRole !== 'viewer') {
+              router.push('/add-device');
+            }
+          }
         }}
-        onOpenDcModal={() => router.push('/admin/data-centers')}
+        onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
         datacenterCount={enrichedDatacenters.length}
         deviceCount={servers.length}
-        onOpenUsersModal={() => router.push('/admin/users')}
-        onNavigateThresholds={() => router.push('/admin/thresholds')}
+        onOpenUsersModal={currentUserRole === 'admin' ? () => router.push('/admin/users') : undefined}
+        onNavigateThresholds={currentUserRole === 'admin' ? () => router.push('/admin/thresholds') : undefined}
         currentUsername={currentUsername}
+        role={currentUserRole}
         onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -972,13 +984,32 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 sm:pb-6 flex flex-col min-h-0">
         
-        {currentView === 'inspect' ? (
+        {/* Route Protection: Admin-Only Pages (Users, Thresholds, Datacenters) */}
+        {(currentView === 'admin-users' || currentView === 'data-centers' || currentView === 'thresholds') && currentUserRole !== 'admin' ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="max-w-md w-full p-8 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4 animate-fadeIn">
+              <div className="w-14 h-14 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center mx-auto text-error shadow-inner">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h2 className="text-lg font-bold text-base-content">Access Denied</h2>
+              <p className="text-xs text-base-content/70 leading-relaxed">
+                Administrator privileges are required to access this resource. Your current role is <span className="font-mono font-bold uppercase text-error">{currentUserRole}</span>.
+              </p>
+              <button
+                onClick={() => router.push('/')}
+                className="btn btn-primary btn-sm rounded-xl font-bold shadow-sm"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        ) : currentView === 'inspect' ? (
           currentInspectServer ? (
             <DeviceRenderer
               server={currentInspectServer}
               onBack={() => router.push('/')}
-              onEditServer={handleOpenEditModal}
-              onDeleteServer={handleOpenDeleteModal}
+              onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+              onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
               onRebootServer={handleRebootServer}
               onUpdateServer={handleDeviceUpdated}
             />
@@ -1000,14 +1031,34 @@ export default function App() {
             </div>
           )
         ) : currentView === 'add-device' ? (
-          <AddServerView
-            onBack={() => router.push('/')}
-            onServerAdded={handleServerAdded}
-            existingIps={existingIps}
-            datacenters={enrichedDatacenters}
-            onOpenDcModal={() => router.push('/admin/data-centers')}
-            onNavigateToDatacenters={() => router.push('/admin/data-centers')}
-          />
+          currentUserRole === 'viewer' ? (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="max-w-md w-full p-8 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4 animate-fadeIn">
+                <div className="w-14 h-14 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center mx-auto text-error shadow-inner">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <h2 className="text-lg font-bold text-base-content">Access Denied</h2>
+                <p className="text-xs text-base-content/70 leading-relaxed">
+                  Viewers have read-only access and cannot register new devices. Please contact an administrator or editor.
+                </p>
+                <button
+                  onClick={() => router.push('/')}
+                  className="btn btn-primary btn-sm rounded-xl font-bold shadow-sm"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            </div>
+          ) : (
+            <AddServerView
+              onBack={() => router.push('/')}
+              onServerAdded={handleServerAdded}
+              existingIps={existingIps}
+              datacenters={enrichedDatacenters}
+              onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+              onNavigateToDatacenters={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+            />
+          )
         ) : currentView === 'data-centers' ? (
           <DatacenterPageView
             datacenters={enrichedDatacenters}
@@ -1054,7 +1105,7 @@ export default function App() {
                 datacenters={enrichedDatacenters}
                 datacenterFilter={datacenterFilter}
                 onSelectDatacenterFilter={handleDatacenterFilterChange}
-                onOpenDcModal={() => router.push('/admin/data-centers')}
+                onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
                 onResetFilters={handleResetAllFilters}
                 hasActiveFilters={hasActiveFilters}
               />
@@ -1071,8 +1122,8 @@ export default function App() {
                 selectedServer={selectedServer}
                 onSelectServer={handleSelectServer}
                 onInspectServer={handleInspectServer}
-                onEditServer={handleOpenEditModal}
-                onDeleteServer={handleOpenDeleteModal}
+                onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+                onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
                 searchQuery={searchQuery}
                 setSearchQuery={handleSearchChange}
                 totalFilteredCount={filteredServers.length}
