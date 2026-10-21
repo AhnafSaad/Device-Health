@@ -79,7 +79,22 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const isCisco = isCiscoSwitch(activeServer.brand || server.brand);
-  const skipStorageCard = isCisco;
+  const rawStorage = server.storage ?? activeServer.storage;
+  const storageList: Array<{ name: string; kind: string; total_bytes: number; used_bytes: number; used_pct: number }> =
+    Array.isArray(rawStorage)
+      ? rawStorage
+      : typeof rawStorage === 'string'
+      ? (() => {
+          try {
+            const p = JSON.parse(rawStorage);
+            return Array.isArray(p) ? p : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  const hasStorageData = storageList.length > 0;
+  const skipStorageCard = isCisco || !hasStorageData;
 
   // Sensor arrays
   const rawOptical =
@@ -726,46 +741,40 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                 </span>
               </div>
 
-              {Array.isArray(server.storage) && server.storage.length > 0 ? (
-                <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
-                  {server.storage.map((item, idx) => {
-                    const pct = Number(item.used_pct ?? 0);
-                    const kindLabel = formatStorageKind(item.kind);
-                    return (
-                      <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
-                              {item.name}
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
-                              {kindLabel}
-                            </span>
-                          </div>
-                          <div className="font-mono text-xs shrink-0 text-right">
-                            <span className="text-base-content/70">
-                              {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
-                            </span>
-                            <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
-                              ({pct}%)
-                            </span>
-                          </div>
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
+                {storageList.map((item, idx) => {
+                  const pct = Number(item.used_pct ?? 0);
+                  const kindLabel = formatStorageKind(item.kind);
+                  return (
+                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
+                            {item.name}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
+                            {kindLabel}
+                          </span>
                         </div>
-                        <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
-                            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                          />
+                        <div className="font-mono text-xs shrink-0 text-right">
+                          <span className="text-base-content/70">
+                            {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
+                          </span>
+                          <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
+                            ({pct}%)
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
-                  Not reported by this device
-                </div>
-              )}
+                      <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
+                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
