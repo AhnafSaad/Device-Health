@@ -15,6 +15,7 @@ import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { ThresholdsView } from './components/ThresholdsView';
 import { fetchWithAuth, clearAuth } from './utils/auth';
+import { calculateDeviceHealth } from './utils/deviceHealth';
 import { CheckCircle2, AlertCircle, ShieldAlert, X as CloseIcon } from 'lucide-react';
 
 function cronToMs(cron: string): number {
@@ -383,7 +384,16 @@ export default function App() {
               metricsAvailable: d.metrics_available ?? d.metricsAvailable,
               lastPolledAt: d.recorded_at ?? d.lastPolledAt,
               status: (d.status as any) || 'offline',
-              health: (d.health as any) || 'Critical',
+              health: calculateDeviceHealth({
+                status: (d.status as any) || 'offline',
+                cpuUsage: Number(d.cpu_usage ?? d.cpuUsage ?? 0),
+                ramUsage: Number(d.ram_usage ?? d.ramUsage ?? 0),
+                diskUsage: Number(d.disk_usage ?? d.diskUsage ?? 0),
+                temperature: d.temperature !== undefined && d.temperature !== null ? Number(d.temperature) : null,
+                powerSupplies: d.power_supplies ?? d.powerSupplies,
+                fans: d.fans,
+                deviceType: d.device_type ?? d.deviceType ?? 'Server',
+              }).health,
               uptime: d.uptime || '0d 0h',
               loadAverage: d.load_average || d.loadAverage || '0.00, 0.00, 0.00',
             }));
@@ -451,9 +461,10 @@ export default function App() {
       // 2. Device type filter
       if (deviceFilter !== 'all' && (srv.deviceType || '').toLowerCase() !== deviceFilter.toLowerCase()) return false;
 
-      // 3. Health filter
-      if (healthFilter === 'normal' && srv.health !== 'Normal') return false;
-      if (healthFilter === 'critical' && srv.health === 'Normal') return false;
+      // 3. Health filter - Unified via calculateDeviceHealth
+      const srvHealth = calculateDeviceHealth(srv).health;
+      if (healthFilter === 'normal' && srvHealth !== 'Normal') return false;
+      if (healthFilter === 'critical' && srvHealth === 'Normal') return false;
 
       // 4. Data Center filter
       if (datacenterFilter !== 'all') {
@@ -821,7 +832,16 @@ export default function App() {
                 metricsAvailable: live.metrics_available ?? live.metricsAvailable ?? existing?.metricsAvailable,
                 lastPolledAt: live.recorded_at ?? live.lastPolledAt ?? existing?.lastPolledAt,
                 status: (live.status as any) || existing?.status || 'offline',
-                health: (live.health as any) || existing?.health || 'Critical',
+                health: calculateDeviceHealth({
+                  status: (live.status as any) || existing?.status || 'offline',
+                  cpuUsage: Number(live.cpu_usage ?? live.cpuUsage ?? existing?.cpuUsage ?? 0),
+                  ramUsage: Number(live.ram_usage ?? live.ramUsage ?? existing?.ramUsage ?? 0),
+                  diskUsage: Number(live.disk_usage ?? live.diskUsage ?? existing?.diskUsage ?? 0),
+                  temperature: live.temperature !== undefined && live.temperature !== null ? Number(live.temperature) : (existing?.temperature ?? null),
+                  powerSupplies: live.power_supplies ?? existing?.powerSupplies,
+                  fans: live.fans ?? existing?.fans,
+                  deviceType: live.device_type ?? existing?.deviceType ?? 'Server',
+                }).health,
                 uptime: live.uptime || existing?.uptime || '0d 0h',
                 loadAverage: live.load_average || live.loadAverage || existing?.loadAverage || '0.00, 0.00, 0.00',
               };
@@ -919,17 +939,18 @@ export default function App() {
               : typeof d.disks === 'string'
               ? (() => { try { return JSON.parse(d.disks); } catch { return device.disks; } })()
               : (device.disks ?? null),
-            interfaces: Array.isArray(d.interfaces)
-              ? d.interfaces
-              : typeof d.interfaces === 'string'
-              ? (() => { try { return JSON.parse(d.interfaces); } catch { return device.interfaces; } })()
-              : (device.interfaces ?? null),
-          };
+              interfaces: Array.isArray(d.interfaces)
+                ? d.interfaces
+                : typeof d.interfaces === 'string'
+                ? (() => { try { return JSON.parse(d.interfaces); } catch { return device.interfaces; } })()
+                : (device.interfaces ?? null),
+            };
+            updated.health = calculateDeviceHealth(updated).health;
 
-          setServers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-          if (selectedServer?.id === updated.id) {
-            setSelectedServer((prev) => (prev ? { ...prev, ...updated } : updated));
-          }
+            setServers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+            if (selectedServer?.id === updated.id) {
+              setSelectedServer((prev) => (prev ? { ...prev, ...updated } : updated));
+            }
 
           setToast({
             type: 'success',

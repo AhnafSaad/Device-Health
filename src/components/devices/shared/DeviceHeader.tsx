@@ -1,6 +1,7 @@
 import React from 'react';
 import { Server } from '../../../types';
 import { BrandLogo } from '../../BrandLogo';
+import { calculateDeviceHealth } from '../../../utils/deviceHealth';
 import { 
   ArrowLeft, 
   Server as ServerIcon, 
@@ -82,6 +83,7 @@ export const DeviceHeader: React.FC<DeviceHeaderProps> = ({
   onPing,
 }) => {
   const isOnline = server.status === 'online';
+  const healthInfo = calculateDeviceHealth(server);
 
   return (
     <div className="space-y-3.5 sm:space-y-4">
@@ -148,6 +150,26 @@ export const DeviceHeader: React.FC<DeviceHeaderProps> = ({
                 <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-rose-500/10 text-rose-500 border border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.25)] animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-rose-500" />
                   DOWN
+                </span>
+              )}
+
+              {/* Unified Health Status Badge */}
+              {healthInfo.health === 'Normal' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Health: Normal
+                </span>
+              )}
+              {healthInfo.health === 'Warning' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Health: Warning
+                </span>
+              )}
+              {healthInfo.health === 'Critical' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  Health: Critical
                 </span>
               )}
 

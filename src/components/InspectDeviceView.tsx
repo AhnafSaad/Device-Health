@@ -3,6 +3,7 @@ import { Server, NetworkInterface } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { formatRack } from '../utils/rack';
 import { fetchWithAuth } from '../utils/auth';
+import { calculateDeviceHealth } from '../utils/deviceHealth';
 import { 
   ArrowLeft,
   Server as ServerIcon, 
@@ -600,121 +601,136 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Smart Diagnostic Alerts & Health Banner */}
-      <div className="space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5 px-1">
-          <Activity className="w-3.5 h-3.5 text-primary" />
-          Diagnostic Alerts &amp; Fleet Health
-        </h2>
+      {/* 3. Smart Diagnostic Alerts & Health Banner - Unified via calculateDeviceHealth */}
+      {(() => {
+        const healthInfo = calculateDeviceHealth(server);
+        return (
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5 px-1">
+              <Activity className="w-3.5 h-3.5 text-primary" />
+              Diagnostic Alerts &amp; Fleet Health
+            </h2>
 
-        {/* Offline Critical Alert */}
-        {!isOnline && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
-            <AlertOctagon className="w-6 h-6 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold text-sm sm:text-base">Host Status: OFFLINE CRITICAL</div>
-              <div className="text-xs sm:text-sm text-base-content/80 mt-1 leading-relaxed">
-                Heartbeat polling dropped out. Host unreachable at IP <span className="font-mono font-bold">{server.ip}</span>. Please verify IPMI/BMC power status, top-of-rack leaf switch port, or active upstream BGP peer.
+            {/* Offline Critical Alert */}
+            {healthInfo.isOffline && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertOctagon className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">Host Status: OFFLINE CRITICAL</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1 leading-relaxed">
+                    Heartbeat polling dropped out. Host unreachable at IP <span className="font-mono font-bold">{server.ip}</span>. Please verify IPMI/BMC power status, top-of-rack leaf switch port, or active upstream BGP peer.
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Elevated CPU Alert */}
-        {isOnline && !isMetricsUnavailable && server.cpuUsage > 85 && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.12)] flex items-start gap-3.5">
-            <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold text-sm sm:text-base">Sustained CPU Saturation ({server.cpuUsage}%)</div>
-              <div className="text-xs sm:text-sm text-base-content/80 mt-1">
-                Thread contention detected on compute cores. Active process threads exceed standard capacity thresholds.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Elevated RAM Alert */}
-        {isOnline && !isMetricsUnavailable && deviceType === 'Server' && server.ramUsage > 85 && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.12)] flex items-start gap-3.5">
-            <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold text-sm sm:text-base">Memory Pressure Critical ({server.ramUsage}%)</div>
-              <div className="text-xs sm:text-sm text-base-content/80 mt-1">
-                Linux kernel page buffer depleted. High risk of OOM reaper terminating active database or worker daemons.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Elevated Disk Alert */}
-        {isOnline && !isMetricsUnavailable && deviceType === 'Server' && server.diskUsage > 85 && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
-            <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold text-sm sm:text-base">NVMe Storage Pool Near Capacity ({server.diskUsage}%)</div>
-              <div className="text-xs sm:text-sm text-base-content/80 mt-1">
-                Volume saturation warning: Please inspect `/var/log` or rotate PostgreSQL audit log files.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Neutral Banner when SNMP vendor metrics are unavailable */}
-        {isOnline && isMetricsUnavailable && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-200/70 border border-base-content/15 text-base-content/80 flex items-start gap-3.5">
-            <Info className="w-6 h-6 shrink-0 mt-0.5 text-base-content/60" />
-            <div>
-              <div className="font-bold text-sm sm:text-base text-base-content">
-                SNMP metrics unavailable — device is reachable but did not respond to vendor-specific telemetry OIDs.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Critical PSU / Fan Hardware Alert */}
-        {isOnline &&
-          (() => {
-            const failedPsus = (server.powerSupplies || [])
-              .filter((p) => p.status === 'critical')
-              .map((p) => p.name);
-            const failedFans = (server.fans || [])
-              .filter((f) => f.status === 'critical')
-              .map((f) => f.name);
-            const failedUnits = [...failedPsus, ...failedFans];
-            if (failedUnits.length === 0) return null;
-            return (
+            {/* Critical PSU / Fan Hardware Alert */}
+            {!healthInfo.isOffline && healthInfo.failedHardware.length > 0 && (
               <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
                 <AlertOctagon className="w-6 h-6 shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold text-sm sm:text-base">
-                    Hardware Unit Failure: {failedUnits.join(', ')}
+                    Hardware Unit Failure: {healthInfo.failedHardware.join(', ')}
                   </div>
                   <div className="text-xs sm:text-sm text-base-content/80 mt-1">
-                    Critical hardware sensor status reported for: {failedUnits.join(', ')}. Inspect chassis power supply or cooling fan tray immediately.
+                    Critical hardware sensor status reported for: {healthInfo.failedHardware.join(', ')}. Inspect chassis power supply or cooling fan tray immediately.
                   </div>
                 </div>
               </div>
-            );
-          })()}
+            )}
 
-        {/* All Nominal Alert */}
-        {isOnline &&
-          !isMetricsUnavailable &&
-          server.cpuUsage <= 85 &&
-          (deviceType !== 'Server' || (server.ramUsage <= 85 && server.diskUsage <= 85)) &&
-          !(server.powerSupplies || []).some((p) => p.status === 'critical') &&
-          !(server.fans || []).some((f) => f.status === 'critical') && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-start gap-3.5 shadow-[0_0_20px_rgba(16,185,129,0.12)]">
-              <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
-              <div>
-                <div className="font-bold text-sm sm:text-base">System Operational &amp; Nominal</div>
-                <div className="text-xs sm:text-sm text-base-content/80 mt-1">
-                  All host telemetry metrics are securely within standard SLA parameters. No active alerts or threshold breaches recorded.
+            {/* Elevated CPU Alert (>85%) */}
+            {!healthInfo.isOffline && !isMetricsUnavailable && healthInfo.cpuCritical && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">Sustained CPU Saturation ({server.cpuUsage}%)</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    Thread contention detected on compute cores. Active process threads exceed standard capacity thresholds.
+                  </div>
                 </div>
               </div>
-            </div>
-        )}
-      </div>
+            )}
+
+            {/* Elevated RAM Alert (>85%) */}
+            {!healthInfo.isOffline && !isMetricsUnavailable && healthInfo.ramCritical && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">Memory Pressure Critical ({server.ramUsage}%)</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    System memory buffer exhausted. High risk of frame drops or OOM condition.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Elevated Disk Alert (>85%) */}
+            {!healthInfo.isOffline && !isMetricsUnavailable && healthInfo.diskCritical && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">NVMe Storage Pool Near Capacity ({server.diskUsage}%)</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    Volume saturation warning: Please inspect `/var/log` or rotate storage audit log files.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Thermal Alert (>75°C) */}
+            {!healthInfo.isOffline && healthInfo.tempCritical && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.12)] flex items-start gap-3.5">
+                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">Chassis Thermal Threshold Exceeded ({server.temperature}°C)</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    Chassis temperature is above operating safety limit. Thermal throttling or shutdown may occur.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Warning Alert (70-85% usage or hardware warning) */}
+            {!healthInfo.isOffline && healthInfo.health === 'Warning' && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.12)] flex items-start gap-3.5">
+                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">Telemetry Warning: {healthInfo.summary}</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    Resource usage or environmental sensors are approaching SLA operating limits.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Neutral Banner when SNMP vendor metrics are unavailable */}
+            {!healthInfo.isOffline && isMetricsUnavailable && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-base-200/70 border border-base-content/15 text-base-content/80 flex items-start gap-3.5">
+                <Info className="w-6 h-6 shrink-0 mt-0.5 text-base-content/60" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base text-base-content">
+                    SNMP metrics unavailable — device is reachable but did not respond to vendor-specific telemetry OIDs.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* All Nominal Alert - Unified with List View */}
+            {!healthInfo.isOffline && healthInfo.health === 'Normal' && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-start gap-3.5 shadow-[0_0_20px_rgba(16,185,129,0.12)]">
+                <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-sm sm:text-base">System Operational &amp; Nominal</div>
+                  <div className="text-xs sm:text-sm text-base-content/80 mt-1">
+                    All host telemetry metrics are securely within standard SLA parameters. No active alerts or threshold breaches recorded.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 4. Two-Column Dashboard Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">

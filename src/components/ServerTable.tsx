@@ -3,6 +3,7 @@ import { Server, StatusFilter, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { BrandLogo } from './BrandLogo';
 import { formatRack } from '../utils/rack';
+import { calculateDeviceHealth } from '../utils/deviceHealth';
 import { 
   Search, 
   ChevronRight, 
@@ -308,6 +309,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               servers.map((server, index) => {
                 const isSelected = selectedServer?.id === server.id;
                 const isOnline = server.status === 'online';
+                const healthInfo = calculateDeviceHealth(server);
 
                 return (
                   <tr
@@ -429,21 +431,30 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       </span>
                     </td>
 
-                    {/* 3. Health Telemetry: Normal / Warning / Critical */}
+                    {/* 3. Health Telemetry: Normal / Warning / Critical - Unified via calculateDeviceHealth */}
                     <td className="py-2.5 px-3.5 whitespace-nowrap">
                       <div>
-                        {server.health === 'Normal' && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                        {healthInfo.health === 'Normal' && (
+                          <span
+                            className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold"
+                            title={healthInfo.summary}
+                          >
                             Normal
                           </span>
                         )}
-                        {(server.health === 'Warning' || server.health === 'High CPU') && (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold">
+                        {healthInfo.health === 'Warning' && (
+                          <span
+                            className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold"
+                            title={healthInfo.summary}
+                          >
                             Warning
                           </span>
                         )}
-                        {server.health === 'Critical' && (
-                          <span className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                        {healthInfo.health === 'Critical' && (
+                          <span
+                            className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold"
+                            title={healthInfo.summary}
+                          >
                             Critical
                           </span>
                         )}
