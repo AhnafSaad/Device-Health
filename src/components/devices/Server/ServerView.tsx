@@ -817,9 +817,10 @@ export const ServerView: React.FC<ServerViewProps> = ({
               <div className="divide-y divide-base-content/10 space-y-4">
                 {disks.map((d, idx) => {
                   const isNvme = d.type === 'nvme';
-                  const isHdd = d.type === 'hdd_sata';
                   const wearLevel = d.percentage_used;
                   const hasWear = wearLevel !== null && wearLevel !== undefined && !isNaN(wearLevel);
+                  const isSsd = d.type === 'ssd' || d.type === 'ssd_sata' || (!isNvme && hasWear);
+                  const isHdd = !isNvme && !isSsd;
 
                   const hasReallocated = d.reallocated !== null && d.reallocated !== undefined && d.reallocated > 0;
                   const hasPending = d.pending !== null && d.pending !== undefined && d.pending > 0;
@@ -835,11 +836,15 @@ export const ServerView: React.FC<ServerViewProps> = ({
                           </span>
                           {isNvme ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/25">
-                              NVMe
+                              NVMe SSD
+                            </span>
+                          ) : isSsd ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/25">
+                              SATA SSD
                             </span>
                           ) : isHdd ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-secondary/10 text-secondary border border-secondary/25">
-                              HDD/SATA
+                              HDD / Storage
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-base-300/60 text-base-content/60 border border-base-content/15">
@@ -862,8 +867,8 @@ export const ServerView: React.FC<ServerViewProps> = ({
                         </div>
                       </div>
 
-                      {/* NVMe Specific Details */}
-                      {isNvme && (
+                      {/* SSD Specific Details (NVMe and SATA/SAS SSD) */}
+                      {(isNvme || isSsd) && (
                         <div className="space-y-3">
                           {/* Wear Level Bar */}
                           <div className="p-3 sm:p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 space-y-1.5">

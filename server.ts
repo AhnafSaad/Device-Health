@@ -2782,6 +2782,11 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Setup Agent download endpoint
+app.get('/setup-agent.sh', (_req: Request, res: Response) => {
+  res.sendFile(path.resolve(__dirname, 'public', 'setup-agent.sh'));
+});
+
 // Vite or Static assets mounting
 async function startServer() {
   const PORT = Number(process.env.PORT || 3000);
