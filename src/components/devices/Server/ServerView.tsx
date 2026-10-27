@@ -954,9 +954,15 @@ export const ServerView: React.FC<ServerViewProps> = ({
                                     Healthy
                                   </span>
                                 ) : d.passed === false ? (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
-                                    Failing
-                                  </span>
+                                  (d.reallocated === null && d.pending === null && d.uncorrectable === null && d.power_on_hours === null) ? (
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold uppercase bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" title="SMART passthrough not available (e.g. PERC RAID virtual disk)">
+                                      Unavailable (RAID/Bus)
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                      Failing
+                                    </span>
+                                  )
                                 ) : (
                                   <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-base-300/60 text-base-content/50 border border-base-content/15">
                                     Unknown
