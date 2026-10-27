@@ -94,7 +94,8 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const deviceType = activeServer.deviceType || 'Server';
   const isCiscoSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco');
-  const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch;
+  const isJuniperSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'juniper' || String(activeServer.brand).toLowerCase() === 'juniper');
+  const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch || isJuniperSwitch;
 
   const rawOpticalSensors =
     (activeServer as any).optical_sensors ??

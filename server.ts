@@ -1417,6 +1417,15 @@ export function sanitizeDeviceRow(r: any) {
     }
   }
 
+  // Cisco and Juniper switches do not support/require storage & memory monitoring
+  const devTypeStr = String(r.device_type || r.deviceType || '').toLowerCase();
+  const brandLowerStr = String(r.brand || '').toLowerCase();
+  if (devTypeStr === 'switch' && (brandLowerStr.includes('cisco') || brandLowerStr.includes('juniper'))) {
+    r.storage = null;
+    r.disk_usage = null;
+    r.diskUsage = null;
+  }
+
   // Physical chassis limits for power supplies:
   // An OLT chassis (Huawei FRAME-300 / SmartAX MA5680T / MA5683T / MA5608T / MA5800, V-SOL, BDCOM)
   // physically only has 1 or 2 modular power supply units (dual redundant power supplies: Power Supply 1 and Power Supply 2).

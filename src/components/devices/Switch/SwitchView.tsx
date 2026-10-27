@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Server, NetworkInterface } from '../../../types';
 import { DeviceHeader } from '../shared/DeviceHeader';
-import { isCiscoSwitch, parseOpticalSensors, parseTemperatureSensors } from './SwitchBrands';
+import { isCiscoSwitch, isJuniperSwitch, skipStorageForSwitch, parseOpticalSensors, parseTemperatureSensors } from './SwitchBrands';
 import { BrandLogo } from '../../BrandLogo';
 import { formatRack } from '../../../utils/rack';
 import { fetchWithAuth } from '../../../utils/auth';
@@ -80,7 +80,8 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
   const isCisco = isCiscoSwitch(activeServer.brand || server.brand);
-  const rawStorage = server.storage ?? activeServer.storage;
+  const isJuniper = isJuniperSwitch(activeServer.brand || server.brand);
+  const rawStorage = (isCisco || isJuniper) ? null : (server.storage ?? activeServer.storage);
   const storageList: Array<{ name: string; kind: string; total_bytes: number; used_bytes: number; used_pct: number }> =
     Array.isArray(rawStorage)
       ? rawStorage
@@ -95,7 +96,7 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
         })()
       : [];
   const hasStorageData = storageList.length > 0;
-  const skipStorageCard = isCisco || !hasStorageData;
+  const skipStorageCard = isCisco || isJuniper || !hasStorageData;
 
   // Sensor arrays
   const rawOptical =
@@ -154,14 +155,15 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
       if (m) {
         const portNum = m[1];
         lane = m[2] || null;
-        baseKey = `Eth${portNum}`;
-        displayPort = `Ethernet ${portNum}`;
+        baseKey = lane ? `Eth${portNum}_L${lane}` : `Eth${portNum}`;
+        displayPort = lane ? `Ethernet ${portNum} (Lane ${lane})` : `Ethernet ${portNum}`;
       } else {
         const laneMatch = trimmed.match(/\s+(?:L|Lane)\s*(\d+)$/i);
         lane = laneMatch ? laneMatch[1] : null;
         const stripped = laneMatch ? trimmed.replace(/\s+(?:L|Lane)\s*\d+$/i, '').trim() : trimmed;
-        baseKey = stripped;
-        displayPort = stripped.replace(/^(?:Eth|Ethernet)\s*(\d+(?:\/\d+)+|\d+)/i, 'Ethernet $1');
+        baseKey = lane ? `${stripped}_L${lane}` : stripped;
+        const formatted = stripped.replace(/^(?:Eth|Ethernet)\s*(\d+(?:\/\d+)+|\d+)/i, 'Ethernet $1');
+        displayPort = lane ? `${formatted} (Lane ${lane})` : formatted;
       }
 
       if (!groupMap.has(baseKey)) {

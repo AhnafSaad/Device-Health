@@ -22,12 +22,17 @@ export const isAristaSwitch = (brand?: string): boolean => {
   return b.includes('arista');
 };
 
+export const isJuniperSwitch = (brand?: string): boolean => {
+  const b = (brand || '').toLowerCase();
+  return b.includes('juniper');
+};
+
 /**
- * Cisco switches do not support HOST-RESOURCES-MIB storage polling,
- * so the Storage & Memory card is strictly skipped for Cisco switches.
+ * Cisco and Juniper switches do not support/require HOST-RESOURCES-MIB storage polling,
+ * so the Storage & Memory card is strictly skipped for them.
  */
 export const skipStorageForSwitch = (brand?: string): boolean => {
-  return isCiscoSwitch(brand);
+  return isCiscoSwitch(brand) || isJuniperSwitch(brand);
 };
 
 export const parseOpticalSensors = (raw: any): Array<{ index: number | string; dbm: number; port?: string | null; label?: string | null }> => {
