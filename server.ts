@@ -339,7 +339,36 @@ export interface NormalizedTelemetry {
   temperature_sensors?: any;
 }
 
-const memoryDevices: DeviceRecord[] = [];
+const memoryDevices: DeviceRecord[] = [
+  {
+    id: '51',
+    ip_address: '103.154.48.188',
+    hostname: 'localhost',
+    brand: 'Dell',
+    device_type: 'Server',
+    snmp_community: 'razu0223',
+    location: 'Kaliakoir',
+    datacenter_name: 'Felicity',
+    rack_number: 'Rack 01',
+    created_at: new Date().toISOString(),
+    status: 'online',
+    health: 'Normal',
+  },
+  {
+    id: '12',
+    ip_address: '103.129.209.218',
+    hostname: 'razu-ProLiant-DL380-Gen9',
+    brand: 'HP',
+    device_type: 'Server',
+    snmp_community: 'public',
+    location: 'Dhaka',
+    datacenter_name: 'Yassin Tower',
+    rack_number: 'Rack 01',
+    created_at: new Date().toISOString(),
+    status: 'online',
+    health: 'Normal',
+  },
+];
 
 // Register memory devices with SNMP background scheduler
 registerMemoryDevicesProvider(() => memoryDevices);
@@ -2785,6 +2814,11 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Setup Agent download endpoint
 app.get('/setup-agent.sh', (_req: Request, res: Response) => {
   res.sendFile(path.resolve(__dirname, 'public', 'setup-agent.sh'));
+});
+
+// Standalone IPMI health script download endpoint
+app.get('/ipmi-health.sh', (_req: Request, res: Response) => {
+  res.sendFile(path.resolve(__dirname, 'public', 'ipmi-health.sh'));
 });
 
 // Vite or Static assets mounting
