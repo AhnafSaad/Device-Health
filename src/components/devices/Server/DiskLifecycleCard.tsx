@@ -190,7 +190,7 @@ export const DiskLifecycleCard: React.FC<DiskLifecycleCardProps> = (props) => {
           </div>
 
           {/* Powered On, Total Data Read, Total Data Written, Estimated Remaining Life */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-2.5">
             <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
                 <Clock className="w-3.5 h-3.5 text-sky-500" />
@@ -238,7 +238,7 @@ export const DiskLifecycleCard: React.FC<DiskLifecycleCardProps> = (props) => {
       {isHdd && (
         <div className="space-y-2.5">
           {/* Row 1: SMART Status + Power On and Error Counters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-base-content/70">SMART Status:</span>
@@ -293,7 +293,7 @@ export const DiskLifecycleCard: React.FC<DiskLifecycleCardProps> = (props) => {
 
           {/* Row 2: Total Data Read and Total Data Written Cards (whenever lifetime_bytes_read or lifetime_bytes_written are not null) */}
           {hasLifetimeBytes && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 space-y-0.5">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/70">
                   <Activity className="w-3.5 h-3.5 text-emerald-500" />

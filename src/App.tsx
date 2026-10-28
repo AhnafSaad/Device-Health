@@ -1096,7 +1096,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 sm:pb-6 flex flex-col min-h-0">
+      <main className={`flex-1 w-full flex flex-col min-h-0 ${currentView === 'inspect' ? '' : 'px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 sm:pb-6'}`}>
         
         {/* Route Protection: Admin-Only Pages (Users, Thresholds, Datacenters) */}
         {(currentView === 'admin-users' || currentView === 'data-centers' || currentView === 'thresholds') && currentUserRole !== 'admin' ? (

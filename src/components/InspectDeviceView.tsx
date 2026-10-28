@@ -472,7 +472,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-3.5 sm:space-y-4 pb-10 animate-fadeIn">
+    <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fadeIn">
       {/* 1. Breadcrumbs & Top Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-2 text-xs text-base-content/60 font-medium">
@@ -1169,9 +1169,9 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                       Not available on this host
                     </div>
                   ) : (
-                    <div className="divide-y divide-base-content/10 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
                       {disks.map((d, idx) => (
-                        <div key={d.device || idx} className={idx > 0 ? 'pt-4' : ''}>
+                        <div key={d.device || idx} className="p-3.5 sm:p-4 rounded-xl bg-base-200/30 border border-base-content/5 hover:border-base-content/15 transition-all">
                           <DiskLifecycleCard disk={d} />
                         </div>
                       ))}

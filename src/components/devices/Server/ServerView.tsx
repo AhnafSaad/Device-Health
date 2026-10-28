@@ -372,7 +372,7 @@ export const ServerView: React.FC<ServerViewProps> = ({
   const healthInfo = calculateDeviceHealth(server);
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-3.5 sm:space-y-4 pb-10 animate-fadeIn">
+    <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fadeIn">
       {/* 1. Breadcrumbs & Header Card */}
       <DeviceHeader
         server={server}
@@ -383,8 +383,14 @@ export const ServerView: React.FC<ServerViewProps> = ({
         isPollingNow={isPollingNow}
       />
 
-      {/* 2. Smart Diagnostic Alerts & Health Banner - Unified via calculateDeviceHealth */}
-      <div className="space-y-3">
+      {/* 2. Main Dashboard Layout (2-Column Split on Desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* Left Main Section (lg:col-span-8 or xl:col-span-9): Operational Alerts, Resource Utilization, Storage & Memory, Disks, Network, Power/Fans */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-6 min-w-0">
+
+          {/* Operational Alerts & Fleet Health */}
+          <div className="space-y-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5 px-1">
           <Activity className="w-3.5 h-3.5 text-primary" />
           Diagnostic Alerts &amp; Fleet Health
@@ -509,14 +515,11 @@ export const ServerView: React.FC<ServerViewProps> = ({
         )}
       </div>
 
-      {/* 3. Two-Column Dashboard Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
+      {/* Top Metrics Section (Resource Utilization & Storage Memory): 2-Column Responsive Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         
-        {/* Left Column (8 cols): Real-Time Telemetry, Storage & Diagnostics */}
-        <div className="lg:col-span-8 grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-stretch">
-          
-          {/* Resource Utilization Card (Left) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
+        {/* Resource Utilization Card (Left) */}
+        <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -797,39 +800,40 @@ export const ServerView: React.FC<ServerViewProps> = ({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Disk Health & Lifecycle Card (Full Span) */}
-          <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-primary" />
-                Disk Health &amp; Lifecycle
-              </h3>
-              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
-                {hasDisks ? `${disks.length} physical ${disks.length === 1 ? 'disk' : 'disks'} detected` : 'Physical storage telemetry'}
-              </span>
-            </div>
-
-            {!hasDisks ? (
-              <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/50 text-center py-6">
-                Not available on this host
-              </div>
-            ) : (
-              <div className="divide-y divide-base-content/10 space-y-4">
-                {disks.map((d, idx) => (
-                  <div key={d.device || idx} className={idx > 0 ? 'pt-4' : ''}>
-                    <DiskLifecycleCard disk={d} />
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Disk Health & Lifecycle Card (Multi-Column Responsive Grid) */}
+        <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-primary" />
+              Disk Health &amp; Lifecycle
+            </h3>
+            <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
+              {hasDisks ? `${disks.length} physical ${disks.length === 1 ? 'disk' : 'disks'} detected` : 'Physical storage telemetry'}
+            </span>
           </div>
 
-          {/* Network Ports & Interface Status (Full Span - if present) */}
-          {allPorts.length > 0 && (
-            <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
+          {!hasDisks ? (
+            <div className="p-4 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/50 text-center py-6">
+              Not available on this host
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
+              {disks.map((d, idx) => (
+                <div key={d.device || idx} className="p-3.5 sm:p-4 rounded-xl bg-base-200/30 border border-base-content/5 hover:border-base-content/15 transition-all">
+                  <DiskLifecycleCard disk={d} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Network Ports & Interface Status (Full Span - if present) */}
+        {allPorts.length > 0 && (
+          <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                     <Network className="w-4 h-4 text-primary" />
                     Network Ports &amp; Interface Status
@@ -1224,8 +1228,8 @@ export const ServerView: React.FC<ServerViewProps> = ({
             </div>
           )}
 
-          {/* Power Supplies, Fans & Temperature (Full Span) */}
-          <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
+          {/* Power Supplies, Fans & Temperature (Full Span of Left Section) */}
+          <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-emerald-500" />
@@ -1398,11 +1402,11 @@ export const ServerView: React.FC<ServerViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column (4 cols): Hardware Specifications & SRE Diagnostics */}
-        <div className="lg:col-span-4 space-y-4 sm:space-y-5">
+        {/* Right Sidebar Section (lg:col-span-4 or xl:col-span-3): Hardware Specifications & SRE Diagnostics (Sticky on desktop) */}
+        <div className="lg:col-span-4 xl:col-span-3 space-y-6 lg:sticky lg:top-6 lg:self-start">
           
           {/* Hardware Info Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
+          <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
               <Terminal className="w-4 h-4 text-primary" />
               Hardware Specifications
@@ -1515,7 +1519,7 @@ export const ServerView: React.FC<ServerViewProps> = ({
           </div>
 
           {/* Quick SRE Diagnostic Actions Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5">
+          <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
               <Radio className="w-4 h-4 text-primary" />
               Immediate SRE Diagnostics
