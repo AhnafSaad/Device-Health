@@ -131,7 +131,7 @@ export const RouterForm: React.FC<RouterFormProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-base-content/80">
-              Datacenter Facility
+              Data Center or Location
             </label>
             <DatacenterDropdown
               datacenters={datacenters}
@@ -141,9 +141,6 @@ export const RouterForm: React.FC<RouterFormProps> = ({
                 onChange('datacenter_id', dcId);
                 if (selected) {
                   onChange('location', selected.location);
-                  if (selected.racks && selected.racks.length > 0) {
-                    onChange('rack_number', selected.racks[0]);
-                  }
                 }
               }}
               onOpenDcModal={onOpenDcModal || onNavigateToDatacenters}
@@ -151,13 +148,13 @@ export const RouterForm: React.FC<RouterFormProps> = ({
           </div>
 
           <FormInput
-            label="Rack Number"
-            placeholder="Rack 01"
+            label="Rack Number (Optional)"
+            placeholder="e.g. Rack 01 (Optional)"
             value={formData.rack_number}
             onChange={(e) => onChange('rack_number', e.target.value)}
             icon={<Tag className="w-4 h-4" />}
             disabled={disabled}
-            helperText="e.g. Core Rack 01 or Edge A-1"
+            helperText="e.g. Core Rack 01 or Edge A-1 (Optional)"
           />
         </div>
 

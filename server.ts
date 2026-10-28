@@ -292,7 +292,7 @@ interface DeviceRecord {
   datacenter_name?: string;
   snmp_community: string;
   location: string;
-  rack_number: string;
+  rack_number?: string | null;
   created_at: string;
   cpu_usage?: number;
   ram_usage?: number | null;
@@ -2339,7 +2339,7 @@ app.post('/api/devices', requireEditor, async (req: Request, res: Response) => {
     const cleanHost = (hostname && hostname.trim()) ? hostname.trim() : `${cleanType.toLowerCase()}-node-${cleanIp.replace(/\./g, '-')}`;
     const cleanCommunity = (snmp_community && snmp_community.trim()) ? snmp_community.trim() : 'public';
     const cleanLocation = (location && location.trim()) ? location.trim() : 'Global Datacenter';
-    const cleanRack = (rack_number && rack_number.trim()) ? rack_number.trim() : 'Rack TBD';
+    const cleanRack = (rack_number && typeof rack_number === 'string' && rack_number.trim()) ? rack_number.trim() : null;
 
     // IPv4 validation
     const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;

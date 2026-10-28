@@ -128,7 +128,7 @@ export const ServerForm: React.FC<ServerFormProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-base-content/80">
-              Datacenter Facility
+              Data Center or Location
             </label>
             <DatacenterDropdown
               datacenters={datacenters}
@@ -138,9 +138,6 @@ export const ServerForm: React.FC<ServerFormProps> = ({
                 onChange('datacenter_id', dcId);
                 if (selected) {
                   onChange('location', selected.location);
-                  if (selected.racks && selected.racks.length > 0) {
-                    onChange('rack_number', selected.racks[0]);
-                  }
                 }
               }}
               onOpenDcModal={onOpenDcModal || onNavigateToDatacenters}
@@ -148,13 +145,13 @@ export const ServerForm: React.FC<ServerFormProps> = ({
           </div>
 
           <FormInput
-            label="Rack Position / Unit"
-            placeholder="Rack 01"
+            label="Rack Position / Unit (Optional)"
+            placeholder="e.g. Rack 01 (Optional)"
             value={formData.rack_number}
             onChange={(e) => onChange('rack_number', e.target.value)}
             icon={<Tag className="w-4 h-4" />}
             disabled={disabled}
-            helperText="e.g. Rack 01 or Cabinet 04-U12"
+            helperText="e.g. Rack 01 or Cabinet 04-U12 (Optional)"
           />
         </div>
 

@@ -53,7 +53,7 @@ export interface Server {
   diskUsage: number;
   uptime: string;
   location: string;
-  rackNumber: string;
+  rackNumber?: string | null;
   deviceType: DeviceType | string;
   brand?: DeviceBrand | string;
   datacenterId?: string | number;

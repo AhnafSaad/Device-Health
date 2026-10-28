@@ -278,7 +278,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               <th className="py-2.5 px-3.5 text-center">Status</th>
               <th className="py-2.5 px-3.5">Health Telemetry</th>
               <th className="py-2.5 px-3.5 hidden md:table-cell">Core Resources</th>
-              <th className="py-2.5 px-3.5 hidden lg:table-cell">Location &amp; Rack</th>
+              <th className="py-2.5 px-3.5 hidden lg:table-cell">Data Center or Location / Rack</th>
               <th className="py-2.5 px-3.5 text-right">Action</th>
             </tr>
           </thead>

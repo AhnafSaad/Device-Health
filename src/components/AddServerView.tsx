@@ -19,6 +19,7 @@ import { Server, DeviceType, Datacenter } from '../types';
 import { DatacenterDropdown } from './DatacenterDropdown';
 import { fetchWithAuth, clearAuth } from '../utils/auth';
 import { formatRack } from '../utils/rack';
+import { DeviceFormSchema } from '../schemas/deviceSchema';
 
 interface AddServerViewProps {
   onBack: () => void;
@@ -52,7 +53,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     snmp_community: 'public',
     datacenter_id: datacenters.length > 0 ? String(datacenters[0].id) : '',
     location: datacenters.length > 0 ? datacenters[0].location : '',
-    rack_number: 'Rack 01',
+    rack_number: '',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -81,19 +82,20 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     setAlert(null);
     setIsLoading(true);
 
-    const cleanIp = formData.ip_address.trim();
-
-    // 1. IP validation check
-    const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    if (!ipv4Regex.test(cleanIp)) {
+    // Validate using Zod schema (rack is completely optional & nullable)
+    const validationResult = DeviceFormSchema.safeParse(formData);
+    if (!validationResult.success) {
       setIsLoading(false);
+      const firstIssue = validationResult.error.issues[0];
       setAlert({
         type: 'error',
-        message: 'Invalid IPv4 Format',
-        submessage: 'Please provide a valid IPv4 address (e.g. 192.168.1.100).',
+        message: 'Validation Error',
+        submessage: firstIssue?.message || 'Please check your inputs.',
       });
       return;
     }
+
+    const cleanIp = formData.ip_address.trim();
 
     // 2. Check 409 Conflict: IP already exists in servers_info
     if (existingIps.includes(cleanIp)) {
@@ -118,6 +120,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
     const selectedDc = datacenters.find((d) => String(d.id) === String(formData.datacenter_id));
     const finalLocation = selectedDc ? selectedDc.location : formData.location.trim() || 'Global Datacenter';
     const finalDcName = selectedDc ? selectedDc.name : undefined;
+    const cleanRack = formData.rack_number && formData.rack_number.trim() ? formatRack(formData.rack_number) : null;
 
     let pollReachable: boolean | undefined = undefined;
     let polledTelemetry: any = null;
@@ -135,7 +138,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
           datacenter_name: finalDcName,
           snmp_community: formData.snmp_community.trim() || 'public',
           location: finalLocation,
-          rack_number: formatRack(formData.rack_number) || 'Rack TBD',
+          rack_number: cleanRack,
         }),
       });
 
@@ -199,7 +202,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
       location: finalLocation,
       datacenterId: formData.datacenter_id || undefined,
       datacenterName: finalDcName,
-      rackNumber: formatRack(formData.rack_number) || 'Rack TBD',
+      rackNumber: cleanRack,
       deviceType: formData.device_type,
       brand: polledTelemetry?.detected_brand || 'Auto',
       snmpCommunity: formData.snmp_community.trim() || 'public',
@@ -374,7 +377,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-primary" />
-                <span>Data Center (Dynamic Dropdown)</span>
+                <span>Data Center or Location</span>
                 <span className="text-error">*</span>
               </label>
               <a
@@ -396,7 +399,6 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                   ...prev,
                   datacenter_id: dcId,
                   location: selected ? selected.location : prev.location,
-                  rack_number: selected && selected.racks && selected.racks.length > 0 ? formatRack(selected.racks[0]) : prev.rack_number,
                 }));
               }}
               onOpenDcModal={handleManageDcs}
@@ -412,12 +414,12 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
           {/* Row 3: Rack Cabinet & SNMP Community String */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-            {/* Rack Number */}
+            {/* Rack Number (Optional) */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-warning" />
                 <span>Rack Cabinet &amp; Unit</span>
-                <span className="text-error">*</span>
+                <span className="text-base-content/40 font-normal lowercase text-[10px]">(optional)</span>
               </label>
               
               {selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? (
@@ -428,6 +430,7 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                     onChange={handleChange}
                     className="select select-bordered flex-1 text-sm bg-base-200/50 font-mono"
                   >
+                    <option value="">-- None / Unassigned (Optional) --</option>
                     {selectedDc.racks.map((r) => (
                       <option key={r} value={r}>
                         {r}
@@ -442,13 +445,13 @@ export const AddServerView: React.FC<AddServerViewProps> = ({
                   name="rack_number"
                   value={formData.rack_number}
                   onChange={handleChange}
-                  placeholder="e.g. Rack A-01"
+                  placeholder="e.g. Rack A-01 (Optional)"
                   className="w-full px-4 py-2.5 rounded-xl border border-base-content/15 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm font-mono text-base-content placeholder:text-base-content/30 outline-none transition-all"
                 />
               )}
               
               <p className="text-[11px] text-base-content/40 font-mono">
-                Cabinet location
+                Cabinet location (optional)
               </p>
             </div>
 

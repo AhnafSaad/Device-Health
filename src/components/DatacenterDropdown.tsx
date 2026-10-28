@@ -21,7 +21,7 @@ export const DatacenterDropdown: React.FC<DatacenterDropdownProps> = ({
   onOpenDcModal,
   allowAll = false,
   totalCount,
-  placeholder = 'Select Data Center',
+  placeholder = 'Select Data Center or Location',
   className = '',
   size = 'md',
 }) => {

@@ -1487,7 +1487,7 @@ export const ServerView: React.FC<ServerViewProps> = ({
               <div className="p-3 rounded-xl bg-base-200/40 border border-base-content/10">
                 <div className="text-[11px] text-base-content/50 flex items-center gap-1.5 mb-1">
                   <MapPin className="w-3.5 h-3.5 text-secondary" />
-                  Datacenter Facility
+                  Data Center or Location
                 </div>
                 <div className="font-semibold text-base-content">
                   {server.datacenterName || server.location}

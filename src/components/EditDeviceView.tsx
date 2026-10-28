@@ -274,7 +274,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
 
     try {
       const existingHost = device?.hostname || formData.hostname;
-      const cleanRack = formatRack(formData.rack_number) || 'Rack 01';
+      const cleanRack = formData.rack_number && formData.rack_number.trim() ? formatRack(formData.rack_number) : null;
       const payload = {
         id: deviceId,
         ip_address: cleanIp,
@@ -559,7 +559,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-bold text-base-content tracking-tight">
-                    Datacenter &amp; Physical Rack Placement
+                    Data Center or Location &amp; Physical Rack Placement
                   </h3>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-base-200 text-base-content/60">
@@ -571,7 +571,7 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 {/* Datacenter Dropdown */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-base-content flex items-center justify-between">
-                    <span>Datacenter Facility</span>
+                    <span>Data Center or Location</span>
                     {onOpenDcModal && (
                       <button
                         type="button"
@@ -591,11 +591,10 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                         ...prev,
                         datacenter_id: dcId,
                         location: selectedDc ? selectedDc.location : prev.location,
-                        rack_number: selectedDc && selectedDc.racks && selectedDc.racks.length > 0 ? formatRack(selectedDc.racks[0]) : prev.rack_number,
                       }));
                     }}
                     onOpenDcModal={onOpenDcModal}
-                    placeholder="Choose Facility"
+                    placeholder="Choose Data Center or Location"
                   />
                 </div>
 
@@ -617,12 +616,12 @@ export const EditDeviceView: React.FC<EditDeviceViewProps> = ({
                 {/* Rack Number */}
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-bold text-base-content">
-                    Rack
+                    Rack <span className="text-base-content/40 font-normal lowercase text-[10px]">(optional)</span>
                   </label>
                   <input
                     type="text"
                     name="rack_number"
-                    placeholder="e.g. Rack A-01"
+                    placeholder="e.g. Rack A-01 (Optional)"
                     value={formData.rack_number}
                     onChange={handleChange}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-base-content/20 bg-base-200/50 font-mono text-xs text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"

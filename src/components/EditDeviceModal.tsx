@@ -81,7 +81,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
     const cleanIp = ip.trim();
     const existingHost = device.hostname;
     const cleanLocation = location.trim();
-    const cleanRack = formatRack(rackNumber) || 'Unassigned';
+    const cleanRack = rackNumber && rackNumber.trim() ? formatRack(rackNumber) : null;
     const cleanCommunity = snmpCommunity.trim();
 
     if (!cleanIp) {
@@ -310,7 +310,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5 flex items-center justify-between">
-                  <span>Assigned Datacenter</span>
+                  <span>Data Center or Location</span>
                   {datacenterId && (
                     <span className="text-[10px] font-normal text-primary">Connected</span>
                   )}
@@ -351,7 +351,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-base-content/70 mb-1.5">
-                  Rack
+                  Rack <span className="text-base-content/40 font-normal lowercase text-[10px]">(optional)</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40">
@@ -361,7 +361,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
                     type="text"
                     value={rackNumber}
                     onChange={(e) => setRackNumber(e.target.value)}
-                    placeholder="e.g. Rack A-01"
+                    placeholder="e.g. Rack A-01 (Optional)"
                     disabled={isSubmitting}
                     className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm font-mono rounded-xl border border-base-content/20 bg-base-200/50 focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 text-base-content transition-all outline-none"
                   />
