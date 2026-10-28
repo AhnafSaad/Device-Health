@@ -99,7 +99,7 @@ export interface Server {
   ramEccControllers?: { name: string; ce: number; ue: number }[] | null;
   disks?: {
     device: string;
-    type: 'nvme' | 'hdd_sata' | null;
+    type: string | null;
     percentage_used: number | null;
     power_on_hours: number | null;
     lifetime_bytes_read: number | null;

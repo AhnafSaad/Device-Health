@@ -74,6 +74,8 @@ export const formatLifetimeDataBytes = (bytes?: number | null): string => {
   return `${bytes} B`;
 };
 
+export const formatBytes = formatLifetimeDataBytes;
+
 export const getWearTextColor = (val: number): string => {
   if (val < 70) return 'text-emerald-500';
   if (val <= 90) return 'text-amber-500';
