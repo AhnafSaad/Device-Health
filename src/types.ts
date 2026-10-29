@@ -127,6 +127,7 @@ export interface NetworkInterface {
   speed?: number | null;
   type?: string | null;
   mac?: string | null;
+  crc_errors?: number | null;
 }
 
 export type StatusFilter = 'all' | 'online' | 'offline';

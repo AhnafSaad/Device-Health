@@ -624,9 +624,23 @@ export const OLTView: React.FC<OLTViewProps> = ({
                                     {isUp ? 'UP' : 'DOWN'}
                                   </span>
                                 </div>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
-                                  {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
-                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {port.crc_errors !== undefined && port.crc_errors !== null && (
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shrink-0 border ${
+                                        port.crc_errors > 0
+                                          ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                                          : 'bg-base-300/60 border-base-content/10 text-base-content/50'
+                                      }`}
+                                      title={`CRC / FCS Errors: ${port.crc_errors}`}
+                                    >
+                                      CRC: {port.crc_errors}
+                                    </span>
+                                  )}
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
+                                    {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
+                                  </span>
+                                </div>
                               </div>
 
                               <div
@@ -795,9 +809,23 @@ export const OLTView: React.FC<OLTViewProps> = ({
                                       {isUp ? 'UP' : 'DOWN'}
                                     </span>
                                   </div>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
-                                    {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
-                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {port.crc_errors !== undefined && port.crc_errors !== null && (
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shrink-0 border ${
+                                          port.crc_errors > 0
+                                            ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                                            : 'bg-base-300/60 border-base-content/10 text-base-content/50'
+                                        }`}
+                                        title={`CRC / FCS Errors: ${port.crc_errors}`}
+                                      >
+                                        CRC: {port.crc_errors}
+                                      </span>
+                                    )}
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
+                                      {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 <div
