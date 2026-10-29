@@ -24,6 +24,14 @@ import {
   getLatestTelemetryMap,
   runSnmpPollCycle
 } from './lib/snmp/scheduler.js';
+import {
+  getTelegramSettings,
+  updateTelegramSettings,
+  sendTestTelegramAlert,
+  getTelegramAlertHistory,
+  clearTelegramCooldown,
+  checkAndDispatchTelegramAlert
+} from './lib/telegram.js';
 
 declare module 'express-session' {
   interface SessionData {
@@ -710,6 +718,78 @@ app.put('/api/settings/snmp-poll-cron', requireAdmin, async (req: Request, res: 
       error: 'Internal Server Error',
       message: error?.message || 'Failed to update SNMP polling cron interval.',
     });
+  }
+});
+
+// ==========================================
+// TELEGRAM ALERT BOT API ENDPOINTS
+// ==========================================
+
+// GET /api/telegram/settings
+app.get('/api/telegram/settings', async (_req: Request, res: Response) => {
+  try {
+    const settings = await getTelegramSettings();
+    return res.json(settings);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to fetch Telegram settings.' });
+  }
+});
+
+// POST /api/telegram/settings
+app.post('/api/telegram/settings', async (req: Request, res: Response) => {
+  try {
+    const { botToken, chatId, enabled, cooldownHours } = req.body || {};
+    const updated = await updateTelegramSettings({ botToken, chatId, enabled, cooldownHours });
+    return res.json({ status: 'success', message: 'Telegram settings updated successfully.', settings: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to update Telegram settings.' });
+  }
+});
+
+// POST /api/telegram/test
+app.post('/api/telegram/test', async (req: Request, res: Response) => {
+  try {
+    const { chatId, botToken } = req.body || {};
+    const result = await sendTestTelegramAlert(chatId, botToken);
+    return res.json({ status: 'success', message: 'Test message sent successfully to Telegram!', result });
+  } catch (error: any) {
+    return res.status(400).json({ error: 'Telegram Error', message: error?.message || 'Failed to send test message to Telegram.' });
+  }
+});
+
+// GET /api/telegram/history
+app.get('/api/telegram/history', async (_req: Request, res: Response) => {
+  try {
+    const history = getTelegramAlertHistory();
+    return res.json(history);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to retrieve alert history.' });
+  }
+});
+
+// POST /api/telegram/clear-cooldown
+app.post('/api/telegram/clear-cooldown', async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.body || {};
+    const result = clearTelegramCooldown(deviceId);
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to reset cooldown.' });
+  }
+});
+
+// POST /api/telegram/trigger-device-alert/:id
+app.post('/api/telegram/trigger-device-alert/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const device = memoryDevices.find((d) => String(d.id) === String(id) || d.ip_address === String(id));
+    if (!device) {
+      return res.status(404).json({ error: 'Device Not Found', message: `Device ${id} not found.` });
+    }
+    const result = await checkAndDispatchTelegramAlert(device, device);
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to check alert.' });
   }
 });
 

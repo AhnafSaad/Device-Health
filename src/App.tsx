@@ -14,6 +14,7 @@ import { DeviceRenderer } from './components/devices/DeviceRenderer';
 import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { ThresholdsView } from './components/ThresholdsView';
+import { TelegramAlertModal } from './components/TelegramAlertModal';
 import { fetchWithAuth, clearAuth } from './utils/auth';
 import { calculateDeviceHealth } from './utils/deviceHealth';
 import { CheckCircle2, AlertCircle, ShieldAlert, X as CloseIcon } from 'lucide-react';
@@ -40,6 +41,7 @@ export default function App() {
   const [datacenters, setDatacenters] = useState<Datacenter[]>(INITIAL_DATACENTERS);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'thresholds'>('dashboard');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
@@ -1088,6 +1090,7 @@ export default function App() {
         deviceCount={servers.length}
         onOpenUsersModal={currentUserRole === 'admin' ? () => router.push('/admin/users') : undefined}
         onNavigateThresholds={currentUserRole === 'admin' ? () => router.push('/admin/thresholds') : undefined}
+        onOpenTelegramModal={() => setIsTelegramModalOpen(true)}
         currentUsername={currentUsername}
         role={currentUserRole}
         onLogout={handleLogout}
@@ -1317,6 +1320,12 @@ export default function App() {
         }}
         device={deletingServer}
         onDeviceDeleted={handleDeviceDeleted}
+      />
+
+      {/* Telegram Alert Bot Modal */}
+      <TelegramAlertModal
+        isOpen={isTelegramModalOpen}
+        onClose={() => setIsTelegramModalOpen(false)}
       />
 
       {/* Sleek Floating Toast Notification */}

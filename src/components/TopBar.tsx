@@ -11,7 +11,8 @@ import {
   ChevronDown,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  Send
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -30,6 +31,7 @@ interface TopBarProps {
   deviceCount?: number;
   onOpenUsersModal?: () => void;
   onNavigateThresholds?: () => void;
+  onOpenTelegramModal?: () => void;
   currentUsername?: string;
   role?: 'admin' | 'editor' | 'viewer';
   onLogout?: () => void;
@@ -53,6 +55,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   deviceCount = 0,
   onOpenUsersModal,
   onNavigateThresholds,
+  onOpenTelegramModal,
   currentUsername = 'admin',
   role = 'admin',
   onLogout,
@@ -235,9 +238,40 @@ export const TopBar: React.FC<TopBarProps> = ({
                     )}
                   </button>
                 )}
+
+                {onOpenTelegramModal && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsSettingsOpen(false);
+                      onOpenTelegramModal();
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between text-base-content/80 hover:bg-base-200 hover:text-base-content transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Send className="w-3.5 h-3.5 text-sky-500" />
+                      <span>Telegram Alerts</span>
+                    </div>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  </button>
+                )}
               </div>
             )}
           </div>
+          )}
+
+          {onOpenTelegramModal && (
+            <button
+              type="button"
+              onClick={onOpenTelegramModal}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-sky-500 hover:text-sky-600 hover:bg-sky-500/10 border border-sky-500/20 transition-all duration-200 cursor-pointer"
+              title="Telegram Alert Bot (1 Alert / Device / Day)"
+            >
+              <Send className="w-3.5 h-3.5 text-sky-500" />
+              <span>Telegram Bot</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
           )}
         </div>
 
