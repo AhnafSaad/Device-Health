@@ -15,6 +15,7 @@ import { LoginView } from './components/LoginView';
 import { ManageUsersPageView } from './components/ManageUsersPageView';
 import { ThresholdsView } from './components/ThresholdsView';
 import { TelegramAlertModal } from './components/TelegramAlertModal';
+import { IncidentsView } from './components/IncidentsView';
 import { fetchWithAuth, clearAuth } from './utils/auth';
 import { calculateDeviceHealth } from './utils/deviceHealth';
 import { CheckCircle2, AlertCircle, ShieldAlert, X as CloseIcon } from 'lucide-react';
@@ -42,7 +43,7 @@ export default function App() {
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isDcModalOpen, setIsDcModalOpen] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'thresholds'>('dashboard');
+  const [currentView, setCurrentView] = useState<'incidents' | 'dashboard' | 'add-device' | 'inspect' | 'data-centers' | 'admin-users' | 'thresholds'>('incidents');
   const [inspectDeviceId, setInspectDeviceId] = useState<string | null>(null);
 
   // Three-state authentication lifecycle: 'checking' | 'authenticated' | 'unauthenticated'
@@ -140,7 +141,12 @@ export default function App() {
       setInspectDeviceId(null);
       return;
     }
-    setCurrentView('dashboard');
+    if (path === '/dashboard' || path === '/fleet' || path === '/all-devices') {
+      setCurrentView('dashboard');
+      setInspectDeviceId(null);
+      return;
+    }
+    setCurrentView('incidents');
     setInspectDeviceId(null);
   }, []);
 
@@ -1046,6 +1052,22 @@ export default function App() {
   const offlineCount = useMemo(() => servers.filter((s) => s.status === 'offline').length, [servers]);
   const clusterHealthPercent = Math.round((onlineCount / (servers.length || 1)) * 100);
 
+  // Incident counts for TopBar and quick alerts
+  const { incidentCount, criticalCount } = useMemo(() => {
+    let inc = 0;
+    let crit = 0;
+    servers.forEach((srv) => {
+      const h = calculateDeviceHealth(srv);
+      if (h.health === 'Critical' || h.isOffline || srv.status === 'offline') {
+        inc++;
+        crit++;
+      } else if (h.health === 'Warning') {
+        inc++;
+      }
+    });
+    return { incidentCount: inc, criticalCount: crit };
+  }, [servers]);
+
   // Existing IPs list for 409 conflict detection
   const existingIps = useMemo(() => servers.map((s) => s.ip), [servers]);
 
@@ -1078,7 +1100,8 @@ export default function App() {
         clusterHealthPercent={clusterHealthPercent}
         currentView={currentView}
         onNavigate={(view) => {
-          if (view === 'dashboard') router.push('/');
+          if (view === 'incidents') router.push('/');
+          else if (view === 'dashboard') router.push('/dashboard');
           else if (view === 'add-device') {
             if (currentUserRole !== 'viewer') {
               router.push('/add-device');
@@ -1088,6 +1111,8 @@ export default function App() {
         onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
         datacenterCount={enrichedDatacenters.length}
         deviceCount={servers.length}
+        incidentCount={incidentCount}
+        criticalCount={criticalCount}
         onOpenUsersModal={currentUserRole === 'admin' ? () => router.push('/admin/users') : undefined}
         onNavigateThresholds={currentUserRole === 'admin' ? () => router.push('/admin/thresholds') : undefined}
         onOpenTelegramModal={() => setIsTelegramModalOpen(true)}
@@ -1198,6 +1223,21 @@ export default function App() {
             onBack={() => router.push('/')}
             fetchWithAuth={fetchWithAuth}
             onUnauthorized={handleUnauthorized}
+          />
+        ) : currentView === 'incidents' ? (
+          <IncidentsView
+            servers={servers}
+            datacenters={enrichedDatacenters}
+            selectedServer={selectedServer}
+            onSelectServer={handleSelectServer}
+            onInspectServer={handleInspectServer}
+            onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+            onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
+            onPollDevice={handlePollSingleDevice}
+            pollingDeviceIds={pollingDeviceIds}
+            onNavigateToDashboard={() => router.push('/dashboard')}
+            onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+            currentUserRole={currentUserRole}
           />
         ) : (
           /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */

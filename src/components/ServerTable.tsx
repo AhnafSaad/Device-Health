@@ -18,8 +18,10 @@ import {
   Pencil,
   Trash2,
   MoreVertical,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
+import { ActiveIssuesCell } from './ActiveIssuesCell';
 
 interface ServerTableProps {
   servers: Server[];
@@ -41,6 +43,7 @@ interface ServerTableProps {
   onSelectDatacenterFilter?: (dcId: string) => void;
   onClearSearch?: () => void;
   onClearAllFilters?: () => void;
+  isIncidentsMode?: boolean;
   children?: React.ReactNode;
 }
 
@@ -64,6 +67,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   onSelectDatacenterFilter,
   onClearSearch,
   onClearAllFilters,
+  isIncidentsMode = false,
   children,
 }) => {
   const handleInspect = (server: Server) => {
@@ -277,7 +281,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               <th className="py-2.5 px-3.5">Device &amp; Identity</th>
               <th className="py-2.5 px-3.5 text-center">Status</th>
               <th className="py-2.5 px-3.5">Health Telemetry</th>
-              <th className="py-2.5 px-3.5 hidden md:table-cell">Core Resources</th>
+              <th className="py-2.5 px-3.5 hidden md:table-cell">
+                {isIncidentsMode ? 'Active Issues & Root Causes' : 'Core Resources'}
+              </th>
               <th className="py-2.5 px-3.5 hidden lg:table-cell">Data Center or Location / Rack</th>
               <th className="py-2.5 px-3.5 text-right">Action</th>
             </tr>
@@ -286,23 +292,35 @@ export const ServerTable: React.FC<ServerTableProps> = ({
             {servers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-16 px-4">
-                  <div className="max-w-xs mx-auto flex flex-col items-center justify-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shadow-md shadow-warning/5">
-                      <AlertTriangle className="w-6 h-6" />
+                  {isIncidentsMode && !hasAnyFilterActive ? (
+                    <div className="max-w-md mx-auto flex flex-col items-center justify-center gap-3 py-6">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-lg shadow-emerald-500/10">
+                        <CheckCircle2 className="w-7 h-7" />
+                      </div>
+                      <p className="font-bold text-base-content text-base">All Monitored Devices Healthy</p>
+                      <p className="text-xs text-base-content/60 text-center">
+                        Zero active critical or warning incidents detected across the fleet. All operational metrics and hardware units meet nominal SLA standards.
+                      </p>
                     </div>
-                    <p className="font-bold text-base-content text-sm">No devices match criteria</p>
-                    <p className="text-xs text-base-content/60 text-center">
-                      Try adjusting or clearing your search query or device filter to inspect other devices in the fleet.
-                    </p>
-                    {hasAnyFilterActive && onClearAllFilters && (
-                      <button
-                        onClick={onClearAllFilters}
-                        className="btn btn-sm btn-primary rounded-xl mt-1 text-xs"
-                      >
-                        Reset All Filters
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <div className="max-w-xs mx-auto flex flex-col items-center justify-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shadow-md shadow-warning/5">
+                        <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <p className="font-bold text-base-content text-sm">No devices match criteria</p>
+                      <p className="text-xs text-base-content/60 text-center">
+                        Try adjusting or clearing your search query or device filter to inspect other devices in the fleet.
+                      </p>
+                      {hasAnyFilterActive && onClearAllFilters && (
+                        <button
+                          onClick={onClearAllFilters}
+                          className="btn btn-sm btn-primary rounded-xl mt-1 text-xs"
+                        >
+                          Reset All Filters
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -474,9 +492,11 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       </div>
                     </td>
 
-                    {/* 4. Core Resources: CPU Usage (%) for all device types, RAM Usage (%) only for Server, plus PSU chips */}
+                    {/* 4. Core Resources OR Active Issues & Root Causes */}
                     <td className="py-2.5 px-3.5 hidden md:table-cell">
-                      {isOnline ? (
+                      {isIncidentsMode ? (
+                        <ActiveIssuesCell server={server} />
+                      ) : isOnline ? (
                         <div className="space-y-1.5 w-44 sm:w-52">
                           {server.metricsAvailable === false ? (
                             <div className="flex items-center justify-between text-[10px] font-mono leading-none">

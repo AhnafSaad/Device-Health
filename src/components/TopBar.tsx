@@ -12,7 +12,8 @@ import {
   LogOut,
   Sun,
   Moon,
-  Send
+  Send,
+  AlertOctagon
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -24,11 +25,13 @@ interface TopBarProps {
   pollIntervalMs?: number;
   setPollIntervalMs?: (ms: number) => void;
   clusterHealthPercent: number;
-  currentView: 'dashboard' | 'add-device' | 'add-server' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds';
-  onNavigate: (view: 'dashboard' | 'add-device') => void;
+  currentView: 'incidents' | 'dashboard' | 'add-device' | 'add-server' | 'inspect' | 'data-centers' | 'admin-users' | 'admin-polling' | 'thresholds';
+  onNavigate: (view: 'incidents' | 'dashboard' | 'add-device') => void;
   onOpenDcModal?: () => void;
   datacenterCount?: number;
   deviceCount?: number;
+  incidentCount?: number;
+  criticalCount?: number;
   onOpenUsersModal?: () => void;
   onNavigateThresholds?: () => void;
   onOpenTelegramModal?: () => void;
@@ -53,6 +56,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenDcModal,
   datacenterCount,
   deviceCount = 0,
+  incidentCount = 0,
+  criticalCount = 0,
   onOpenUsersModal,
   onNavigateThresholds,
   onOpenTelegramModal,
@@ -92,7 +97,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Brand Logo & Title */}
         <div className="flex items-center gap-3.5">
           <div 
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('incidents')}
             className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-content shadow-lg shadow-primary/25 cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95"
             title="HealthStream - Infrastructure Telemetry"
           >
@@ -103,7 +108,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span 
-                onClick={() => onNavigate('dashboard')}
+                onClick={() => onNavigate('incidents')}
                 className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-base-content via-base-content/90 to-base-content/70 bg-clip-text text-transparent cursor-pointer"
               >
                 HealthStream
@@ -120,16 +125,41 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Center/Switch: Segmented View Navigation */}
         <div className="flex items-center bg-base-200/80 p-1 rounded-xl border border-base-content/10 shadow-inner">
+          {/* 1. Incidents Tab (Primary Landing View) */}
+          <button
+            onClick={() => onNavigate('incidents')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+              currentView === 'incidents'
+                ? 'bg-base-100 text-rose-600 dark:text-rose-400 shadow-sm shadow-base-content/5 font-bold'
+                : 'text-base-content/70 hover:text-rose-500 hover:bg-base-100/50'
+            }`}
+            title="Active Incidents: Critical & Warning Devices"
+          >
+            <AlertOctagon className={`w-3.5 h-3.5 ${incidentCount > 0 ? 'text-rose-500 animate-pulse' : ''}`} />
+            <span>Incidents</span>
+            {incidentCount > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                criticalCount > 0
+                  ? 'bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400'
+                  : 'bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400'
+              }`}>
+                {incidentCount}
+              </span>
+            )}
+          </button>
+
+          {/* 2. Full Fleet Dashboard Tab */}
           <button
             onClick={() => onNavigate('dashboard')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
               currentView === 'dashboard'
                 ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
                 : 'text-base-content/60 hover:text-base-content hover:bg-base-100/50'
             }`}
+            title="All Fleet Devices Unfiltered"
           >
             <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Dashboard</span>
+            <span>Fleet Dashboard</span>
           </button>
 
           {role !== 'viewer' && (
