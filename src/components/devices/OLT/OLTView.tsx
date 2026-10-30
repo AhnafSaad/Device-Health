@@ -629,11 +629,25 @@ export const OLTView: React.FC<OLTViewProps> = ({
                                 </span>
                               </div>
 
-                              <div
-                                className="font-mono font-bold text-xs text-base-content line-clamp-2 break-all leading-tight w-full"
-                                title={port.name}
-                              >
-                                {port.name}
+                              <div className="flex items-center justify-between gap-1.5 min-w-0">
+                                <div
+                                  className="font-mono font-bold text-xs text-base-content truncate leading-tight"
+                                  title={port.name}
+                                >
+                                  {port.name}
+                                </div>
+                                {port.crc_errors !== null && port.crc_errors !== undefined && (
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border ${
+                                      port.crc_errors > 0
+                                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                        : 'bg-base-200/80 text-base-content/60 border-base-content/10'
+                                    }`}
+                                    title={`CRC Errors: ${port.crc_errors.toLocaleString()}`}
+                                  >
+                                    CRC: {port.crc_errors.toLocaleString()}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -800,13 +814,27 @@ export const OLTView: React.FC<OLTViewProps> = ({
                                   </span>
                                 </div>
 
+                              <div className="flex items-center justify-between gap-1.5 min-w-0">
                                 <div
-                                  className="font-mono font-bold text-xs sm:text-sm text-base-content line-clamp-2 break-all leading-tight w-full"
+                                  className="font-mono font-bold text-xs sm:text-sm text-base-content truncate leading-tight"
                                   title={port.name}
                                 >
                                   {port.name}
                                 </div>
+                                {port.crc_errors !== null && port.crc_errors !== undefined && (
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border ${
+                                      port.crc_errors > 0
+                                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                        : 'bg-base-200/80 text-base-content/60 border-base-content/10'
+                                    }`}
+                                    title={`CRC Errors: ${port.crc_errors.toLocaleString()}`}
+                                  >
+                                    CRC: {port.crc_errors.toLocaleString()}
+                                  </span>
+                                )}
                               </div>
+                            </div>
 
                               <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
                                 <span className="text-base-content/50 uppercase text-[10px]">

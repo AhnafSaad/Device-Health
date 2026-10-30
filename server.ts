@@ -1478,6 +1478,12 @@ export function sanitizeDeviceRow(r: any) {
   if (typeof r.interfaces === 'string') {
     try { r.interfaces = JSON.parse(r.interfaces); } catch {}
   }
+  if (Array.isArray(r.interfaces)) {
+    r.interfaces = r.interfaces.map((iface: any) => ({
+      ...iface,
+      crc_errors: typeof iface.crc_errors === 'number' && !isNaN(iface.crc_errors) ? iface.crc_errors : (iface.crc_errors === null ? null : 0),
+    }));
+  }
   if (typeof r.ram_ecc_controllers === 'string') {
     try { r.ram_ecc_controllers = JSON.parse(r.ram_ecc_controllers); } catch {}
   }
