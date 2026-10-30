@@ -290,19 +290,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             )}
           </div>
           )}
-
-          {onOpenTelegramModal && (
-            <button
-              type="button"
-              onClick={onOpenTelegramModal}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-sky-500 hover:text-sky-600 hover:bg-sky-500/10 border border-sky-500/20 transition-all duration-200 cursor-pointer"
-              title="Telegram Alert Bot (1 Alert / Device / Day)"
-            >
-              <Send className="w-3.5 h-3.5 text-sky-500" />
-              <span>Telegram Bot</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </button>
-          )}
         </div>
 
         {/* Right Section: Telemetry Pulse, Cluster Health & Operator Status */}
