@@ -157,7 +157,8 @@ VALUES
   ('optical_tx', 'All', -8, -12, true),
   ('optical_rx', 'All', -8, -20, true),
   ('ram_ecc_corrected', 'All', 10, 50, true),
-  ('ram_ecc_uncorrected', 'All', 1, 1, true)
+  ('ram_ecc_uncorrected', 'All', 1, 1, true),
+  ('crc_errors', 'All', 10, 50, true)
 ON CONFLICT (metric, device_type) DO NOTHING;
 
 

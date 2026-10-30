@@ -248,8 +248,14 @@ export const RouterView: React.FC<RouterViewProps> = ({
     return getRouterDefaultInterfaces();
   };
 
-  // Safe interface lists
-  const allPorts = getDeviceInterfaces(activeServer);
+  // Safe interface lists (prioritize ports with higher CRC errors at the front)
+  const rawPorts = getDeviceInterfaces(activeServer);
+  const allPorts = [...rawPorts].sort((a, b) => {
+    const aCrc = typeof a.crc_errors === 'number' ? a.crc_errors : 0;
+    const bCrc = typeof b.crc_errors === 'number' ? b.crc_errors : 0;
+    if (bCrc !== aCrc) return bCrc - aCrc;
+    return 0;
+  });
 
   const isPhysicalPort = (p: NetworkInterface): boolean => {
     const t = (p.type || '').toLowerCase();

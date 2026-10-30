@@ -1185,7 +1185,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
           {/* Network Ports & Interface Status (Router, Switch, or any device with interfaces) */}
           {((deviceType === 'Router' || deviceType === 'Switch') || (Array.isArray(activeServer.interfaces) && activeServer.interfaces.length > 0)) && (
             (() => {
-              const allPorts = getDeviceInterfaces(activeServer);
+              const rawPorts = getDeviceInterfaces(activeServer);
+              const allPorts = [...rawPorts].sort((a, b) => {
+                const aCrc = typeof a.crc_errors === 'number' ? a.crc_errors : 0;
+                const bCrc = typeof b.crc_errors === 'number' ? b.crc_errors : 0;
+                if (bCrc !== aCrc) return bCrc - aCrc;
+                return 0;
+              });
               const isRouter = deviceType === 'Router';
 
               const isPhysicalPort = (p: NetworkInterface): boolean => {

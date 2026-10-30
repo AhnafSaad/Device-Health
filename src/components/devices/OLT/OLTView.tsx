@@ -201,12 +201,19 @@ export const OLTView: React.FC<OLTViewProps> = ({
     return `${Math.round(speedBps / 1000)} Kbps`;
   };
 
-  // Ports
-  const allPorts: NetworkInterface[] = Array.isArray(activeServer.interfaces) && activeServer.interfaces.length > 0
+  // Ports (prioritize ports with higher CRC errors at the front)
+  const rawPorts: NetworkInterface[] = Array.isArray(activeServer.interfaces) && activeServer.interfaces.length > 0
     ? activeServer.interfaces
     : Array.isArray(server.interfaces) && server.interfaces.length > 0
     ? server.interfaces
     : [];
+
+  const allPorts: NetworkInterface[] = [...rawPorts].sort((a, b) => {
+    const aCrc = typeof a.crc_errors === 'number' ? a.crc_errors : 0;
+    const bCrc = typeof b.crc_errors === 'number' ? b.crc_errors : 0;
+    if (bCrc !== aCrc) return bCrc - aCrc;
+    return 0;
+  });
 
   const headlinePorts = allPorts;
   const totalPorts = headlinePorts.length;

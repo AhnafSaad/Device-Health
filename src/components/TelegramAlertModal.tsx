@@ -70,6 +70,10 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
   const [botToken, setBotToken] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [showTokenInput, setShowTokenInput] = useState(false);
+  const [cooldownUnit, setCooldownUnit] = useState<'hours' | 'days'>('days');
+  const [cooldownValue, setCooldownValue] = useState<number>(1);
+
+  const effectiveCooldownHours = cooldownUnit === 'days' ? cooldownValue * 24 : cooldownValue;
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -87,6 +91,14 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
         setSettings(sData);
         setChatId(sData.chatId || '');
         setEnabled(sData.enabled !== false);
+        const hours = Number(sData.cooldownHours) || 24;
+        if (hours % 24 === 0 && hours >= 24) {
+          setCooldownUnit('days');
+          setCooldownValue(hours / 24);
+        } else {
+          setCooldownUnit('hours');
+          setCooldownValue(hours);
+        }
       }
 
       if (resHistory.ok) {
@@ -119,6 +131,7 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
       const payload: any = {
         chatId: chatId.trim(),
         enabled,
+        cooldownHours: effectiveCooldownHours,
       };
       if (showTokenInput && botToken.trim()) {
         payload.botToken = botToken.trim();
@@ -219,7 +232,7 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
                 </span>
               </div>
               <p className="text-xs text-base-content/60 mt-0.5">
-                Instant Warning &amp; Critical notifications • Policy: 1 alert per device per day
+                Instant Warning &amp; Critical notifications • Policy: {settings?.policy || `1 alert per device every ${cooldownUnit === 'days' ? `${cooldownValue} day${cooldownValue > 1 ? 's' : ''}` : `${cooldownValue} hr${cooldownValue > 1 ? 's' : ''}`}`}
               </p>
             </div>
           </div>
@@ -258,8 +271,14 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
                 <Radio className="w-3.5 h-3.5 text-primary" />
                 Alert Frequency
               </div>
-              <div className="text-sm font-bold text-base-content mt-1">1 Alert / Day</div>
-              <div className="text-[10px] text-base-content/50">24-hour host cooldown</div>
+              <div className="text-sm font-bold text-base-content mt-1">
+                1 Alert / {cooldownUnit === 'days' 
+                  ? `${cooldownValue} ${cooldownValue === 1 ? 'Day' : 'Days'}` 
+                  : `${cooldownValue} ${cooldownValue === 1 ? 'Hour' : 'Hours'}`}
+              </div>
+              <div className="text-[10px] text-base-content/50 font-mono">
+                {effectiveCooldownHours}-hour host cooldown
+              </div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-base-200/50 border border-base-content/10">
@@ -277,7 +296,7 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
                 Trigger State
               </div>
               <div className="text-sm font-bold text-base-content mt-1">Warning &amp; Critical</div>
-              <div className="text-[10px] text-base-content/50">Offline, CPU, RAM, Temp</div>
+              <div className="text-[10px] text-base-content/50">Offline, CPU, RAM, Temp, CRC</div>
             </div>
           </div>
 
@@ -359,6 +378,101 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
                 )}
               </div>
 
+              {/* Alert Frequency & Cooldown Setting (Hours / Days) */}
+              <div className="space-y-3 pt-3 border-t border-base-content/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-primary" />
+                    <span>Alert Frequency &amp; Cooldown Policy</span>
+                  </label>
+                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                    1 Alert / {cooldownUnit === 'days' 
+                      ? `${cooldownValue} ${cooldownValue === 1 ? 'Day' : 'Days'} (${effectiveCooldownHours}h)`
+                      : `${cooldownValue} ${cooldownValue === 1 ? 'Hour' : 'Hours'}`}
+                  </span>
+                </div>
+                
+                <p className="text-[11px] text-base-content/60">
+                  Select how frequently repeated alerts are dispatched for the same device during an ongoing issue (hours or days).
+                </p>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { label: '1 Hour', unit: 'hours', value: 1 },
+                    { label: '4 Hours', unit: 'hours', value: 4 },
+                    { label: '12 Hours', unit: 'hours', value: 12 },
+                    { label: '1 Day', unit: 'days', value: 1 },
+                    { label: '2 Days', unit: 'days', value: 2 },
+                    { label: '3 Days', unit: 'days', value: 3 },
+                    { label: '7 Days', unit: 'days', value: 7 },
+                  ].map((preset) => {
+                    const isSelected = cooldownUnit === preset.unit && cooldownValue === preset.value;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          setCooldownUnit(preset.unit as 'hours' | 'days');
+                          setCooldownValue(preset.value);
+                        }}
+                        className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-content border-primary font-bold shadow-xs'
+                            : 'bg-base-200/60 hover:bg-base-200 border-base-content/10 text-base-content/80'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Number Input & Unit Toggle (Hours / Days) */}
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex-1 relative">
+                    <input
+                      type="number"
+                      min="1"
+                      max={cooldownUnit === 'days' ? 365 : 8760}
+                      value={cooldownValue}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setCooldownValue(isNaN(val) || val < 1 ? 1 : val);
+                      }}
+                      className="w-full px-3.5 py-2 rounded-xl border border-base-content/15 bg-base-200/50 font-mono text-sm text-base-content focus:bg-base-100 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      placeholder="1"
+                    />
+                  </div>
+
+                  {/* Hours vs Days Switch */}
+                  <div className="flex rounded-xl bg-base-200/70 p-1 border border-base-content/10 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setCooldownUnit('hours')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        cooldownUnit === 'hours'
+                          ? 'bg-base-100 text-primary shadow-xs font-bold'
+                          : 'text-base-content/60 hover:text-base-content'
+                      }`}
+                    >
+                      Hours
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCooldownUnit('days')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        cooldownUnit === 'days'
+                          ? 'bg-base-100 text-primary shadow-xs font-bold'
+                          : 'text-base-content/60 hover:text-base-content'
+                      }`}
+                    >
+                      Days
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Buttons: Save & Test */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <button
@@ -388,7 +502,7 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-warning" />
                 <h4 className="text-xs font-bold uppercase tracking-wider text-base-content">
-                  Active 24h Daily Cooldowns ({cooldowns.length})
+                  Active Cooldowns ({cooldowns.length})
                 </h4>
               </div>
               {cooldowns.length > 0 && (
@@ -404,7 +518,7 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
             </div>
 
             <p className="text-[11px] text-base-content/60">
-              Under the <strong>1 Alert per Device per Day</strong> policy, once a device sends an alert for warning or critical status, it is locked for 24 hours to prevent spamming your chat.
+              Under the <strong>1 Alert per {cooldownUnit === 'days' ? `${cooldownValue} Day${cooldownValue > 1 ? 's' : ''}` : `${cooldownValue} Hour${cooldownValue > 1 ? 's' : ''}`}</strong> policy, once a device sends an alert for warning or critical status, it is locked for {effectiveCooldownHours} hours to prevent spamming your chat.
             </p>
 
             {cooldowns.length === 0 ? (

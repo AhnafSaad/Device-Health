@@ -760,7 +760,7 @@ app.post('/api/telegram/test', async (req: Request, res: Response) => {
 // GET /api/telegram/history
 app.get('/api/telegram/history', async (_req: Request, res: Response) => {
   try {
-    const history = getTelegramAlertHistory();
+    const history = await getTelegramAlertHistory();
     return res.json(history);
   } catch (error: any) {
     return res.status(500).json({ error: 'Internal Server Error', message: error?.message || 'Failed to retrieve alert history.' });
@@ -807,6 +807,7 @@ const VALID_THRESHOLD_METRICS = new Set([
   'ram_ecc_uncorrected',
   'optical_tx',
   'optical_rx',
+  'crc_errors',
 ]);
 const VALID_THRESHOLD_DEVICE_TYPES = new Set(['All', 'Server', 'Router', 'Switch', 'OLT']);
 
@@ -895,7 +896,7 @@ const upsertThresholdsHandler = async (req: Request, res: Response) => {
       if (!VALID_THRESHOLD_METRICS.has(metric)) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users, ram_ecc_corrected, ram_ecc_uncorrected, optical_tx, optical_rx.`,
+          message: `Invalid metric "${item?.metric}". Allowed: cpu, ram, disk, temperature, connected_users, ram_ecc_corrected, ram_ecc_uncorrected, optical_tx, optical_rx, crc_errors.`,
         });
       }
 
@@ -1125,7 +1126,8 @@ app.post('/api/thresholds/reset', requireAdmin, async (_req: Request, res: Respo
            ('optical_tx', 'All', -8, -12, true),
            ('optical_rx', 'All', -8, -20, true),
            ('ram_ecc_corrected', 'All', 10, 50, true),
-           ('ram_ecc_uncorrected', 'All', 1, 1, true)
+           ('ram_ecc_uncorrected', 'All', 1, 1, true),
+           ('crc_errors', 'All', 10, 50, true)
          ON CONFLICT (metric, device_type) DO NOTHING;`
       );
       const dbRes = await query(

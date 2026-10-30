@@ -18,6 +18,7 @@ import {
   MemoryStick,
   Radio,
   X as CloseIcon,
+  Network,
 } from 'lucide-react';
 import { PollingSettingsSection } from './PollingSettingsSection';
 import { fetchWithAuth as defaultFetchWithAuth } from '../utils/auth';
@@ -31,7 +32,8 @@ export type ThresholdMetric =
   | 'ram_ecc_corrected'
   | 'ram_ecc_uncorrected'
   | 'optical_tx'
-  | 'optical_rx';
+  | 'optical_rx'
+  | 'crc_errors';
 export type ThresholdDeviceType = 'All' | 'Server' | 'Router' | 'Switch' | 'OLT';
 
 const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
@@ -44,6 +46,7 @@ const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
   'ram_ecc_uncorrected',
   'optical_tx',
   'optical_rx',
+  'crc_errors',
 ];
 
 export interface ThresholdRow {
@@ -116,6 +119,16 @@ const METRIC_CONFIGS: MetricConfig[] = [
     defaultCritical: 250,
     defaultEnabled: false,
     tileClasses: 'bg-purple-500/10 border-purple-500/25 text-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.12)]',
+  },
+  {
+    metric: 'crc_errors',
+    label: 'Interface CRC Errors',
+    unit: 'errors',
+    scaleMax: 200,
+    defaultWarning: 10,
+    defaultCritical: 50,
+    defaultEnabled: true,
+    tileClasses: 'bg-rose-500/10 border-rose-500/25 text-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.12)]',
   },
 ];
 
@@ -842,6 +855,8 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
         return <Thermometer className="w-5 h-5" />;
       case 'connected_users':
         return <Users className="w-5 h-5" />;
+      case 'crc_errors':
+        return <Network className="w-5 h-5" />;
     }
   };
 
@@ -895,7 +910,7 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
                 Thresholds
               </h1>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/25">
-                {customizedMetricsCount} of {METRIC_CONFIGS.length + 1} metrics customized
+                {customizedMetricsCount} of {METRIC_CONFIGS.length + 2} metrics customized
               </span>
             </div>
             <p className="text-xs text-base-content/60 mt-1">
