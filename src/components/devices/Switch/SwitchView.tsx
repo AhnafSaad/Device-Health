@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Server, NetworkInterface } from '../../../types';
 import { DeviceHeader } from '../shared/DeviceHeader';
+import { PortModal } from '../shared/PortModal';
 import { isCiscoSwitch, isJuniperSwitch, skipStorageForSwitch, parseOpticalSensors, parseTemperatureSensors } from './SwitchBrands';
 import { BrandLogo } from '../../BrandLogo';
 import { formatRack } from '../../../utils/rack';
@@ -1038,204 +1039,16 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
               </div>
             )}
 
-            {/* Full Modal */}
-            {showPortsModal && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-fadeIn"
-                onClick={() => setShowPortsModal(false)}
-              >
-                <div
-                  className="bg-base-100 border border-base-content/15 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="p-4 sm:p-5 border-b border-base-content/10 flex items-center justify-between gap-3 bg-base-200/30">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
-                        <Network className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-base sm:text-lg font-bold text-base-content truncate flex items-center gap-2">
-                          <span>Network Ports &amp; Interfaces</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-base-300 font-mono text-base-content/70 font-normal">
-                            {activeServer.hostname || activeServer.ip}
-                          </span>
-                        </h3>
-                        <p className="text-xs text-base-content/50 truncate">
-                          IP: {activeServer.ip} • Type: Switch • {totalPorts} ports detected
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPortsModal(false)}
-                      className="p-2 rounded-xl text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors cursor-pointer"
-                      aria-label="Close modal"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="p-4 sm:p-5 border-b border-base-content/10 space-y-3 bg-base-200/10">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2 font-mono text-xs">
-                        <span className="px-2.5 py-1 rounded-lg bg-base-200 border border-base-content/10 font-bold text-base-content">
-                          Total: {totalPorts} Ports
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          {upCount} Up
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-500 font-bold flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-rose-500" />
-                          {downCount} Down
-                        </span>
-                      </div>
-                      <div className="text-xs font-mono text-base-content/70">
-                        <span>Port Link Availability: </span>
-                        <span className="font-bold text-emerald-500">{upRatio}%</span> ({upCount}/{totalPorts} online)
-                      </div>
-                    </div>
-
-                    <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden flex">
-                      <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${upRatio}%` }} />
-                      <div className="h-full bg-rose-500/60 transition-all duration-300" style={{ width: `${100 - upRatio}%` }} />
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setPortFilter('all')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          portFilter === 'all'
-                            ? 'bg-primary text-primary-content shadow-xs'
-                            : 'bg-base-200/70 hover:bg-base-200 text-base-content/70'
-                        }`}
-                      >
-                        All Ports ({totalPorts})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPortFilter('up')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          portFilter === 'up'
-                            ? 'bg-emerald-500 text-white shadow-xs'
-                            : 'bg-base-200/70 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Active Up ({upCount})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPortFilter('down')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          portFilter === 'down'
-                            ? 'bg-rose-500 text-white shadow-xs'
-                            : 'bg-base-200/70 hover:bg-rose-500/10 text-rose-500'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                        Down ({downCount})
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3">
-                    {filteredHeadlinePorts.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                        {filteredHeadlinePorts.map((port) => {
-                          const isUp = port.oper_status === 'up';
-                          return (
-                            <div
-                              key={`modal-${port.name}-${port.index}`}
-                              className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
-                                isUp
-                                  ? 'bg-emerald-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40 shadow-2xs'
-                                  : 'bg-base-200/40 border-base-content/10 hover:border-base-content/20'
-                              }`}
-                              title={port.name}
-                            >
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span
-                                      className={`w-2 h-2 rounded-full shrink-0 ${
-                                        isUp
-                                          ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse'
-                                          : 'bg-rose-500/70'
-                                      }`}
-                                    />
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
-                                        isUp
-                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                      }`}
-                                    >
-                                      {isUp ? 'UP' : 'DOWN'}
-                                    </span>
-                                  </div>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 bg-base-300/80 text-base-content/70 border border-base-content/10">
-                                    {(port.type || 'ethernet').toLowerCase() === 'sfp' ? 'SFP' : (port.type || 'ethernet').toUpperCase()}
-                                  </span>
-                                </div>
-
-                              <div className="flex items-center justify-between gap-1.5 min-w-0">
-                                <div
-                                  className="font-mono font-bold text-xs sm:text-sm text-base-content truncate leading-tight"
-                                  title={port.name}
-                                >
-                                  {port.name}
-                                </div>
-                                {port.crc_errors !== null && port.crc_errors !== undefined && (
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border ${
-                                      port.crc_errors > 0
-                                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                                        : 'bg-base-200/80 text-base-content/60 border-base-content/10'
-                                    }`}
-                                    title={`CRC Errors: ${port.crc_errors.toLocaleString()}`}
-                                  >
-                                    CRC: {port.crc_errors.toLocaleString()}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                              <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-base-content/5">
-                                <span className="text-base-content/50 uppercase text-[10px]">
-                                  {port.type || 'Ethernet'}
-                                </span>
-                                <span className={isUp ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-base-content/40'}>
-                                  {isUp ? formatPortSpeed(port.speed) : 'No Link'}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="p-8 rounded-xl bg-base-200/40 border border-base-content/10 text-center text-xs font-mono text-base-content/50">
-                        No ports match the selected filter.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-3.5 sm:p-4 border-t border-base-content/10 flex items-center justify-between bg-base-200/30">
-                    <span className="text-xs font-mono text-base-content/50">
-                      Showing {filteredHeadlinePorts.length} of {totalPorts} ports
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPortsModal(false)}
-                      className="px-4 py-1.5 rounded-xl bg-base-200 hover:bg-base-300 text-xs font-bold text-base-content transition-colors cursor-pointer"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Full Modal via PortModal with createPortal & body scroll lock */}
+            <PortModal
+              isOpen={showPortsModal}
+              onClose={() => setShowPortsModal(false)}
+              hostname={activeServer.hostname}
+              ip={activeServer.ip}
+              deviceType={activeServer.deviceType || "Switch"}
+              ports={headlinePorts}
+              formatPortSpeed={formatPortSpeed}
+            />
           </div>
 
           {/* Power Supplies, Fans & Temperature (Full Span) */}

@@ -92,22 +92,18 @@ select option:focus {
 @keyframes pageFadeSlideIn {
   0% {
     opacity: 0;
-    transform: translateY(8px) scale(0.997);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes fadeIn {
   0% {
     opacity: 0;
-    transform: translateY(5px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -123,7 +119,7 @@ select option:focus {
 @keyframes modalPopIn {
   0% {
     opacity: 0;
-    transform: scale(0.96) translateY(10px);
+    transform: scale(0.97) translateY(6px);
   }
   100% {
     opacity: 1;
@@ -133,12 +129,11 @@ select option:focus {
 
 /* Utility classes for smooth transitions */
 .page-transition {
-  animation: pageFadeSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
+  animation: pageFadeSlideIn 0.22s ease-out;
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fadeIn 0.2s ease-out;
 }
 
 .animate-modal-backdrop {
