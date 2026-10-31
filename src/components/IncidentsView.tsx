@@ -80,18 +80,18 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   }, [allIncidents]);
 
   // Operational status breakdown among incidents (UP vs DOWN)
+  const isDeviceDown = (srv: Server) => {
+    const health = calculateDeviceHealth(srv);
+    const s = String(srv.status || '').toLowerCase().trim();
+    return health.isOffline || s === 'offline' || s === 'down';
+  };
+
   const upIncidentCount = useMemo(() => {
-    return allIncidents.filter((srv) => {
-      const health = calculateDeviceHealth(srv);
-      return !health.isOffline && srv.status !== 'offline';
-    }).length;
+    return allIncidents.filter((srv) => !isDeviceDown(srv)).length;
   }, [allIncidents]);
 
   const downIncidentCount = useMemo(() => {
-    return allIncidents.filter((srv) => {
-      const health = calculateDeviceHealth(srv);
-      return health.isOffline || srv.status === 'offline';
-    }).length;
+    return allIncidents.filter((srv) => isDeviceDown(srv)).length;
   }, [allIncidents]);
 
   const healthyCount = Math.max(0, servers.length - allIncidents.length);
@@ -101,8 +101,8 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   const filteredIncidents = useMemo(() => {
     return allIncidents.filter((srv) => {
       const health = calculateDeviceHealth(srv);
-      const isCrit = health.health === 'Critical' || health.isOffline || srv.status === 'offline';
-      const isDown = health.isOffline || srv.status === 'offline';
+      const isDown = isDeviceDown(srv);
+      const isCrit = health.health === 'Critical' || isDown;
 
       // Severity filter
       if (severityFilter === 'critical' && !isCrit) return false;
@@ -145,7 +145,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
 
       return true;
     });
-  }, [allIncidents, severityFilter, deviceFilter, datacenterFilter, searchQuery]);
+  }, [allIncidents, severityFilter, statusFilter, deviceFilter, datacenterFilter, searchQuery]);
 
   // 3. MANDATORY REQUIREMENT: Strictly sort Critical devices at the TOP!
   const sortedIncidents = useMemo(() => {

@@ -221,7 +221,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                   ? 'bg-success/15 border-success/30 text-success'
                   : 'bg-error/15 border-error/30 text-error'
               }`}>
-                <span>Status: {statusFilter.toUpperCase()}</span>
+                <span>Status: {statusFilter === 'online' ? 'UP' : 'DOWN'}</span>
               </span>
             )}
 
