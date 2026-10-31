@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Server, Datacenter } from '../types';
+import { Server, Datacenter, StatusFilter } from '../types';
 import { ServerTable } from './ServerTable';
 import { Pagination } from './Pagination';
 import { calculateDeviceHealth } from '../utils/deviceHealth';
@@ -51,6 +51,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   // Filter and Search states
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'warning'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [deviceFilter, setDeviceFilter] = useState<string>('all');
   const [datacenterFilter, setDatacenterFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,6 +79,21 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
     }).length;
   }, [allIncidents]);
 
+  // Operational status breakdown among incidents (UP vs DOWN)
+  const upIncidentCount = useMemo(() => {
+    return allIncidents.filter((srv) => {
+      const health = calculateDeviceHealth(srv);
+      return !health.isOffline && srv.status !== 'offline';
+    }).length;
+  }, [allIncidents]);
+
+  const downIncidentCount = useMemo(() => {
+    return allIncidents.filter((srv) => {
+      const health = calculateDeviceHealth(srv);
+      return health.isOffline || srv.status === 'offline';
+    }).length;
+  }, [allIncidents]);
+
   const healthyCount = Math.max(0, servers.length - allIncidents.length);
   const fleetSlaPercent = servers.length > 0 ? Math.round((healthyCount / servers.length) * 100) : 100;
 
@@ -86,10 +102,15 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
     return allIncidents.filter((srv) => {
       const health = calculateDeviceHealth(srv);
       const isCrit = health.health === 'Critical' || health.isOffline || srv.status === 'offline';
+      const isDown = health.isOffline || srv.status === 'offline';
 
       // Severity filter
       if (severityFilter === 'critical' && !isCrit) return false;
       if (severityFilter === 'warning' && isCrit) return false;
+
+      // Operational Status (UP / DOWN) filter
+      if (statusFilter === 'online' && isDown) return false;
+      if (statusFilter === 'offline' && !isDown) return false;
 
       // Device Type filter
       if (deviceFilter !== 'all') {
@@ -161,10 +182,11 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
     return sortedIncidents.slice(start, start + pageSize);
   }, [sortedIncidents, safeCurrentPage, pageSize]);
 
-  const hasActiveFilters = severityFilter !== 'all' || deviceFilter !== 'all' || datacenterFilter !== 'all' || !!searchQuery;
+  const hasActiveFilters = severityFilter !== 'all' || statusFilter !== 'all' || deviceFilter !== 'all' || datacenterFilter !== 'all' || !!searchQuery;
 
   const handleResetFilters = () => {
     setSeverityFilter('all');
+    setStatusFilter('all');
     setDeviceFilter('all');
     setDatacenterFilter('all');
     setSearchQuery('');
@@ -197,9 +219,60 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
           </div>
         </div>
 
-        {/* Quick Triage Badges & Switch to Fleet Dashboard */}
+        {/* Quick Triage Badges & Status Filter & Switch to Fleet Dashboard */}
         <div className="flex flex-wrap items-center gap-2.5 sm:self-center">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-base-200/80 border border-base-content/10 text-xs font-mono">
+          {/* Quick Operational Status (UP / DOWN) Filter Pills */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-base-200/90 border border-base-content/10 text-xs font-mono">
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('all');
+                setCurrentPage(1);
+              }}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                statusFilter === 'all'
+                  ? 'bg-base-100 text-base-content shadow-xs border border-base-content/10'
+                  : 'text-base-content/60 hover:text-base-content'
+              }`}
+              title="Show all incidents"
+            >
+              All: {allIncidents.length}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter(statusFilter === 'online' ? 'all' : 'online');
+                setCurrentPage(1);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                statusFilter === 'online'
+                  ? 'bg-emerald-500 text-white shadow-xs'
+                  : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+              }`}
+              title="Filter by UP status incidents (Online devices with telemetry alerts)"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>UP: {upIncidentCount}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter(statusFilter === 'offline' ? 'all' : 'offline');
+                setCurrentPage(1);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                statusFilter === 'offline'
+                  ? 'bg-rose-500 text-white shadow-xs'
+                  : 'text-rose-500 hover:bg-rose-500/10'
+              }`}
+              title="Filter by DOWN status outages (Offline/unreachable devices)"
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span>DOWN: {downIncidentCount}</span>
+            </button>
+          </div>
+
+          <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-base-200/80 border border-base-content/10 text-xs font-mono">
             <span className="flex items-center gap-1.5 text-rose-500 font-bold">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
               Critical: {criticalCount}
@@ -208,11 +281,6 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
             <span className="flex items-center gap-1.5 text-amber-500 font-bold">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
               Warning: {warningCount}
-            </span>
-            <span className="text-base-content/30">•</span>
-            <span className="flex items-center gap-1.5 text-emerald-500 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              Nominal: {healthyCount}
             </span>
           </div>
 
@@ -401,6 +469,59 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
               )}
             </div>
 
+            {/* Device Operational Status (UP / DOWN) Filter */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 block mb-1">
+                Device Status
+              </label>
+              <div className="grid grid-cols-3 gap-1 bg-base-200/60 p-1 rounded-xl border border-base-content/10 font-mono text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-1.5 py-1.5 font-semibold rounded-lg transition-all text-center cursor-pointer ${
+                    statusFilter === 'all'
+                      ? 'bg-base-100 text-primary shadow-xs font-bold border border-base-content/10'
+                      : 'text-base-content/60 hover:text-base-content'
+                  }`}
+                >
+                  All ({allIncidents.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('online');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-1.5 py-1.5 font-semibold rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    statusFilter === 'online'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold ring-1 ring-emerald-500/30'
+                      : 'text-base-content/60 hover:text-emerald-500'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>UP ({upIncidentCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('offline');
+                    setCurrentPage(1);
+                  }}
+                  className={`px-1.5 py-1.5 font-semibold rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    statusFilter === 'offline'
+                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 shadow-xs font-bold ring-1 ring-rose-500/30'
+                      : 'text-base-content/60 hover:text-rose-500'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  <span>DOWN ({downIncidentCount})</span>
+                </button>
+              </div>
+            </div>
+
             {/* Device Type Quick Filter */}
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 block mb-1">
@@ -488,7 +609,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
               setCurrentPage(1);
             }}
             totalFilteredCount={sortedIncidents.length}
-            statusFilter="all"
+            statusFilter={statusFilter}
             deviceFilter={deviceFilter}
             healthFilter={severityFilter}
             datacenters={datacenters}
