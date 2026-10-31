@@ -229,9 +229,9 @@ export const DatacenterModal: React.FC<DatacenterModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-modal-backdrop">
       <div 
-        className="relative w-full max-w-2xl bg-base-100 rounded-2xl shadow-2xl border border-base-content/10 overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-2xl bg-base-100 rounded-2xl shadow-2xl border border-base-content/10 overflow-hidden flex flex-col max-h-[90vh] animate-modal-pop"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

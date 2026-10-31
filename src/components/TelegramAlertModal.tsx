@@ -214,8 +214,8 @@ export const TelegramAlertModal: React.FC<TelegramAlertModalProps> = ({ isOpen, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-base-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-base-100 rounded-3xl border border-base-content/10 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-base-900/60 backdrop-blur-sm animate-modal-backdrop">
+      <div className="bg-base-100 rounded-3xl border border-base-content/10 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh] animate-modal-pop">
         
         {/* Header */}
         <div className="p-6 border-b border-base-content/10 bg-base-200/50 flex items-center justify-between">

@@ -1125,55 +1125,12 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className={`flex-1 w-full flex flex-col min-h-0 ${currentView === 'inspect' ? '' : 'px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 sm:pb-6'}`}>
-        
-        {/* Route Protection: Admin-Only Pages (Users, Thresholds, Datacenters) */}
-        {(currentView === 'admin-users' || currentView === 'data-centers' || currentView === 'thresholds') && currentUserRole !== 'admin' ? (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="max-w-md w-full p-8 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4 animate-fadeIn">
-              <div className="w-14 h-14 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center mx-auto text-error shadow-inner">
-                <ShieldAlert className="w-8 h-8" />
-              </div>
-              <h2 className="text-lg font-bold text-base-content">Access Denied</h2>
-              <p className="text-xs text-base-content/70 leading-relaxed">
-                Administrator privileges are required to access this resource. Your current role is <span className="font-mono font-bold uppercase text-error">{currentUserRole}</span>.
-              </p>
-              <button
-                onClick={() => router.push('/')}
-                className="btn btn-primary btn-sm rounded-xl font-bold shadow-sm"
-              >
-                Return to Dashboard
-              </button>
-            </div>
-          </div>
-        ) : currentView === 'inspect' ? (
-          currentInspectServer ? (
-            <DeviceRenderer
-              server={currentInspectServer}
-              onBack={() => router.push('/')}
-              onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
-              onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
-              onRebootServer={handleRebootServer}
-              onUpdateServer={handleDeviceUpdated}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="max-w-md p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4">
-                <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-                <h2 className="text-lg font-bold">Device Not Found</h2>
-                <p className="text-xs text-base-content/70">
-                  The specified device ({inspectDeviceId}) could not be located in fleet inventory.
-                </p>
-                <button
-                  onClick={() => router.push('/')}
-                  className="btn btn-primary btn-sm rounded-xl font-bold"
-                >
-                  Back to Dashboard
-                </button>
-              </div>
-            </div>
-          )
-        ) : currentView === 'add-device' ? (
-          currentUserRole === 'viewer' ? (
+        <div 
+          key={currentView === 'inspect' ? `inspect-${inspectDeviceId || 'active'}` : currentView} 
+          className="page-transition flex-1 w-full flex flex-col min-h-0"
+        >
+          {/* Route Protection: Admin-Only Pages (Users, Thresholds, Datacenters) */}
+          {(currentView === 'admin-users' || currentView === 'data-centers' || currentView === 'thresholds') && currentUserRole !== 'admin' ? (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="max-w-md w-full p-8 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4 animate-fadeIn">
                 <div className="w-14 h-14 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center mx-auto text-error shadow-inner">
@@ -1181,7 +1138,7 @@ export default function App() {
                 </div>
                 <h2 className="text-lg font-bold text-base-content">Access Denied</h2>
                 <p className="text-xs text-base-content/70 leading-relaxed">
-                  Viewers have read-only access and cannot register new devices. Please contact an administrator or editor.
+                  Administrator privileges are required to access this resource. Your current role is <span className="font-mono font-bold uppercase text-error">{currentUserRole}</span>.
                 </p>
                 <button
                   onClick={() => router.push('/')}
@@ -1191,127 +1148,174 @@ export default function App() {
                 </button>
               </div>
             </div>
-          ) : (
-            <AddServerView
-              onBack={() => router.push('/')}
-              onServerAdded={handleServerAdded}
-              existingIps={existingIps}
-              datacenters={enrichedDatacenters}
-              onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
-              onNavigateToDatacenters={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
-            />
-          )
-        ) : currentView === 'data-centers' ? (
-          <DatacenterPageView
-            datacenters={enrichedDatacenters}
-            onBack={() => router.push('/')}
-            onAddDatacenter={handleAddDatacenter}
-            onDeleteDatacenter={handleDeleteDatacenter}
-            onUpdateDatacenter={handleUpdateDatacenter}
-            onUnauthorized={handleUnauthorized}
-          />
-        ) : currentView === 'admin-users' ? (
-          <ManageUsersPageView
-            onBack={() => router.push('/')}
-            currentUsername={currentUsername}
-            currentUserId={currentUserId}
-            authStatus={authStatus}
-            onUnauthorized={handleUnauthorized}
-          />
-        ) : currentView === 'thresholds' ? (
-          <ThresholdsView
-            onBack={() => router.push('/')}
-            fetchWithAuth={fetchWithAuth}
-            onUnauthorized={handleUnauthorized}
-          />
-        ) : currentView === 'incidents' ? (
-          <IncidentsView
-            servers={servers}
-            datacenters={enrichedDatacenters}
-            selectedServer={selectedServer}
-            onSelectServer={handleSelectServer}
-            onInspectServer={handleInspectServer}
-            onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
-            onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
-            onPollDevice={handlePollSingleDevice}
-            pollingDeviceIds={pollingDeviceIds}
-            onNavigateToDashboard={() => router.push('/dashboard')}
-            onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
-            currentUserRole={currentUserRole}
-          />
-        ) : (
-          /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
-          <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch lg:h-[calc(100vh-7.5rem)] min-w-0">
-            
-            {/* Left Sidebar / Column: Compact Stats Cards Stacked Vertically + Quick Filters */}
-            <aside 
-              aria-label="Fleet status metrics and quick filters"
-              className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full lg:overflow-y-auto pr-1 pt-1 pb-1 space-y-2.5"
-            >
-              <FilterCards
-                currentFilter={statusFilter}
-                onSelectFilter={handleFilterChange}
-                totalCount={servers.length}
-                onlineCount={onlineCount}
-                offlineCount={offlineCount}
-                mockEstimatedTotal={servers.length.toLocaleString()}
-                deviceFilter={deviceFilter}
-                onSelectDeviceFilter={handleDeviceFilterChange}
-                healthFilter={healthFilter}
-                onSelectHealthFilter={handleHealthFilterChange}
-                datacenters={enrichedDatacenters}
-                datacenterFilter={datacenterFilter}
-                onSelectDatacenterFilter={handleDatacenterFilterChange}
-                onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
-                onResetFilters={handleResetAllFilters}
-                hasActiveFilters={hasActiveFilters}
-              />
-            </aside>
-
-            {/* Main Right Content Area: Prominently displays Search at top, Data Table with Internal Scroll, Pagination */}
-            <section 
-              aria-label="Server fleet telemetry and controls" 
-              className="flex-1 min-w-0 lg:h-full flex flex-col overflow-hidden"
-            >
-              {/* High-Density Server Telemetry Table with Prominent Search Bar & Internal Scroll */}
-              <ServerTable
-                servers={paginatedServers}
-                selectedServer={selectedServer}
-                onSelectServer={handleSelectServer}
-                onInspectServer={handleInspectServer}
+          ) : currentView === 'inspect' ? (
+            currentInspectServer ? (
+              <DeviceRenderer
+                server={currentInspectServer}
+                onBack={() => router.push('/')}
                 onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
                 onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
-                onPollDevice={handlePollSingleDevice}
-                pollingDeviceIds={pollingDeviceIds}
-                searchQuery={searchQuery}
-                setSearchQuery={handleSearchChange}
-                totalFilteredCount={filteredServers.length}
-                statusFilter={statusFilter}
-                deviceFilter={deviceFilter}
-                healthFilter={healthFilter}
+                onRebootServer={handleRebootServer}
+                onUpdateServer={handleDeviceUpdated}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="max-w-md p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4">
+                  <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+                  <h2 className="text-lg font-bold">Device Not Found</h2>
+                  <p className="text-xs text-base-content/70">
+                    The specified device ({inspectDeviceId}) could not be located in fleet inventory.
+                  </p>
+                  <button
+                    onClick={() => router.push('/')}
+                    className="btn btn-primary btn-sm rounded-xl font-bold"
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
+              </div>
+            )
+          ) : currentView === 'add-device' ? (
+            currentUserRole === 'viewer' ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="max-w-md w-full p-8 rounded-2xl bg-base-100 border border-base-content/10 shadow-xl text-center space-y-4 animate-fadeIn">
+                  <div className="w-14 h-14 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center mx-auto text-error shadow-inner">
+                    <ShieldAlert className="w-8 h-8" />
+                  </div>
+                  <h2 className="text-lg font-bold text-base-content">Access Denied</h2>
+                  <p className="text-xs text-base-content/70 leading-relaxed">
+                    Viewers have read-only access and cannot register new devices. Please contact an administrator or editor.
+                  </p>
+                  <button
+                    onClick={() => router.push('/')}
+                    className="btn btn-primary btn-sm rounded-xl font-bold shadow-sm"
+                  >
+                    Return to Dashboard
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <AddServerView
+                onBack={() => router.push('/')}
+                onServerAdded={handleServerAdded}
+                existingIps={existingIps}
                 datacenters={enrichedDatacenters}
-                datacenterFilter={datacenterFilter}
-                onSelectDatacenterFilter={handleDatacenterFilterChange}
-                onClearSearch={() => handleSearchChange('')}
-                onClearAllFilters={handleResetAllFilters}
+                onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+                onNavigateToDatacenters={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+              />
+            )
+          ) : currentView === 'data-centers' ? (
+            <DatacenterPageView
+              datacenters={enrichedDatacenters}
+              onBack={() => router.push('/')}
+              onAddDatacenter={handleAddDatacenter}
+              onDeleteDatacenter={handleDeleteDatacenter}
+              onUpdateDatacenter={handleUpdateDatacenter}
+              onUnauthorized={handleUnauthorized}
+            />
+          ) : currentView === 'admin-users' ? (
+            <ManageUsersPageView
+              onBack={() => router.push('/')}
+              currentUsername={currentUsername}
+              currentUserId={currentUserId}
+              authStatus={authStatus}
+              onUnauthorized={handleUnauthorized}
+            />
+          ) : currentView === 'thresholds' ? (
+            <ThresholdsView
+              onBack={() => router.push('/')}
+              fetchWithAuth={fetchWithAuth}
+              onUnauthorized={handleUnauthorized}
+            />
+          ) : currentView === 'incidents' ? (
+            <IncidentsView
+              servers={servers}
+              datacenters={enrichedDatacenters}
+              selectedServer={selectedServer}
+              onSelectServer={handleSelectServer}
+              onInspectServer={handleInspectServer}
+              onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+              onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
+              onPollDevice={handlePollSingleDevice}
+              pollingDeviceIds={pollingDeviceIds}
+              onNavigateToDashboard={() => router.push('/dashboard')}
+              onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+              currentUserRole={currentUserRole}
+            />
+          ) : (
+            /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch lg:h-[calc(100vh-7.5rem)] min-w-0">
+              
+              {/* Left Sidebar / Column: Compact Stats Cards Stacked Vertically + Quick Filters */}
+              <aside 
+                aria-label="Fleet status metrics and quick filters"
+                className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full lg:overflow-y-auto pr-1 pt-1 pb-1 space-y-2.5"
               >
-                {/* Pagination Controls at Bottom of Table Card */}
-                <Pagination
-                  currentPage={safeCurrentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  pageSize={pageSize}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setCurrentPage(1);
-                  }}
-                  totalItems={filteredServers.length}
-                  virtualTotalEstimate={servers.length}
+                <FilterCards
+                  currentFilter={statusFilter}
+                  onSelectFilter={handleFilterChange}
+                  totalCount={servers.length}
+                  onlineCount={onlineCount}
+                  offlineCount={offlineCount}
+                  mockEstimatedTotal={servers.length.toLocaleString()}
+                  deviceFilter={deviceFilter}
+                  onSelectDeviceFilter={handleDeviceFilterChange}
+                  healthFilter={healthFilter}
+                  onSelectHealthFilter={handleHealthFilterChange}
+                  datacenters={enrichedDatacenters}
+                  datacenterFilter={datacenterFilter}
+                  onSelectDatacenterFilter={handleDatacenterFilterChange}
+                  onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
+                  onResetFilters={handleResetAllFilters}
+                  hasActiveFilters={hasActiveFilters}
                 />
-              </ServerTable>
-            </section>
-          </div>
-        )}
+              </aside>
+
+              {/* Main Right Content Area: Prominently displays Search at top, Data Table with Internal Scroll, Pagination */}
+              <section 
+                aria-label="Server fleet telemetry and controls" 
+                className="flex-1 min-w-0 lg:h-full flex flex-col overflow-hidden"
+              >
+                {/* High-Density Server Telemetry Table with Prominent Search Bar & Internal Scroll */}
+                <ServerTable
+                  servers={paginatedServers}
+                  selectedServer={selectedServer}
+                  onSelectServer={handleSelectServer}
+                  onInspectServer={handleInspectServer}
+                  onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+                  onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
+                  onPollDevice={handlePollSingleDevice}
+                  pollingDeviceIds={pollingDeviceIds}
+                  searchQuery={searchQuery}
+                  setSearchQuery={handleSearchChange}
+                  totalFilteredCount={filteredServers.length}
+                  statusFilter={statusFilter}
+                  deviceFilter={deviceFilter}
+                  healthFilter={healthFilter}
+                  datacenters={enrichedDatacenters}
+                  datacenterFilter={datacenterFilter}
+                  onSelectDatacenterFilter={handleDatacenterFilterChange}
+                  onClearSearch={() => handleSearchChange('')}
+                  onClearAllFilters={handleResetAllFilters}
+                >
+                  {/* Pagination Controls at Bottom of Table Card */}
+                  <Pagination
+                    currentPage={safeCurrentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    pageSize={pageSize}
+                    onPageSizeChange={(size) => {
+                      setPageSize(size);
+                      setCurrentPage(1);
+                    }}
+                    totalItems={filteredServers.length}
+                    virtualTotalEstimate={servers.length}
+                  />
+                </ServerTable>
+              </section>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Production Enterprise Footer */}

@@ -1,10 +1,18 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
-/* Smooth theme transitions */
+/* Smooth theme transitions & typography rendering */
 html {
+  scroll-behavior: smooth;
   transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   color-scheme: light dark;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 html[data-theme="dark"] {
@@ -13,6 +21,51 @@ html[data-theme="dark"] {
 
 html[data-theme="light"] {
   color-scheme: light;
+}
+
+/* Ensure all scrollable panels and tables scroll smoothly */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+main,
+section,
+aside,
+table {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom sleek, non-intrusive modern scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.25) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
 }
 
 /* Light & Dark mode support for native select options */
@@ -34,3 +87,98 @@ select option:focus {
   background-color: var(--color-primary, #6366f1) !important;
   color: #ffffff !important;
 }
+
+/* Page Transition & UI Motion Animations */
+@keyframes pageFadeSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.997);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalBackdropFade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes modalPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Utility classes for smooth transitions */
+.page-transition {
+  animation: pageFadeSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-modal-backdrop {
+  animation: modalBackdropFade 0.22s ease-out both;
+}
+
+.animate-modal-pop {
+  animation: modalPopIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Micro-interaction helpers */
+.smooth-press {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+
+.smooth-press:active {
+  transform: scale(0.97);
+}
+
+.smooth-hover {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.smooth-hover:hover {
+  transform: translateY(-1px);
+}
+
+/* Respect user's system reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  html, body {
+    scroll-behavior: auto !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

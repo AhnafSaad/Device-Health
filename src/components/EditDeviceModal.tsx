@@ -197,13 +197,13 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-modal-backdrop"
         onClick={() => !isSubmitting && onClose()}
         aria-hidden="true"
       />
 
       <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-6">
-        <div className="relative transform overflow-hidden rounded-2xl bg-base-100 border border-base-content/10 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-xl">
+        <div className="relative transform overflow-hidden rounded-2xl bg-base-100 border border-base-content/10 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-xl animate-modal-pop">
           
           {/* Modal Header */}
           <div className="p-5 sm:p-6 border-b border-base-content/10 bg-base-100/90 flex items-center justify-between">

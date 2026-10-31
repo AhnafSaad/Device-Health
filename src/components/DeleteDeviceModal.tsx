@@ -67,13 +67,13 @@ export const DeleteDeviceModal: React.FC<DeleteDeviceModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-modal-backdrop"
         onClick={() => !isDeleting && onClose()}
         aria-hidden="true"
       />
 
       <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-6">
-        <div className="relative transform overflow-hidden rounded-2xl bg-base-100 border border-error/30 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+        <div className="relative transform overflow-hidden rounded-2xl bg-base-100 border border-error/30 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-lg animate-modal-pop">
           
           {/* Subtle Danger Header Accent Banner */}
           <div className="h-1.5 w-full bg-linear-to-r from-error via-rose-500 to-amber-500" />
