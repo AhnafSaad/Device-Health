@@ -281,7 +281,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               <th className="py-2.5 px-3.5">Device &amp; Identity</th>
               <th className="py-2.5 px-3.5 text-center">Status</th>
               <th className="py-2.5 px-3.5">Health Telemetry</th>
-              <th className="py-2.5 px-3.5 hidden md:table-cell">
+              <th className={`py-2.5 px-3.5 hidden md:table-cell ${isIncidentsMode ? 'min-w-[280px]' : ''}`}>
                 {isIncidentsMode ? 'Active Issues & Root Causes' : 'Core Resources'}
               </th>
               <th className="py-2.5 px-3.5 hidden lg:table-cell">Data Center or Location / Rack</th>
@@ -341,8 +341,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     }`}
                   >
                     {/* 1. Node & Identity: IP Address, Hostname, Brand Logo & Name, Device Type Badge */}
-                    <td className="py-2.5 px-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                    <td className="py-2.5 px-3.5 align-top">
+                      <div className="flex items-center gap-2 whitespace-nowrap">
                         {/* Live Ping Beacon */}
                         <span className="relative flex h-2 w-2 shrink-0">
                           {isOnline ? (
@@ -433,10 +433,17 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                         </div>
                       );
                     })()}
+
+                    {/* Mobile responsive view for active issues */}
+                    {isIncidentsMode && (
+                      <div className="mt-2 md:hidden">
+                        <ActiveIssuesCell server={server} isCompact={true} />
+                      </div>
+                    )}
                   </td>
 
                     {/* 2. Status: Glowing UP/DOWN badge */}
-                    <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 text-center align-top whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase border transition-all ${
                           isOnline
@@ -450,7 +457,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 3. Health Telemetry: Normal / Warning / Critical - Unified via calculateDeviceHealth */}
-                    <td className="py-2.5 px-3.5 whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 align-top whitespace-nowrap">
                       <div>
                         {healthInfo.health === 'Normal' && (
                           <span
@@ -493,7 +500,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 4. Core Resources OR Active Issues & Root Causes */}
-                    <td className="py-2.5 px-3.5 hidden md:table-cell">
+                    <td className="py-2.5 px-3.5 hidden md:table-cell align-top">
                       {isIncidentsMode ? (
                         <ActiveIssuesCell server={server} />
                       ) : isOnline ? (
@@ -623,7 +630,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 5. Location & Rack */}
-                    <td className="py-2.5 px-3.5 hidden lg:table-cell text-xs text-base-content/70 whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 hidden lg:table-cell align-top text-xs text-base-content/70 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
                         <span className="truncate max-w-[140px] font-semibold text-base-content">
@@ -638,7 +645,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 6. Action: Poll button + Inspect button + 3-dot dropdown menu */}
-                    <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 align-top text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {onPollDevice && (
                           <button

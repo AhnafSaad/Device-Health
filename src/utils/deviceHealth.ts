@@ -13,6 +13,9 @@ export interface DeviceHealthEvaluation {
   tempWarning: boolean;
   diskCritical: boolean;
   diskWarning: boolean;
+  crcCritical: boolean;
+  crcWarning: boolean;
+  crcIssues: Array<{ name: string; count: number; severity: 'critical' | 'warning' }>;
   summary: string;
 }
 
@@ -61,6 +64,9 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
       tempWarning: false,
       diskCritical: false,
       diskWarning: false,
+      crcCritical: false,
+      crcWarning: false,
+      crcIssues: [],
       summary: 'Host unreachable or offline (Ping/SNMP heartbeat down)',
     };
   }
@@ -82,6 +88,9 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
       tempWarning: false,
       diskCritical: false,
       diskWarning: false,
+      crcCritical: false,
+      crcWarning: false,
+      crcIssues: [],
       summary: 'Host Status: OFFLINE CRITICAL (Unreachable via SNMP/Ping)',
     };
   }
@@ -200,11 +209,39 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     }
   }
 
-  // 4. NOTE: Interface link down states and empty/unpopulated optical DOM metrics
-  // are deliberately EXCLUDED from device-wide health calculation per Requirement 4.
+  // 4. Interface CRC Errors Evaluation
+  const rawIfaces = device.interfaces ?? (device as any).network_interfaces;
+  let ifacesList: any[] = [];
+  if (Array.isArray(rawIfaces)) {
+    ifacesList = rawIfaces;
+  } else if (typeof rawIfaces === 'string') {
+    try {
+      const p = JSON.parse(rawIfaces);
+      if (Array.isArray(p)) ifacesList = p;
+    } catch {}
+  }
 
-  const isCritical = failedHardware.length > 0 || cpuCritical || ramCritical || tempCritical || diskCritical || diskLifecycleCritical;
-  const isWarning = !isCritical && (warningHardware.length > 0 || cpuWarning || ramWarning || tempWarning || diskWarning || diskLifecycleWarning);
+  const crcIssues: Array<{ name: string; count: number; severity: 'critical' | 'warning' }> = [];
+  let crcCritical = false;
+  let crcWarning = false;
+
+  for (const iface of ifacesList) {
+    if (!iface) continue;
+    const errCount = typeof iface.crc_errors === 'number' ? iface.crc_errors : Number(iface.crc_errors);
+    if (!isNaN(errCount) && errCount > 0) {
+      const portName = String(iface.name || iface.descr || iface.description || `Port ${iface.index ?? ''}`).trim() || 'Port';
+      if (errCount >= 50) {
+        crcCritical = true;
+        crcIssues.push({ name: portName, count: errCount, severity: 'critical' });
+      } else if (errCount >= 10 || errCount > 0) {
+        crcWarning = true;
+        crcIssues.push({ name: portName, count: errCount, severity: 'warning' });
+      }
+    }
+  }
+
+  const isCritical = failedHardware.length > 0 || cpuCritical || ramCritical || tempCritical || diskCritical || diskLifecycleCritical || crcCritical;
+  const isWarning = !isCritical && (warningHardware.length > 0 || cpuWarning || ramWarning || tempWarning || diskWarning || diskLifecycleWarning || crcWarning);
 
   const health: ServerHealth = isCritical ? 'Critical' : isWarning ? 'Warning' : 'Normal';
 
@@ -221,6 +258,8 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     summary = `Storage Volume Near Capacity (${diskVal}%)`;
   } else if (diskLifecycleCritical) {
     summary = diskLifecycleReason || 'Disk Lifecycle Critical Degradation';
+  } else if (crcCritical) {
+    summary = `Interface CRC Errors Critical (${crcIssues.map(c => `${c.name}: ${c.count}`).join(', ')})`;
   } else if (warningHardware.length > 0) {
     summary = `Hardware Unit Warning: ${warningHardware.join(', ')}`;
   } else if (cpuWarning) {
@@ -233,6 +272,8 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     summary = `Elevated Storage Usage (${diskVal}%)`;
   } else if (diskLifecycleWarning) {
     summary = diskLifecycleReason || 'Disk Lifecycle Warning';
+  } else if (crcWarning) {
+    summary = `Interface CRC Errors Warning (${crcIssues.map(c => `${c.name}: ${c.count}`).join(', ')})`;
   }
 
   return {
@@ -248,6 +289,9 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     tempWarning,
     diskCritical,
     diskWarning,
+    crcCritical,
+    crcWarning,
+    crcIssues,
     summary,
   };
 }

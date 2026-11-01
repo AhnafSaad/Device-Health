@@ -11,14 +11,18 @@ import {
   Zap, 
   Fan as FanIcon,
   AlertOctagon,
-  Activity
+  Network,
+  CheckCircle2,
+  Disc,
+  ShieldAlert
 } from 'lucide-react';
 
 interface ActiveIssuesCellProps {
   server: Server;
+  isCompact?: boolean;
 }
 
-export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) => {
+export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCompact = false }) => {
   const healthInfo = calculateDeviceHealth(server);
   const isOnline = server.status === 'online';
 
@@ -27,7 +31,7 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     label: string;
     detail: string;
     severity: 'critical' | 'warning';
-    type: 'offline' | 'hardware-psu' | 'hardware-fan' | 'cpu' | 'ram' | 'temp' | 'disk' | 'general';
+    type: 'offline' | 'hardware-psu' | 'hardware-fan' | 'cpu' | 'ram' | 'temp' | 'disk' | 'crc' | 'disk-lifecycle' | 'ecc' | 'general';
   }
 
   const issues: IssueItem[] = [];
@@ -37,7 +41,7 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     issues.push({
       id: 'offline',
       label: 'Host Offline',
-      detail: 'ICMP / SNMP heartbeat failure — device unreachable',
+      detail: 'ICMP / SNMP heartbeat failure — host completely unreachable',
       severity: 'critical',
       type: 'offline',
     });
@@ -49,13 +53,13 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     issues.push({
       id: `failed-hw-${idx}`,
       label: `${name} Failed`,
-      detail: `${name} operational status: CRITICAL FAULT`,
+      detail: `${name} operational status: CRITICAL FAULT / Unpowered`,
       severity: 'critical',
       type: isFan ? 'hardware-fan' : 'hardware-psu',
     });
   });
 
-  // 3. Hardware Unit Warnings
+  // 3. Hardware Unit Warnings (PSUs and Fans)
   healthInfo.warningHardware.forEach((name, idx) => {
     const isFan = /fan/i.test(name);
     issues.push({
@@ -124,7 +128,7 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     });
   }
 
-  // 7. Storage / Disk Alerts
+  // 7. Storage / Disk Alerts (Global)
   if (healthInfo.diskCritical) {
     issues.push({
       id: 'disk-crit',
@@ -143,7 +147,152 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     });
   }
 
-  // Fallback if marked critical/warning without specific sub-metric
+  // 8. Individual Storage Partitions & Mounts
+  const rawStorage = server.storage;
+  let storageList: Array<{ name: string; kind?: string; used_pct?: number }> = [];
+  if (Array.isArray(rawStorage)) {
+    storageList = rawStorage;
+  } else if (typeof rawStorage === 'string') {
+    try {
+      const p = JSON.parse(rawStorage);
+      if (Array.isArray(p)) storageList = p;
+    } catch {}
+  }
+  storageList.forEach((s, idx) => {
+    const pct = typeof s?.used_pct === 'number' ? s.used_pct : null;
+    const mountName = s?.name || `Disk ${idx + 1}`;
+    if (pct !== null) {
+      if (pct > 85) {
+        issues.push({
+          id: `storage-crit-${idx}`,
+          label: `Vol ${mountName}: ${pct}%`,
+          detail: `Partition ${mountName} is near capacity (${pct}% used)`,
+          severity: 'critical',
+          type: 'disk',
+        });
+      } else if (pct >= 70) {
+        issues.push({
+          id: `storage-warn-${idx}`,
+          label: `Vol ${mountName}: ${pct}%`,
+          detail: `Partition ${mountName} elevated capacity (${pct}% used)`,
+          severity: 'warning',
+          type: 'disk',
+        });
+      }
+    }
+  });
+
+  // 9. Interface CRC Errors (Threshold breaches on physical/optical ports)
+  const crcList = healthInfo.crcIssues || [];
+  if (crcList.length > 0) {
+    crcList.forEach((c, idx) => {
+      issues.push({
+        id: `crc-${idx}-${c.name}`,
+        label: `CRC: ${c.name} (${c.count.toLocaleString()})`,
+        detail: `Interface ${c.name} recorded ${c.count.toLocaleString()} CRC packet check failures`,
+        severity: c.severity,
+        type: 'crc',
+      });
+    });
+  } else {
+    // Check raw interfaces if crcIssues wasn't populated
+    const rawIfaces = server.interfaces ?? (server as any).network_interfaces;
+    let ifacesList: any[] = [];
+    if (Array.isArray(rawIfaces)) {
+      ifacesList = rawIfaces;
+    } else if (typeof rawIfaces === 'string') {
+      try {
+        const p = JSON.parse(rawIfaces);
+        if (Array.isArray(p)) ifacesList = p;
+      } catch {}
+    }
+    ifacesList.forEach((iface, idx) => {
+      const errCount = typeof iface?.crc_errors === 'number' ? iface.crc_errors : Number(iface?.crc_errors);
+      if (!isNaN(errCount) && errCount > 0) {
+        const portName = String(iface.name || iface.descr || iface.description || `Port ${iface.index ?? idx + 1}`).trim();
+        const isCrit = errCount >= 50;
+        issues.push({
+          id: `crc-raw-${idx}-${portName}`,
+          label: `CRC: ${portName} (${errCount.toLocaleString()})`,
+          detail: `Interface ${portName} recorded ${errCount.toLocaleString()} CRC packet check failures`,
+          severity: isCrit ? 'critical' : 'warning',
+          type: 'crc',
+        });
+      }
+    });
+  }
+
+  // 10. Disk Lifecycle: SSD Wear & HDD SMART Sectors
+  const rawWear = typeof server.diskPercentageUsed === 'number' ? server.diskPercentageUsed : null;
+  if (rawWear !== null && !isNaN(rawWear)) {
+    if (rawWear >= 90) {
+      issues.push({
+        id: 'ssd-wear-crit',
+        label: `SSD Wear: ${rawWear}%`,
+        detail: `SSD endurance critical (${rawWear}% wear life consumed)`,
+        severity: 'critical',
+        type: 'disk-lifecycle',
+      });
+    } else if (rawWear >= 70) {
+      issues.push({
+        id: 'ssd-wear-warn',
+        label: `SSD Wear: ${rawWear}%`,
+        detail: `SSD endurance warning (${rawWear}% wear life consumed)`,
+        severity: 'warning',
+        type: 'disk-lifecycle',
+      });
+    }
+  }
+
+  const disks = Array.isArray(server.disks) ? server.disks : [];
+  disks.forEach((d, idx) => {
+    if (!d) return;
+    const r = typeof d.reallocated === 'number' ? d.reallocated : null;
+    const p = typeof d.pending === 'number' ? d.pending : null;
+    const u = typeof d.uncorrectable === 'number' ? d.uncorrectable : null;
+    const dName = d.device || `Disk ${idx + 1}`;
+
+    if ((r !== null && r >= 20) || (p !== null && p >= 5) || (u !== null && u >= 5)) {
+      issues.push({
+        id: `smart-crit-${dName}`,
+        label: `SMART: ${dName}`,
+        detail: `HDD ${dName} SMART Critical: ${r || 0} reallocated, ${p || 0} pending, ${u || 0} uncorrectable sectors`,
+        severity: 'critical',
+        type: 'disk-lifecycle',
+      });
+    } else if ((r !== null && r >= 5) || (p !== null && p >= 1) || (u !== null && u >= 1)) {
+      issues.push({
+        id: `smart-warn-${dName}`,
+        label: `SMART: ${dName}`,
+        detail: `HDD ${dName} SMART Warning: ${r || 0} reallocated, ${p || 0} pending sectors`,
+        severity: 'warning',
+        type: 'disk-lifecycle',
+      });
+    }
+  });
+
+  // 11. RAM ECC Memory Parity Errors
+  const eccUncorrected = typeof server.ramEccUncorrected === 'number' ? server.ramEccUncorrected : null;
+  const eccCorrected = typeof server.ramEccCorrected === 'number' ? server.ramEccCorrected : null;
+  if (eccUncorrected !== null && eccUncorrected > 0) {
+    issues.push({
+      id: 'ecc-uncorrected',
+      label: `RAM ECC: ${eccUncorrected} Uncorrected`,
+      detail: `Hardware uncorrected multi-bit memory parity errors detected`,
+      severity: 'critical',
+      type: 'ecc',
+    });
+  } else if (eccCorrected !== null && eccCorrected > 50) {
+    issues.push({
+      id: 'ecc-corrected',
+      label: `RAM ECC: ${eccCorrected} Corrected`,
+      detail: `High rate of single-bit ECC memory corrections detected`,
+      severity: 'warning',
+      type: 'ecc',
+    });
+  }
+
+  // 12. Fallback if health is marked critical/warning but no specific items matched
   if (issues.length === 0) {
     if (healthInfo.health === 'Critical') {
       issues.push({
@@ -181,6 +330,12 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
         return <Thermometer className={iconClass} />;
       case 'disk':
         return <HardDrive className={iconClass} />;
+      case 'crc':
+        return <Network className={iconClass} />;
+      case 'disk-lifecycle':
+        return <Disc className={iconClass} />;
+      case 'ecc':
+        return <ShieldAlert className={iconClass} />;
       default:
         return item.severity === 'critical' ? (
           <AlertOctagon className={iconClass} />
@@ -190,9 +345,19 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
     }
   };
 
+  // If completely nominal with zero issues
+  if (issues.length === 0) {
+    return (
+      <div className="py-1.5 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        <span>All systems nominal</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-1.5 py-1 min-w-[210px] max-w-[340px]">
-      {/* Visual Issue Badges */}
+    <div className={`space-y-2 py-2 min-w-[240px] max-w-full md:max-w-md lg:max-w-lg xl:max-w-xl ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+      {/* Visual Issue Badges (All threshold-breaching errors rendered) */}
       <div className="flex flex-wrap items-center gap-1.5">
         {issues.map((issue) => {
           const isCrit = issue.severity === 'critical';
@@ -202,26 +367,45 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server }) =>
               title={issue.detail}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all shadow-xs ${
                 isCrit
-                  ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400 shadow-rose-500/10'
-                  : 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-amber-500/10'
+                  ? 'bg-rose-500/15 border-rose-500/35 text-rose-600 dark:text-rose-400 shadow-rose-500/10'
+                  : 'bg-amber-500/15 border-amber-500/35 text-amber-600 dark:text-amber-400 shadow-amber-500/10'
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCrit ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
               {renderIssueIcon(issue)}
-              <span>{issue.label}</span>
+              <span className="whitespace-nowrap">{issue.label}</span>
             </span>
           );
         })}
       </div>
 
-      {/* Root Cause Summary Line */}
-      <div 
-        className="flex items-center gap-1.5 text-[11px] font-mono text-base-content/75 truncate"
-        title={healthInfo.summary}
-      >
-        <Activity className="w-3 h-3 text-base-content/40 shrink-0" />
-        <span className="truncate">{healthInfo.summary}</span>
+      {/* Root Causes Detailed Stacked List - Every error shown with explanation */}
+      <div className="space-y-1 pt-0.5 border-t border-base-content/5">
+        {issues.map((issue) => {
+          const isCrit = issue.severity === 'critical';
+          return (
+            <div 
+              key={`detail-${issue.id}`}
+              className="flex items-start gap-1.5 text-[11px] font-mono leading-relaxed"
+            >
+              <span className={`shrink-0 mt-0.5 text-xs font-bold ${isCrit ? 'text-rose-500' : 'text-amber-500'}`}>
+                ↳
+              </span>
+              <span 
+                className={`break-words font-medium ${
+                  isCrit 
+                    ? 'text-rose-700 dark:text-rose-300' 
+                    : 'text-amber-700 dark:text-amber-300'
+                }`}
+              >
+                {issue.detail}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 };
+
+export default ActiveIssuesCell;
