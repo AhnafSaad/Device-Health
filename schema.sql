@@ -158,7 +158,11 @@ VALUES
   ('optical_rx', 'All', -8, -20, true),
   ('ram_ecc_corrected', 'All', 10, 50, true),
   ('ram_ecc_uncorrected', 'All', 1, 1, true),
-  ('crc_errors', 'All', 10, 50, true)
+  ('crc_errors', 'All', 10, 50, true),
+  ('ssd_wear', 'All', 70, 90, true),
+  ('disk_reallocated', 'All', 5, 20, true),
+  ('disk_pending', 'All', 1, 5, true),
+  ('disk_uncorrectable', 'All', 1, 5, true)
 ON CONFLICT (metric, device_type) DO NOTHING;
 
 

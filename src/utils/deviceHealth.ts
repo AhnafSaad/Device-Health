@@ -137,11 +137,74 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
   const diskCritical = hasDiskMetric && diskVal > 85;
   const diskWarning = hasDiskMetric && !diskCritical && diskVal >= 70;
 
+  // Disk Lifecycle: SSD Wear Level & HDD Reallocated / Pending / Uncorrectable Sectors
+  let diskLifecycleCritical = false;
+  let diskLifecycleWarning = false;
+  let diskLifecycleReason = '';
+
+  const rawWear = device.diskPercentageUsed !== undefined && device.diskPercentageUsed !== null
+    ? Number(device.diskPercentageUsed)
+    : null;
+  if (rawWear !== null && !isNaN(rawWear)) {
+    if (rawWear >= 90) {
+      diskLifecycleCritical = true;
+      diskLifecycleReason = `SSD Wear Level Critical (${rawWear}% used)`;
+    } else if (rawWear >= 70) {
+      diskLifecycleWarning = true;
+      diskLifecycleReason = `SSD Wear Level Warning (${rawWear}% used)`;
+    }
+  }
+
+  const disks = Array.isArray(device.disks) ? device.disks : [];
+  for (const d of disks) {
+    if (!d) continue;
+    const w = typeof d.percentage_used === 'number' ? d.percentage_used : null;
+    if (w !== null && !isNaN(w)) {
+      if (w >= 90) {
+        diskLifecycleCritical = true;
+        diskLifecycleReason = `SSD ${d.device} Wear Critical (${w}% used)`;
+      } else if (w >= 70 && !diskLifecycleCritical && !diskLifecycleWarning) {
+        diskLifecycleWarning = true;
+        diskLifecycleReason = `SSD ${d.device} Wear Warning (${w}% used)`;
+      }
+    }
+    const r = typeof d.reallocated === 'number' ? d.reallocated : null;
+    if (r !== null && !isNaN(r) && r > 0) {
+      if (r >= 20) {
+        diskLifecycleCritical = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Critical: ${r} Reallocated Sectors`;
+      } else if (r >= 5 && !diskLifecycleCritical && !diskLifecycleWarning) {
+        diskLifecycleWarning = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Warning: ${r} Reallocated Sectors`;
+      }
+    }
+    const p = typeof d.pending === 'number' ? d.pending : null;
+    if (p !== null && !isNaN(p) && p > 0) {
+      if (p >= 5) {
+        diskLifecycleCritical = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Critical: ${p} Pending Sectors`;
+      } else if (p >= 1 && !diskLifecycleCritical && !diskLifecycleWarning) {
+        diskLifecycleWarning = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Warning: ${p} Pending Sectors`;
+      }
+    }
+    const u = typeof d.uncorrectable === 'number' ? d.uncorrectable : null;
+    if (u !== null && !isNaN(u) && u > 0) {
+      if (u >= 5) {
+        diskLifecycleCritical = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Critical: ${u} Uncorrectable Errors`;
+      } else if (u >= 1 && !diskLifecycleCritical && !diskLifecycleWarning) {
+        diskLifecycleWarning = true;
+        diskLifecycleReason = `HDD ${d.device} SMART Warning: ${u} Uncorrectable Errors`;
+      }
+    }
+  }
+
   // 4. NOTE: Interface link down states and empty/unpopulated optical DOM metrics
   // are deliberately EXCLUDED from device-wide health calculation per Requirement 4.
 
-  const isCritical = failedHardware.length > 0 || cpuCritical || ramCritical || tempCritical || diskCritical;
-  const isWarning = !isCritical && (warningHardware.length > 0 || cpuWarning || ramWarning || tempWarning || diskWarning);
+  const isCritical = failedHardware.length > 0 || cpuCritical || ramCritical || tempCritical || diskCritical || diskLifecycleCritical;
+  const isWarning = !isCritical && (warningHardware.length > 0 || cpuWarning || ramWarning || tempWarning || diskWarning || diskLifecycleWarning);
 
   const health: ServerHealth = isCritical ? 'Critical' : isWarning ? 'Warning' : 'Normal';
 
@@ -156,6 +219,8 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     summary = `Chassis Temperature Critical (${rawTemp}°C)`;
   } else if (diskCritical) {
     summary = `Storage Volume Near Capacity (${diskVal}%)`;
+  } else if (diskLifecycleCritical) {
+    summary = diskLifecycleReason || 'Disk Lifecycle Critical Degradation';
   } else if (warningHardware.length > 0) {
     summary = `Hardware Unit Warning: ${warningHardware.join(', ')}`;
   } else if (cpuWarning) {
@@ -166,6 +231,8 @@ export function calculateDeviceHealth(device: Partial<Server> | null | undefined
     summary = `Elevated Temperature (${rawTemp}°C)`;
   } else if (diskWarning) {
     summary = `Elevated Storage Usage (${diskVal}%)`;
+  } else if (diskLifecycleWarning) {
+    summary = diskLifecycleReason || 'Disk Lifecycle Warning';
   }
 
   return {

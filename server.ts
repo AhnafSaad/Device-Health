@@ -808,6 +808,11 @@ const VALID_THRESHOLD_METRICS = new Set([
   'optical_tx',
   'optical_rx',
   'crc_errors',
+  'ssd_wear',
+  'hdd_lifecycle',
+  'disk_reallocated',
+  'disk_pending',
+  'disk_uncorrectable',
 ]);
 const VALID_THRESHOLD_DEVICE_TYPES = new Set(['All', 'Server', 'Router', 'Switch', 'OLT']);
 

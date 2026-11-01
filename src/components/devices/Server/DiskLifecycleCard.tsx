@@ -268,23 +268,23 @@ export const DiskLifecycleCard: React.FC<DiskLifecycleCardProps> = (props) => {
               </div>
             </div>
 
-            {/* Error Counters (Reallocated, Pending, Uncorrectable) */}
+            {/* Error Counters (Reallocated, Pending, Uncorrectable) with Threshold Highlights */}
             <div className="p-2.5 sm:p-3 rounded-xl bg-base-200/40 border border-base-content/5 flex items-center justify-around text-xs font-mono">
               <div>
                 <span className="text-base-content/50 text-[11px]">Reallocated: </span>
-                <span className={hasReallocated ? 'font-bold text-amber-500' : 'text-base-content/70'}>
+                <span className={(d.reallocated ?? 0) >= 20 ? 'font-black text-rose-500' : (d.reallocated ?? 0) >= 5 ? 'font-bold text-amber-500' : hasReallocated ? 'font-semibold text-amber-500/80' : 'text-base-content/70'}>
                   {d.reallocated ?? '—'}
                 </span>
               </div>
               <div>
                 <span className="text-base-content/50 text-[11px]">Pending: </span>
-                <span className={hasPending ? 'font-bold text-amber-500' : 'text-base-content/70'}>
+                <span className={(d.pending ?? 0) >= 5 ? 'font-black text-rose-500' : (d.pending ?? 0) >= 1 ? 'font-bold text-amber-500' : hasPending ? 'font-semibold text-amber-500/80' : 'text-base-content/70'}>
                   {d.pending ?? '—'}
                 </span>
               </div>
               <div>
                 <span className="text-base-content/50 text-[11px]">Uncorrectable: </span>
-                <span className={hasUncorrectable ? 'font-bold text-rose-500' : 'text-base-content/70'}>
+                <span className={(d.uncorrectable ?? 0) >= 5 ? 'font-black text-rose-500' : (d.uncorrectable ?? 0) >= 1 ? 'font-bold text-rose-500/90' : hasUncorrectable ? 'font-semibold text-rose-500' : 'text-base-content/70'}>
                   {d.uncorrectable ?? '—'}
                 </span>
               </div>

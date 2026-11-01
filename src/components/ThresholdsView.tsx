@@ -33,7 +33,12 @@ export type ThresholdMetric =
   | 'ram_ecc_uncorrected'
   | 'optical_tx'
   | 'optical_rx'
-  | 'crc_errors';
+  | 'crc_errors'
+  | 'ssd_wear'
+  | 'hdd_lifecycle'
+  | 'disk_reallocated'
+  | 'disk_pending'
+  | 'disk_uncorrectable';
 export type ThresholdDeviceType = 'All' | 'Server' | 'Router' | 'Switch' | 'OLT';
 
 const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
@@ -47,6 +52,11 @@ const ALL_SUPPORTED_METRICS: ThresholdMetric[] = [
   'optical_tx',
   'optical_rx',
   'crc_errors',
+  'ssd_wear',
+  'hdd_lifecycle',
+  'disk_reallocated',
+  'disk_pending',
+  'disk_uncorrectable',
 ];
 
 export interface ThresholdRow {
@@ -129,6 +139,26 @@ const METRIC_CONFIGS: MetricConfig[] = [
     defaultCritical: 50,
     defaultEnabled: true,
     tileClasses: 'bg-rose-500/10 border-rose-500/25 text-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.12)]',
+  },
+  {
+    metric: 'ssd_wear',
+    label: 'SSD Wear Level (Used %)',
+    unit: '%',
+    scaleMax: 100,
+    defaultWarning: 70,
+    defaultCritical: 90,
+    defaultEnabled: true,
+    tileClasses: 'bg-amber-500/10 border-amber-500/25 text-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.12)]',
+  },
+  {
+    metric: 'hdd_lifecycle',
+    label: 'HDD Lifecycle / Wear Level',
+    unit: '%',
+    scaleMax: 100,
+    defaultWarning: 70,
+    defaultCritical: 90,
+    defaultEnabled: true,
+    tileClasses: 'bg-orange-500/10 border-orange-500/25 text-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.12)]',
   },
 ];
 
@@ -857,6 +887,18 @@ export const ThresholdsView: React.FC<ThresholdsViewProps> = ({
         return <Users className="w-5 h-5" />;
       case 'crc_errors':
         return <Network className="w-5 h-5" />;
+      case 'ssd_wear':
+        return <Activity className="w-5 h-5" />;
+      case 'hdd_lifecycle':
+        return <HardDrive className="w-5 h-5" />;
+      case 'disk_reallocated':
+        return <AlertCircle className="w-5 h-5" />;
+      case 'disk_pending':
+        return <Clock className="w-5 h-5" />;
+      case 'disk_uncorrectable':
+        return <HardDrive className="w-5 h-5" />;
+      default:
+        return <Activity className="w-5 h-5" />;
     }
   };
 
