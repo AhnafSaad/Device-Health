@@ -1152,7 +1152,7 @@ export default function App() {
             currentInspectServer ? (
               <DeviceRenderer
                 server={currentInspectServer}
-                onBack={() => router.push('/')}
+                onBack={() => router.push('/dashboard')}
                 onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
                 onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
                 onRebootServer={handleRebootServer}
@@ -1167,10 +1167,10 @@ export default function App() {
                     The specified device ({inspectDeviceId}) could not be located in fleet inventory.
                   </p>
                   <button
-                    onClick={() => router.push('/')}
+                    onClick={() => router.push('/dashboard')}
                     className="btn btn-primary btn-sm rounded-xl font-bold"
                   >
-                    Back to Dashboard
+                    Back to Fleet Dashboard
                   </button>
                 </div>
               </div>
