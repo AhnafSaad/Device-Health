@@ -15,9 +15,15 @@ import {
   Layers,
   Activity,
   Building2,
-  Filter
+  Filter,
+  Zap,
+  Radio,
+  Network,
+  MemoryStick,
+  Cpu
 } from 'lucide-react';
 import { DatacenterDropdown } from './DatacenterDropdown';
+import { ObserviumSensorMonitor, ErrorCategory } from './ObserviumSensorMonitor';
 
 interface IncidentsViewProps {
   servers: Server[];
@@ -48,6 +54,10 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   onOpenDcModal,
   currentUserRole = 'viewer',
 }) => {
+  // View mode and Category states
+  const [viewMode, setViewMode] = useState<'sensors' | 'devices'>('sensors');
+  const [errorCategory, setErrorCategory] = useState<ErrorCategory>('all');
+
   // Filter and Search states
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'warning'>('all');
@@ -143,9 +153,39 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
         }
       }
 
+      // Error Category filter
+      if (errorCategory === 'optical') {
+        const rawOpt = (srv as any).optical_sensors ?? (srv as any).opticalSensors;
+        const hasOptVal = typeof srv.opticalRx === 'number';
+        let optList: any[] = [];
+        if (Array.isArray(rawOpt)) optList = rawOpt;
+        else if (typeof rawOpt === 'string') {
+          try {
+            const p = JSON.parse(rawOpt);
+            if (Array.isArray(p)) optList = p;
+          } catch {}
+        }
+        if (!hasOptVal && optList.length === 0) return false;
+      } else if (errorCategory === 'ecc') {
+        const ue = Number(srv.ramEccUncorrected || 0);
+        const ce = Number(srv.ramEccCorrected || 0);
+        const controllers = Array.isArray(srv.ramEccControllers) ? srv.ramEccControllers : [];
+        if (ue === 0 && ce === 0 && controllers.length === 0) return false;
+      } else if (errorCategory === 'ram') {
+        const ram = srv.ramUsage || Number((srv as any).ram_usage ?? 0);
+        if (ram < 70) return false;
+      } else if (errorCategory === 'cpu') {
+        const cpu = srv.cpuUsage || Number((srv as any).cpu_usage ?? 0);
+        if (cpu < 70) return false;
+      } else if (errorCategory === 'hardware') {
+        if (health.failedHardware.length === 0 && health.warningHardware.length === 0) return false;
+      } else if (errorCategory === 'interfaces') {
+        if (!health.crcCritical && !health.crcWarning) return false;
+      }
+
       return true;
     });
-  }, [allIncidents, severityFilter, statusFilter, deviceFilter, datacenterFilter, searchQuery]);
+  }, [allIncidents, severityFilter, statusFilter, deviceFilter, datacenterFilter, searchQuery, errorCategory]);
 
   // 3. MANDATORY REQUIREMENT: Strictly sort Critical devices at the TOP!
   const sortedIncidents = useMemo(() => {
@@ -295,8 +335,51 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
         </div>
       </div>
 
-      {/* Main Two-Column Incident Workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch lg:h-[calc(100vh-13.5rem)] min-w-0">
+      {/* View Switcher: Observium Telemetry vs Host Device List */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-2 rounded-2xl bg-base-100 border border-base-content/10 shadow-sm">
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-base-200/80 border border-base-content/10 text-xs font-mono">
+          <button
+            type="button"
+            onClick={() => setViewMode('sensors')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              viewMode === 'sensors'
+                ? 'bg-primary text-primary-content shadow-xs'
+                : 'text-base-content/70 hover:text-base-content'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Observium Telemetry Monitor (Real-time Graphs)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('devices')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              viewMode === 'devices'
+                ? 'bg-primary text-primary-content shadow-xs'
+                : 'text-base-content/70 hover:text-base-content'
+            }`}
+          >
+            <ServerIcon className="w-3.5 h-3.5" />
+            <span>Host Incidents Table ({sortedIncidents.length})</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-base-content/60 px-2">
+          <span>Active View: <strong className="text-base-content">{viewMode === 'sensors' ? 'Real-Time Sensor Telemetry' : 'Device Outage Triage'}</strong></span>
+        </div>
+      </div>
+
+      {viewMode === 'sensors' ? (
+        <ObserviumSensorMonitor
+          servers={servers}
+          onInspectServer={onInspectServer}
+          selectedCategory={errorCategory}
+          onSelectCategory={setErrorCategory}
+        />
+      ) : (
+        /* Main Two-Column Incident Workspace */
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch lg:h-[calc(100vh-13.5rem)] min-w-0">
         
         {/* Left Sidebar: Incident Metric Cards & Filters */}
         <aside 
@@ -469,6 +552,47 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
               )}
             </div>
 
+            {/* Error Category Filter */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 block mb-1">
+                Error Category
+              </label>
+              <div className="flex flex-col gap-1 font-mono text-[11px]">
+                {[
+                  { id: 'all', label: 'All Anomalies', icon: AlertOctagon, color: 'text-base-content' },
+                  { id: 'optical', label: 'Optical Tx/Rx', icon: Zap, color: 'text-cyan-500' },
+                  { id: 'ecc', label: 'ECC Memory (ERC)', icon: MemoryStick, color: 'text-purple-500' },
+                  { id: 'ram', label: 'RAM Saturation', icon: Activity, color: 'text-amber-500' },
+                  { id: 'cpu', label: 'Compute CPU', icon: Cpu, color: 'text-rose-500' },
+                  { id: 'hardware', label: 'Hardware PSU/Fans', icon: AlertTriangle, color: 'text-emerald-500' },
+                  { id: 'interfaces', label: 'Interfaces Down/CRC', icon: Network, color: 'text-blue-500' },
+                ].map((cat) => {
+                  const Icon = cat.icon;
+                  const isSelected = errorCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setErrorCategory(cat.id as ErrorCategory);
+                        setCurrentPage(1);
+                      }}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-primary text-primary-content font-bold shadow-xs'
+                          : 'bg-base-200/50 hover:bg-base-200 text-base-content/70 hover:text-base-content'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : cat.color}`} />
+                        <span>{cat.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Device Operational Status (UP / DOWN) Filter */}
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 block mb-1">
@@ -638,6 +762,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
           </ServerTable>
         </section>
       </div>
+      )}
     </div>
   );
 };
