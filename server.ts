@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { execFile } from 'child_process';
 import { query, ensureTablesExist, getSetting, setSetting, isDbConnected } from './lib/db.js';
 import { 
   pollDevice, 
@@ -2412,6 +2413,116 @@ const pollSingleDeviceHandler = async (req: Request, res: Response) => {
 
 app.post('/api/devices/:id/poll', pollSingleDeviceHandler);
 app.post('/api/devices/poll', pollSingleDeviceHandler);
+
+// POST /api/devices/:id/ping & POST /api/devices/ping - Live on-demand ICMP ping
+const pingDeviceHandler = async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id || req.body?.id || req.body?.ip_address || (req.query.id as string);
+    if (!rawId) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Device ID or IP address is required for ping.' });
+    }
+
+    const idStr = String(rawId).trim();
+    let targetIp: string | null = null;
+
+    // 1. Fetch ONLY the ip_address from the database (no status, no snmp_reachable, no telemetry)
+    if (isDbConnected()) {
+      const isNumeric = /^\d+$/.test(idStr);
+      try {
+        const dbRes = await query(
+          `SELECT ip_address FROM servers_info WHERE ${isNumeric ? 'id = $1' : 'id::text = $1 OR ip_address = $1'} LIMIT 1;`,
+          [idStr]
+        );
+        if (dbRes && dbRes.rows && dbRes.rows.length > 0 && dbRes.rows[0].ip_address) {
+          targetIp = String(dbRes.rows[0].ip_address).trim();
+        }
+      } catch (dbErr: any) {
+        console.warn('[server.ts] Error querying device IP for ping:', dbErr?.message);
+      }
+    }
+
+    // 2. Memory provider fallback
+    if (!targetIp) {
+      const memDev = memoryDevices.find((d) => String(d.id) === idStr || d.ip_address === idStr);
+      if (memDev && memDev.ip_address) {
+        targetIp = String(memDev.ip_address).trim();
+      }
+    }
+
+    // 3. Direct IP fallback if passed in request body or id itself is an IP
+    if (!targetIp && typeof req.body?.ip_address === 'string' && req.body.ip_address.trim()) {
+      targetIp = req.body.ip_address.trim();
+    }
+    if (!targetIp && typeof req.body?.ip === 'string' && req.body.ip.trim()) {
+      targetIp = req.body.ip.trim();
+    }
+    if (!targetIp && /^[a-zA-Z0-9.:-]+$/.test(idStr)) {
+      targetIp = idStr;
+    }
+
+    if (!targetIp) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Device with ID ${idStr} was not found.`,
+      });
+    }
+
+    const cleanIp = targetIp.trim();
+    // Validate targetIp against shell injection
+    if (!/^[a-zA-Z0-9.:-]+$/.test(cleanIp)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid IP address or hostname format.',
+      });
+    }
+
+    // 4. Directly execute system-level ping command: ping -c 1 -W 2 <ip>
+    execFile('ping', ['-c', '1', '-W', '2', cleanIp], { timeout: 3500 }, (error, stdout, stderr) => {
+      const rawOut = ((stdout || '') + '\n' + (stderr || '')).trim();
+      const lines = rawOut.split('\n').map((l) => l.trim()).filter(Boolean);
+
+      const echoLine = lines.find((l) => /bytes from/i.test(l));
+      const statsLine = lines.find((l) => /packets transmitted/i.test(l));
+      const unreachLine = lines.find((l) => /destination host unreachable|host unreachable/i.test(l));
+
+      let alive = false;
+      let displayResult = '';
+
+      if (!error && echoLine) {
+        alive = true;
+        displayResult = echoLine;
+        if (statsLine && /0%\s*packet loss/i.test(statsLine) && !displayResult.includes('packet loss')) {
+          displayResult += ' (0% packet loss)';
+        }
+      } else if (unreachLine) {
+        displayResult = `${unreachLine} (${cleanIp}) - 100% packet loss`;
+      } else if (statsLine) {
+        displayResult = `Request timed out: ${statsLine} (${cleanIp})`;
+      } else if (error && error.message) {
+        displayResult = `Ping failed for ${cleanIp}: ${lines[0] || error.message}`;
+      } else {
+        displayResult = `No response received from ${cleanIp} (100% packet loss)`;
+      }
+
+      return res.json({
+        status: 'success',
+        alive,
+        ip: cleanIp,
+        output: displayResult,
+        raw: rawOut,
+      });
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: err?.message || 'Failed to execute ICMP ping.',
+    });
+  }
+};
+
+app.post('/api/devices/:id/ping', pingDeviceHandler);
+app.post('/api/devices/ping', pingDeviceHandler);
+
 
 
 // POST /api/devices

@@ -177,18 +177,32 @@ export const OLTView: React.FC<OLTViewProps> = ({
     return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
   };
 
-  const handlePing = () => {
+  const handlePing = async () => {
     setIsPinging(true);
     setPingResult(null);
-    setTimeout(() => {
-      setIsPinging(false);
-      if (server.status === 'online') {
-        const ms = Math.floor(Math.random() * 22) + 6;
-        setPingResult(`64 bytes from ${server.ip}: icmp_seq=1 ttl=58 time=${ms}ms (0% packet loss)`);
+    try {
+      const targetId = server.id || server.ip;
+      const res = await fetchWithAuth(`/api/devices/${encodeURIComponent(targetId)}/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: server.id, ip_address: server.ip }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.output) {
+          setPingResult(data.output);
+        } else {
+          setPingResult(`ICMP ping finished for ${server.ip} (Status: ${data?.alive ? 'Alive' : 'No response'})`);
+        }
       } else {
-        setPingResult(`From 10.0.0.1: Destination Host Unreachable (${server.ip}) - 100% loss`);
+        const errData = await res.json().catch(() => null);
+        setPingResult(errData?.message || `Ping request failed (HTTP ${res.status})`);
       }
-    }, 550);
+    } catch (err: any) {
+      setPingResult(err?.message || 'Network error while attempting ICMP ping.');
+    } finally {
+      setIsPinging(false);
+    }
   };
 
   const formatPortSpeed = (speedBps?: number | null) => {
