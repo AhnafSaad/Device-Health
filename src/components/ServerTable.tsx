@@ -275,17 +275,26 @@ export const ServerTable: React.FC<ServerTableProps> = ({
       {/* Modern High-Density Table with Internal Scrollbar */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
+          {/* Defined column proportions to keep Device & Location snug, maximizing space for Active Issues */}
+          <colgroup>
+            <col className="w-[210px] sm:w-[230px]" />
+            <col className="w-[72px]" />
+            <col className="w-[105px]" />
+            <col className="w-auto" />
+            <col className="hidden lg:table-column w-[170px]" />
+            <col className="w-[110px]" />
+          </colgroup>
           {/* Sticky Table Header with exactly the 6 requested columns */}
           <thead className="sticky top-0 z-10 bg-base-200/95 backdrop-blur-md shadow-xs">
             <tr className="border-b border-base-content/10 text-[11px] font-bold uppercase tracking-wider text-base-content/60 select-none">
-              <th className="py-2.5 px-3.5">Device &amp; Identity</th>
-              <th className="py-2.5 px-3.5 text-center">Status</th>
-              <th className="py-2.5 px-3.5">Health Telemetry</th>
-              <th className={`py-2.5 px-3.5 hidden md:table-cell ${isIncidentsMode ? 'min-w-[280px]' : ''}`}>
+              <th className="py-2.5 px-3 w-[210px] sm:w-[230px]">Device &amp; Identity</th>
+              <th className="py-2.5 px-2 w-[72px] text-center">Status</th>
+              <th className="py-2.5 px-2.5 w-[105px]">Health Telemetry</th>
+              <th className="py-2.5 px-3.5 hidden md:table-cell">
                 {isIncidentsMode ? 'Active Issues & Root Causes' : 'Core Resources'}
               </th>
-              <th className="py-2.5 px-3.5 hidden lg:table-cell">Data Center or Location / Rack</th>
-              <th className="py-2.5 px-3.5 text-right">Action</th>
+              <th className="py-2.5 px-3 hidden lg:table-cell w-[170px]">Data Center / Rack</th>
+              <th className="py-2.5 px-3 text-right w-[110px]">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-base-content/5">
@@ -341,7 +350,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     }`}
                   >
                     {/* 1. Node & Identity: IP Address, Hostname, Brand Logo & Name, Device Type Badge */}
-                    <td className="py-2.5 px-3.5 align-top">
+                    <td className="py-2.5 px-3 w-[210px] sm:w-[230px] align-top">
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         {/* Live Ping Beacon */}
                         <span className="relative flex h-2 w-2 shrink-0">
@@ -443,7 +452,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                   </td>
 
                     {/* 2. Status: Glowing UP/DOWN badge */}
-                    <td className="py-2.5 px-3.5 text-center align-top whitespace-nowrap">
+                    <td className="py-2.5 px-2 w-[72px] text-center align-top whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase border transition-all ${
                           isOnline
@@ -457,7 +466,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 3. Health Telemetry: Normal / Warning / Critical - Unified via calculateDeviceHealth */}
-                    <td className="py-2.5 px-3.5 align-top whitespace-nowrap">
+                    <td className="py-2.5 px-2.5 w-[105px] align-top whitespace-nowrap">
                       <div>
                         {healthInfo.health === 'Normal' && (
                           <span
@@ -630,22 +639,22 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 5. Location & Rack */}
-                    <td className="py-2.5 px-3.5 hidden lg:table-cell align-top text-xs text-base-content/70 whitespace-nowrap">
+                    <td className="py-2.5 px-3 hidden lg:table-cell align-top text-xs text-base-content/70 w-[170px] whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                        <span className="truncate max-w-[140px] font-semibold text-base-content">
+                        <span className="truncate max-w-[130px] font-semibold text-base-content">
                           {server.datacenterName || server.location.split(' ')[0]}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-[10px] font-mono text-base-content/50 ml-5">
-                        <span className="truncate max-w-[110px]">{server.location}</span>
+                        <span className="truncate max-w-[105px]">{server.location}</span>
                         <span>•</span>
                         <span>{formatRack(server.rackNumber) || 'Unassigned'}</span>
                       </div>
                     </td>
 
                     {/* 6. Action: Poll button + Inspect button + 3-dot dropdown menu */}
-                    <td className="py-2.5 px-3.5 align-top text-right whitespace-nowrap">
+                    <td className="py-2.5 px-3 align-top text-right w-[110px] whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {onPollDevice && (
                           <button

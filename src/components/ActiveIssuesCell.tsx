@@ -356,8 +356,8 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCo
   }
 
   return (
-    <div className={`space-y-2 py-2 min-w-[240px] max-w-full md:max-w-md lg:max-w-lg xl:max-w-xl ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
-      {/* Visual Issue Badges (All threshold-breaching errors rendered) */}
+    <div className={`py-1 w-full ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+      {/* Visual Issue Badges (All threshold-breaching errors rendered cleanly) */}
       <div className="flex flex-wrap items-center gap-1.5">
         {issues.map((issue) => {
           const isCrit = issue.severity === 'critical';
@@ -367,40 +367,14 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCo
               title={issue.detail}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all shadow-xs ${
                 isCrit
-                  ? 'bg-rose-500/15 border-rose-500/35 text-rose-600 dark:text-rose-400 shadow-rose-500/10'
-                  : 'bg-amber-500/15 border-amber-500/35 text-amber-600 dark:text-amber-400 shadow-amber-500/10'
+                  ? 'bg-rose-500/15 border-rose-500/35 text-rose-600 dark:text-rose-400 shadow-rose-500/10 hover:bg-rose-500/25'
+                  : 'bg-amber-500/15 border-amber-500/35 text-amber-600 dark:text-amber-400 shadow-amber-500/10 hover:bg-amber-500/25'
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCrit ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
               {renderIssueIcon(issue)}
               <span className="whitespace-nowrap">{issue.label}</span>
             </span>
-          );
-        })}
-      </div>
-
-      {/* Root Causes Detailed Stacked List - Every error shown with explanation */}
-      <div className="space-y-1 pt-0.5 border-t border-base-content/5">
-        {issues.map((issue) => {
-          const isCrit = issue.severity === 'critical';
-          return (
-            <div 
-              key={`detail-${issue.id}`}
-              className="flex items-start gap-1.5 text-[11px] font-mono leading-relaxed"
-            >
-              <span className={`shrink-0 mt-0.5 text-xs font-bold ${isCrit ? 'text-rose-500' : 'text-amber-500'}`}>
-                ↳
-              </span>
-              <span 
-                className={`break-words font-medium ${
-                  isCrit 
-                    ? 'text-rose-700 dark:text-rose-300' 
-                    : 'text-amber-700 dark:text-amber-300'
-                }`}
-              >
-                {issue.detail}
-              </span>
-            </div>
           );
         })}
       </div>
