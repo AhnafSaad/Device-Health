@@ -1155,8 +1155,13 @@ export const SwitchView: React.FC<SwitchViewProps> = ({
                 {hasFans ? (
                   <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
                     {fansList.map((fan, idx) => {
-                      const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
-                      const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
+                      const slotMatch = fan.name?.match(/fan\s*(?:slot\s*)?(\d+(?:\/\d+)+)/i) || fan.name?.match(/slot\s*(\d+(?:\/\d+)+)/i);
+                      const singleMatch = fan.name?.match(/fan\s*#?\s*(\d+)\b/i);
+                      const displayLabel = slotMatch
+                        ? `Fan ${slotMatch[1]}`
+                        : singleMatch
+                        ? `Fan ${singleMatch[1]}`
+                        : (fan.name && !/^fan$/i.test(fan.name) ? fan.name : `Fan ${idx + 1}`);
                       const statusBadge =
                         fan.status === 'ok'
                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'

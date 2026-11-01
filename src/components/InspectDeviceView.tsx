@@ -97,7 +97,22 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
   const deviceType = activeServer.deviceType || 'Server';
   const isCiscoSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'cisco' || String(activeServer.brand).toLowerCase() === 'cisco');
   const isJuniperSwitch = deviceType === 'Switch' && (String(server.brand).toLowerCase() === 'juniper' || String(activeServer.brand).toLowerCase() === 'juniper');
-  const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch || isJuniperSwitch;
+  const rawStorage = (isCiscoSwitch || isJuniperSwitch) ? null : (server.storage ?? activeServer.storage ?? (propServer as any)?.storage);
+  const storageList: Array<{ name: string; kind: string; total_bytes: number; used_bytes: number; used_pct: number }> =
+    Array.isArray(rawStorage)
+      ? rawStorage
+      : typeof rawStorage === 'string'
+      ? (() => {
+          try {
+            const p = JSON.parse(rawStorage);
+            return Array.isArray(p) ? p : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  const hasStorageData = storageList.length > 0;
+  const skipStorageCard = deviceType === 'OLT' || isCiscoSwitch || isJuniperSwitch || !hasStorageData;
 
   const rawOpticalSensors =
     (activeServer as any).optical_sensors ??
@@ -1058,7 +1073,7 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
             </div>
           </div>
 
-          {/* Storage & Memory (Server, Router, Switch — skipped for OLT and Cisco switches) */}
+          {/* Storage & Memory (Server, Router, Switch — skipped when no data or OLT/Cisco/Juniper) */}
           {!skipStorageCard && (
             <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
               <div className="flex items-center justify-between">
@@ -1071,46 +1086,40 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                 </span>
               </div>
 
-              {Array.isArray(server.storage) && server.storage.length > 0 ? (
-                <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
-                  {server.storage.map((item, idx) => {
-                    const pct = Number(item.used_pct ?? 0);
-                    const kindLabel = formatStorageKind(item.kind);
-                    return (
-                      <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
-                              {item.name}
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
-                              {kindLabel}
-                            </span>
-                          </div>
-                          <div className="font-mono text-xs shrink-0 text-right">
-                            <span className="text-base-content/70">
-                              {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
-                            </span>
-                            <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
-                              ({pct}%)
-                            </span>
-                          </div>
+              <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
+                {storageList.map((item, idx) => {
+                  const pct = Number(item.used_pct ?? 0);
+                  const kindLabel = formatStorageKind(item.kind);
+                  return (
+                    <div key={`${item.name}-${idx}`} className="p-3 sm:p-3.5 text-xs flex flex-col justify-center flex-1">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono font-bold text-base-content text-xs sm:text-sm truncate" title={item.name}>
+                            {item.name}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded border border-base-content/15 bg-base-300/60 text-base-content/70 text-[10px] font-mono font-semibold shrink-0">
+                            {kindLabel}
+                          </span>
                         </div>
-                        <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
-                            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                          />
+                        <div className="font-mono text-xs shrink-0 text-right">
+                          <span className="text-base-content/70">
+                            {formatStorageBytes(item.used_bytes)} / {formatStorageBytes(item.total_bytes)}
+                          </span>
+                          <span className={`font-bold ml-1.5 ${getMetricColor(pct)}`}>
+                            ({pct}%)
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
-                  Not reported by this device
-                </div>
-              )}
+                      <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${getProgressColor(pct)}`}
+                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -1693,8 +1702,13 @@ export const InspectDeviceView: React.FC<InspectDeviceViewProps> = ({
                     {hasFans ? (
                       <div className="divide-y divide-base-content/10 rounded-lg border border-base-content/10 bg-base-100/70">
                         {fansList.map((fan, idx) => {
-                          const numMatch = fan.name?.match(/fan\s*(\d+)/i) || fan.name?.match(/(\d+)/);
-                          const displayLabel = numMatch ? `Fan ${numMatch[1]}` : (fan.name || `Fan ${idx + 1}`);
+                          const slotMatch = fan.name?.match(/fan\s*(?:slot\s*)?(\d+(?:\/\d+)+)/i) || fan.name?.match(/slot\s*(\d+(?:\/\d+)+)/i);
+                          const singleMatch = fan.name?.match(/fan\s*#?\s*(\d+)\b/i);
+                          const displayLabel = slotMatch
+                            ? `Fan ${slotMatch[1]}`
+                            : singleMatch
+                            ? `Fan ${singleMatch[1]}`
+                            : (fan.name && !/^fan$/i.test(fan.name) ? fan.name : `Fan ${idx + 1}`);
                           const statusBadge =
                             fan.status === 'ok'
                               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'

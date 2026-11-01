@@ -90,6 +90,22 @@ export const ServerView: React.FC<ServerViewProps> = ({
   const isOnline = activeServer.status === 'online';
   const isMetricsUnavailable = activeServer.metricsAvailable === false;
 
+  const rawStorage = server.storage ?? activeServer.storage ?? (propServer as any)?.storage;
+  const storageList: Array<{ name: string; kind: string; total_bytes: number; used_bytes: number; used_pct: number }> =
+    Array.isArray(rawStorage)
+      ? rawStorage
+      : typeof rawStorage === 'string'
+      ? (() => {
+          try {
+            const p = JSON.parse(rawStorage);
+            return Array.isArray(p) ? p : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  const hasStorageData = storageList.length > 0;
+
   const pollingRef = useRef<boolean>(false);
   const activeServerRef = useRef<Server>(liveServer);
   activeServerRef.current = liveServer;
@@ -541,7 +557,7 @@ export const ServerView: React.FC<ServerViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         
         {/* Resource Utilization Card (Left) */}
-        <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col">
+        <div className={`p-4 sm:p-5 lg:p-6 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-4 flex flex-col ${!hasStorageData ? 'md:col-span-2' : ''}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
@@ -770,20 +786,20 @@ export const ServerView: React.FC<ServerViewProps> = ({
           </div>
 
           {/* Storage & Memory Card (Right) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
-                <Database className="w-4 h-4 text-secondary" />
-                Storage &amp; Memory
-              </h3>
-              <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
-                &lt;70% OK • 70-85% WARN • &gt;85% CRIT
-              </span>
-            </div>
+          {hasStorageData && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-base-100 border border-base-content/10 shadow-lg space-y-3.5 sm:space-y-4 flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-secondary" />
+                  Storage &amp; Memory
+                </h3>
+                <span className="text-[10px] sm:text-[11px] font-mono text-base-content/50">
+                  &lt;70% OK • 70-85% WARN • &gt;85% CRIT
+                </span>
+              </div>
 
-            {Array.isArray(server.storage) && server.storage.length > 0 ? (
               <div className="rounded-xl border border-base-content/10 bg-base-200/30 overflow-hidden divide-y divide-base-content/10 flex-1 flex flex-col">
-                {server.storage.map((item, idx) => {
+                {storageList.map((item, idx) => {
                   const pct = Number(item.used_pct ?? 0);
                   const kindLabel = formatStorageKind(item.kind);
                   return (
@@ -816,12 +832,8 @@ export const ServerView: React.FC<ServerViewProps> = ({
                   );
                 })}
               </div>
-            ) : (
-              <div className="p-3.5 rounded-xl bg-base-200/40 border border-base-content/5 text-xs font-mono text-base-content/40 flex-1 flex items-center justify-center">
-                Not reported by this device
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Disk Health & Lifecycle Card (Multi-Column Responsive Grid) */}
