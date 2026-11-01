@@ -14,7 +14,8 @@ import {
   Network,
   CheckCircle2,
   Disc,
-  ShieldAlert
+  ShieldAlert,
+  Radio
 } from 'lucide-react';
 
 interface ActiveIssuesCellProps {
@@ -31,7 +32,7 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCo
     label: string;
     detail: string;
     severity: 'critical' | 'warning';
-    type: 'offline' | 'hardware-psu' | 'hardware-fan' | 'cpu' | 'ram' | 'temp' | 'disk' | 'crc' | 'disk-lifecycle' | 'ecc' | 'general';
+    type: 'offline' | 'hardware-psu' | 'hardware-fan' | 'cpu' | 'ram' | 'temp' | 'disk' | 'crc' | 'disk-lifecycle' | 'ecc' | 'optical' | 'general';
   }
 
   const issues: IssueItem[] = [];
@@ -292,7 +293,44 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCo
     });
   }
 
-  // 12. Fallback if health is marked critical/warning but no specific items matched
+  // 12. Optical Power Issues (Tx/Rx power threshold breach or signal loss)
+  const opticalRx = typeof server.opticalRx === 'number' ? server.opticalRx : null;
+  const opticalTx = typeof server.opticalTx === 'number' ? server.opticalTx : null;
+  if (opticalRx !== null && (opticalRx <= -25 || opticalRx === 0)) {
+    const isCrit = opticalRx <= -30 || opticalRx === 0;
+    issues.push({
+      id: 'optical-rx',
+      label: `Opt Rx: ${opticalRx} dBm`,
+      detail: `Optical transceiver receive power abnormal (${opticalRx} dBm)`,
+      severity: isCrit ? 'critical' : 'warning',
+      type: 'optical',
+    });
+  }
+  if (opticalTx !== null && (opticalTx <= -20 || opticalTx === 0)) {
+    const isCrit = opticalTx <= -25 || opticalTx === 0;
+    issues.push({
+      id: 'optical-tx',
+      label: `Opt Tx: ${opticalTx} dBm`,
+      detail: `Optical transceiver transmit power abnormal (${opticalTx} dBm)`,
+      severity: isCrit ? 'critical' : 'warning',
+      type: 'optical',
+    });
+  }
+  const opticalSensors = server.opticalSensors || server.optical_sensors || [];
+  opticalSensors.forEach((sensor, idx) => {
+    if (typeof sensor.dbm === 'number' && (sensor.dbm <= -25 || sensor.dbm === 0)) {
+      const pName = sensor.port || sensor.label || `Port ${sensor.index ?? idx + 1}`;
+      issues.push({
+        id: `optical-sensor-${idx}`,
+        label: `Opt: ${pName} (${sensor.dbm} dBm)`,
+        detail: `Transceiver ${pName} optical power breach: ${sensor.dbm} dBm`,
+        severity: sensor.dbm <= -30 || sensor.dbm === 0 ? 'critical' : 'warning',
+        type: 'optical',
+      });
+    }
+  });
+
+  // 13. Fallback if health is marked critical/warning but no specific items matched
   if (issues.length === 0) {
     if (healthInfo.health === 'Critical') {
       issues.push({
@@ -336,6 +374,8 @@ export const ActiveIssuesCell: React.FC<ActiveIssuesCellProps> = ({ server, isCo
         return <Disc className={iconClass} />;
       case 'ecc':
         return <ShieldAlert className={iconClass} />;
+      case 'optical':
+        return <Radio className={iconClass} />;
       default:
         return item.severity === 'critical' ? (
           <AlertOctagon className={iconClass} />

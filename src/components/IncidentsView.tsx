@@ -15,9 +15,68 @@ import {
   Layers,
   Activity,
   Building2,
-  Filter
+  Filter,
+  Radio,
+  Zap,
+  Cpu,
+  Network
 } from 'lucide-react';
 import { DatacenterDropdown } from './DatacenterDropdown';
+
+export type ErrorCategory = 'all' | 'optical' | 'ecc' | 'ram' | 'cpu' | 'hardware' | 'interfaces';
+
+export function deviceMatchesErrorCategory(server: Server, category: ErrorCategory): boolean {
+  if (category === 'all') return true;
+
+  const health = calculateDeviceHealth(server);
+
+  if (category === 'optical') {
+    const rx = typeof server.opticalRx === 'number' ? server.opticalRx : null;
+    const tx = typeof server.opticalTx === 'number' ? server.opticalTx : null;
+    const hasOpticalValue = (rx !== null && (rx <= -25 || rx === 0)) ||
+                            (tx !== null && (tx <= -20 || tx === 0));
+    const sensors = (server.opticalSensors || server.optical_sensors || []);
+    const hasSensorIssue = sensors.some(s => typeof s.dbm === 'number' && (s.dbm <= -25 || s.dbm === 0));
+    const summaryMatch = /optical|rx power|tx power|transceiver|dbm/i.test(health.summary || '');
+    return Boolean(hasOpticalValue || hasSensorIssue || summaryMatch);
+  }
+
+  if (category === 'ecc') {
+    const ue = typeof server.ramEccUncorrected === 'number' ? server.ramEccUncorrected : 0;
+    const ce = typeof server.ramEccCorrected === 'number' ? server.ramEccCorrected : 0;
+    const hasControllers = (server.ramEccControllers || []).some(c => (c.ue || 0) > 0 || (c.ce || 0) > 50);
+    const summaryMatch = /ecc|parity|erc/i.test(health.summary || '');
+    return ue > 0 || ce > 50 || hasControllers || summaryMatch;
+  }
+
+  if (category === 'ram') {
+    const ram = typeof server.ramUsage === 'number' ? server.ramUsage : 0;
+    return health.ramCritical || health.ramWarning || ram >= 70;
+  }
+
+  if (category === 'cpu') {
+    const cpu = typeof server.cpuUsage === 'number' ? server.cpuUsage : 0;
+    return health.cpuCritical || health.cpuWarning || cpu >= 70;
+  }
+
+  if (category === 'hardware') {
+    const failedHw = health.failedHardware.length > 0;
+    const warnHw = health.warningHardware.length > 0;
+    const psuBad = (server.powerSupplies || []).some(p => p.status && !['ok', 'normal', 'up'].includes(p.status.toLowerCase()));
+    const fanBad = (server.fans || []).some(f => f.status && !['ok', 'normal', 'up'].includes(f.status.toLowerCase()));
+    return failedHw || warnHw || psuBad || fanBad;
+  }
+
+  if (category === 'interfaces') {
+    const hasCrc = (health.crcIssues && health.crcIssues.length > 0) || health.crcCritical || health.crcWarning;
+    const ifaces = (server.interfaces || []);
+    const ifaceCrc = ifaces.some(i => (typeof i.crc_errors === 'number' && i.crc_errors > 0) || i.oper_status === 'down');
+    const summaryMatch = /crc|interface|link down/i.test(health.summary || '');
+    return hasCrc || ifaceCrc || summaryMatch;
+  }
+
+  return false;
+}
 
 interface IncidentsViewProps {
   servers: Server[];
@@ -54,6 +113,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [deviceFilter, setDeviceFilter] = useState<string>('all');
   const [datacenterFilter, setDatacenterFilter] = useState<string>('all');
+  const [errorCategory, setErrorCategory] = useState<ErrorCategory>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -97,6 +157,19 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
   const healthyCount = Math.max(0, servers.length - allIncidents.length);
   const fleetSlaPercent = servers.length > 0 ? Math.round((healthyCount / servers.length) * 100) : 100;
 
+  // Breakdown by Error Category
+  const categoryCounts = useMemo(() => {
+    return {
+      all: allIncidents.length,
+      optical: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'optical')).length,
+      ecc: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'ecc')).length,
+      ram: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'ram')).length,
+      cpu: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'cpu')).length,
+      hardware: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'hardware')).length,
+      interfaces: allIncidents.filter((s) => deviceMatchesErrorCategory(s, 'interfaces')).length,
+    };
+  }, [allIncidents]);
+
   // 2. Filter incidents according to user's selected filters
   const filteredIncidents = useMemo(() => {
     return allIncidents.filter((srv) => {
@@ -111,6 +184,11 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
       // Operational Status (UP / DOWN) filter
       if (statusFilter === 'online' && isDown) return false;
       if (statusFilter === 'offline' && !isDown) return false;
+
+      // Error Category filter (Optical, ECC, RAM, CPU, Hardware, Interfaces)
+      if (errorCategory !== 'all' && !deviceMatchesErrorCategory(srv, errorCategory)) {
+        return false;
+      }
 
       // Device Type filter
       if (deviceFilter !== 'all') {
@@ -145,7 +223,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
 
       return true;
     });
-  }, [allIncidents, severityFilter, statusFilter, deviceFilter, datacenterFilter, searchQuery]);
+  }, [allIncidents, severityFilter, statusFilter, errorCategory, deviceFilter, datacenterFilter, searchQuery]);
 
   // 3. MANDATORY REQUIREMENT: Strictly sort Critical devices at the TOP!
   const sortedIncidents = useMemo(() => {
@@ -182,13 +260,14 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
     return sortedIncidents.slice(start, start + pageSize);
   }, [sortedIncidents, safeCurrentPage, pageSize]);
 
-  const hasActiveFilters = severityFilter !== 'all' || statusFilter !== 'all' || deviceFilter !== 'all' || datacenterFilter !== 'all' || !!searchQuery;
+  const hasActiveFilters = severityFilter !== 'all' || statusFilter !== 'all' || deviceFilter !== 'all' || datacenterFilter !== 'all' || errorCategory !== 'all' || !!searchQuery;
 
   const handleResetFilters = () => {
     setSeverityFilter('all');
     setStatusFilter('all');
     setDeviceFilter('all');
     setDatacenterFilter('all');
+    setErrorCategory('all');
     setSearchQuery('');
     setCurrentPage(1);
   };
@@ -594,6 +673,183 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
           aria-label="Incident telemetry and alarms" 
           className="flex-1 min-w-0 lg:h-full flex flex-col overflow-hidden"
         >
+          {/* Error Category Quick Filter Pills Bar */}
+          <div className="mb-2.5 p-2 rounded-xl bg-base-100/90 border border-base-content/10 shadow-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1 mr-1">
+                <Filter className="w-3.5 h-3.5 text-primary" />
+                <span>Error Filter:</span>
+              </span>
+
+              {/* All Anomalies */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('all');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'all'
+                    ? 'bg-primary text-primary-content border-primary font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <span>All Anomalies</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'all' ? 'bg-primary-content/20 text-primary-content' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.all}
+                </span>
+              </button>
+
+              {/* Optical Tx/Rx */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('optical');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'optical'
+                    ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <Radio className="w-3 h-3 text-sky-400" />
+                <span>Optical Tx/Rx</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'optical' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.optical}
+                </span>
+              </button>
+
+              {/* ECC Memory (ERC) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('ecc');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'ecc'
+                    ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <ShieldAlert className="w-3 h-3 text-purple-400" />
+                <span>ECC Memory (ERC)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'ecc' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.ecc}
+                </span>
+              </button>
+
+              {/* RAM Usage */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('ram');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'ram'
+                    ? 'bg-amber-600 text-white border-amber-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <Layers className="w-3 h-3 text-amber-400" />
+                <span>RAM Usage</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'ram' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.ram}
+                </span>
+              </button>
+
+              {/* Compute CPU */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('cpu');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'cpu'
+                    ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <Cpu className="w-3 h-3 text-rose-400" />
+                <span>Compute CPU</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'cpu' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.cpu}
+                </span>
+              </button>
+
+              {/* Hardware PSU / Fans */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('hardware');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'hardware'
+                    ? 'bg-orange-600 text-white border-orange-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <Zap className="w-3 h-3 text-orange-400" />
+                <span>Hardware PSU / Fans</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'hardware' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.hardware}
+                </span>
+              </button>
+
+              {/* Interfaces Down / CRC */}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('interfaces');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  errorCategory === 'interfaces'
+                    ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs'
+                    : 'bg-base-200/70 hover:bg-base-200 text-base-content/80 border-base-content/10'
+                }`}
+              >
+                <Network className="w-3 h-3 text-emerald-400" />
+                <span>Interfaces / CRC</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  errorCategory === 'interfaces' ? 'bg-white/20 text-white' : 'bg-base-300 text-base-content/70'
+                }`}>
+                  {categoryCounts.interfaces}
+                </span>
+              </button>
+            </div>
+
+            {errorCategory !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorCategory('all');
+                  setCurrentPage(1);
+                }}
+                className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 shrink-0"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset Error Filter</span>
+              </button>
+            )}
+          </div>
+
           <ServerTable
             servers={paginatedServers}
             selectedServer={selectedServer}
@@ -621,6 +877,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({
             onClearSearch={() => setSearchQuery('')}
             onClearAllFilters={handleResetFilters}
             isIncidentsMode={true}
+            errorCategory={errorCategory}
           >
             {/* Pagination Controls at Bottom of Table Card */}
             <Pagination

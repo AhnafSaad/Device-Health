@@ -44,6 +44,7 @@ interface ServerTableProps {
   onClearSearch?: () => void;
   onClearAllFilters?: () => void;
   isIncidentsMode?: boolean;
+  errorCategory?: string;
   children?: React.ReactNode;
 }
 
@@ -68,6 +69,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
   onClearSearch,
   onClearAllFilters,
   isIncidentsMode = false,
+  errorCategory = 'all',
   children,
 }) => {
   const handleInspect = (server: Server) => {
@@ -128,7 +130,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
     );
   };
 
-  const hasAnyFilterActive = statusFilter !== 'all' || deviceFilter !== 'all' || healthFilter !== 'all' || !!searchQuery;
+  const hasAnyFilterActive = statusFilter !== 'all' || deviceFilter !== 'all' || healthFilter !== 'all' || (errorCategory && errorCategory !== 'all') || !!searchQuery;
 
   return (
     <div className="rounded-2xl border border-base-content/10 bg-base-100/95 shadow-xl overflow-hidden backdrop-blur-md flex flex-col h-full min-h-[460px] lg:max-h-[calc(100vh-6rem)]">
@@ -239,6 +241,13 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               </span>
             )}
 
+            {/* Error Category Chip */}
+            {errorCategory && errorCategory !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-primary/15 border-primary/30 text-primary">
+                <span>Error Type: {errorCategory === 'optical' ? 'Optical Tx/Rx' : errorCategory === 'ecc' ? 'ECC Memory (ERC)' : errorCategory === 'ram' ? 'RAM Usage' : errorCategory === 'cpu' ? 'Compute CPU' : errorCategory === 'hardware' ? 'Hardware PSU / Fans' : errorCategory === 'interfaces' ? 'Interfaces / CRC' : errorCategory}</span>
+              </span>
+            )}
+
             {/* Query Chip */}
             {searchQuery && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-base-200 border-base-content/15 text-base-content max-w-xs truncate">
@@ -275,25 +284,36 @@ export const ServerTable: React.FC<ServerTableProps> = ({
       {/* Modern High-Density Table with Internal Scrollbar */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
-          {/* Defined column proportions to keep Device & Location snug, maximizing space for Active Issues */}
-          <colgroup>
-            <col className="w-[210px] sm:w-[230px]" />
-            <col className="w-[72px]" />
-            <col className="w-[105px]" />
-            <col className="w-auto" />
-            <col className="hidden lg:table-column w-[170px]" />
-            <col className="w-[110px]" />
-          </colgroup>
+          {/* Defined column proportions: Incidents mode prioritizes Active Issues; Fleet mode distributes space evenly */}
+          {isIncidentsMode ? (
+            <colgroup>
+              <col className="w-[210px] sm:w-[230px]" />
+              <col className="w-[72px]" />
+              <col className="w-[105px]" />
+              <col className="w-auto" />
+              <col className="hidden lg:table-column w-[170px]" />
+              <col className="w-[110px]" />
+            </colgroup>
+          ) : (
+            <colgroup>
+              <col className="w-[280px] lg:w-[320px]" />
+              <col className="w-[75px]" />
+              <col className="w-[125px]" />
+              <col className="w-[240px]" />
+              <col className="hidden lg:table-column w-auto" />
+              <col className="w-[110px]" />
+            </colgroup>
+          )}
           {/* Sticky Table Header with exactly the 6 requested columns */}
           <thead className="sticky top-0 z-10 bg-base-200/95 backdrop-blur-md shadow-xs">
             <tr className="border-b border-base-content/10 text-[11px] font-bold uppercase tracking-wider text-base-content/60 select-none">
-              <th className="py-2.5 px-3 w-[210px] sm:w-[230px]">Device &amp; Identity</th>
-              <th className="py-2.5 px-2 w-[72px] text-center">Status</th>
-              <th className="py-2.5 px-2.5 w-[105px]">Health Telemetry</th>
+              <th className={`py-2.5 px-3 ${isIncidentsMode ? 'w-[210px] sm:w-[230px]' : ''}`}>Device &amp; Identity</th>
+              <th className="py-2.5 px-2 text-center">Status</th>
+              <th className="py-2.5 px-2.5">Health Telemetry</th>
               <th className="py-2.5 px-3.5 hidden md:table-cell">
                 {isIncidentsMode ? 'Active Issues & Root Causes' : 'Core Resources'}
               </th>
-              <th className="py-2.5 px-3 hidden lg:table-cell w-[170px]">Data Center / Rack</th>
+              <th className="py-2.5 px-3 hidden lg:table-cell">Data Center / Rack</th>
               <th className="py-2.5 px-3 text-right w-[110px]">Action</th>
             </tr>
           </thead>
@@ -350,7 +370,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     }`}
                   >
                     {/* 1. Node & Identity: IP Address, Hostname, Brand Logo & Name, Device Type Badge */}
-                    <td className="py-2.5 px-3 w-[210px] sm:w-[230px] align-top">
+                    <td className={`py-2.5 px-3 ${isIncidentsMode ? 'w-[210px] sm:w-[230px]' : ''} align-top`}>
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         {/* Live Ping Beacon */}
                         <span className="relative flex h-2 w-2 shrink-0">
@@ -513,7 +533,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                       {isIncidentsMode ? (
                         <ActiveIssuesCell server={server} />
                       ) : isOnline ? (
-                        <div className="space-y-1.5 w-44 sm:w-52">
+                        <div className="space-y-1.5 w-full max-w-[230px]">
                           {server.metricsAvailable === false ? (
                             <div className="flex items-center justify-between text-[10px] font-mono leading-none">
                               <span className="text-base-content/50">CPU</span>
@@ -639,7 +659,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     </td>
 
                     {/* 5. Location & Rack */}
-                    <td className="py-2.5 px-3 hidden lg:table-cell align-top text-xs text-base-content/70 w-[170px] whitespace-nowrap">
+                    <td className={`py-2.5 px-3 hidden lg:table-cell align-top text-xs text-base-content/70 ${isIncidentsMode ? 'w-[170px]' : ''} whitespace-nowrap`}>
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
                         <span className="truncate max-w-[130px] font-semibold text-base-content">
