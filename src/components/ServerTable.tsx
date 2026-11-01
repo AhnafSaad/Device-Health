@@ -284,23 +284,23 @@ export const ServerTable: React.FC<ServerTableProps> = ({
       {/* Modern High-Density Table with Internal Scrollbar */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
-          {/* Defined column proportions: Core Resources / Active Issues gets flexible space; Data Center / Rack gets natural compact width */}
-          {isIncidentsMode ? (
+          {/* Defined column proportions matching reference design */}
+          {!isIncidentsMode ? (
+            <colgroup>
+              <col className="w-[280px] lg:w-[26%]" />
+              <col className="w-[100px] lg:w-[9%]" />
+              <col className="w-[150px] lg:w-[15%]" />
+              <col className="w-[280px] lg:w-[28%]" />
+              <col className="w-[180px] lg:w-[14%]" />
+              <col className="w-[100px] lg:w-[8%]" />
+            </colgroup>
+          ) : (
             <colgroup>
               <col className="w-[220px] sm:w-[250px]" />
               <col className="w-[75px]" />
               <col className="w-[120px]" />
               <col className="w-auto" />
               <col className="hidden lg:table-column w-[180px]" />
-              <col className="w-[110px] sm:w-[120px]" />
-            </colgroup>
-          ) : (
-            <colgroup>
-              <col className="w-[260px] lg:w-[300px]" />
-              <col className="w-[75px]" />
-              <col className="w-[130px]" />
-              <col className="w-auto" />
-              <col className="hidden lg:table-column w-[190px]" />
               <col className="w-[110px] sm:w-[120px]" />
             </colgroup>
           )}
@@ -313,7 +313,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({
               <th className="py-2.5 px-3.5 hidden md:table-cell">
                 {isIncidentsMode ? 'Active Issues & Root Causes' : 'Core Resources'}
               </th>
-              <th className="py-2.5 px-3 hidden lg:table-cell">Data Center / Rack</th>
+              <th className="py-2.5 px-3 hidden lg:table-cell">
+                {isIncidentsMode ? 'Data Center / Rack' : 'Location & Rack'}
+              </th>
               <th className="py-2.5 px-3 text-right">Action</th>
             </tr>
           </thead>
@@ -676,7 +678,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({
                     {/* 6. Action: Poll button + Inspect button + 3-dot dropdown menu */}
                     <td className="py-2.5 px-3 align-top text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        {onPollDevice && (
+                        {onPollDevice && isIncidentsMode && (
                           <button
                             type="button"
                             onClick={() => onPollDevice(server)}

@@ -141,12 +141,17 @@ export default function App() {
       setInspectDeviceId(null);
       return;
     }
-    if (path === '/dashboard' || path === '/fleet' || path === '/all-devices') {
+    if (path === '/' || path === '/dashboard' || path === '/fleet' || path === '/all-devices') {
       setCurrentView('dashboard');
       setInspectDeviceId(null);
       return;
     }
-    setCurrentView('incidents');
+    if (path === '/incidents') {
+      setCurrentView('incidents');
+      setInspectDeviceId(null);
+      return;
+    }
+    setCurrentView('dashboard');
     setInspectDeviceId(null);
   }, []);
 
@@ -1243,76 +1248,41 @@ export default function App() {
               currentUserRole={currentUserRole}
             />
           ) : (
-            /* Two-Column Dashboard Layout: Desktop Flex/Grid with Fixed Sidebar & Internal Scroll Table */
-            <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch lg:h-[calc(100vh-7.5rem)] min-w-0">
-              
-              {/* Left Sidebar / Column: Compact Stats Cards Stacked Vertically + Quick Filters */}
-              <aside 
-                aria-label="Fleet status metrics and quick filters"
-                className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full lg:overflow-y-auto pr-1 pt-1 pb-1 space-y-2.5"
+            /* Full-Width Fleet Dashboard matching original design */
+            <div className="flex-1 min-w-0 lg:h-[calc(100vh-7.5rem)] flex flex-col overflow-hidden">
+              <ServerTable
+                servers={paginatedServers}
+                selectedServer={selectedServer}
+                onSelectServer={handleSelectServer}
+                onInspectServer={handleInspectServer}
+                onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
+                onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
+                searchQuery={searchQuery}
+                setSearchQuery={handleSearchChange}
+                totalFilteredCount={filteredServers.length}
+                statusFilter={statusFilter}
+                deviceFilter={deviceFilter}
+                healthFilter={healthFilter}
+                datacenters={enrichedDatacenters}
+                datacenterFilter={datacenterFilter}
+                onSelectDatacenterFilter={handleDatacenterFilterChange}
+                onClearSearch={() => handleSearchChange('')}
+                onClearAllFilters={handleResetAllFilters}
               >
-                <FilterCards
-                  currentFilter={statusFilter}
-                  onSelectFilter={handleFilterChange}
-                  totalCount={servers.length}
-                  onlineCount={onlineCount}
-                  offlineCount={offlineCount}
-                  mockEstimatedTotal={servers.length.toLocaleString()}
-                  deviceFilter={deviceFilter}
-                  onSelectDeviceFilter={handleDeviceFilterChange}
-                  healthFilter={healthFilter}
-                  onSelectHealthFilter={handleHealthFilterChange}
-                  datacenters={enrichedDatacenters}
-                  datacenterFilter={datacenterFilter}
-                  onSelectDatacenterFilter={handleDatacenterFilterChange}
-                  onOpenDcModal={currentUserRole === 'admin' ? () => router.push('/admin/data-centers') : undefined}
-                  onResetFilters={handleResetAllFilters}
-                  hasActiveFilters={hasActiveFilters}
+                {/* Pagination Controls at Bottom of Table Card */}
+                <Pagination
+                  currentPage={safeCurrentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  pageSize={pageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                  totalItems={filteredServers.length}
+                  virtualTotalEstimate={servers.length}
                 />
-              </aside>
-
-              {/* Main Right Content Area: Prominently displays Search at top, Data Table with Internal Scroll, Pagination */}
-              <section 
-                aria-label="Server fleet telemetry and controls" 
-                className="flex-1 min-w-0 lg:h-full flex flex-col overflow-hidden"
-              >
-                {/* High-Density Server Telemetry Table with Prominent Search Bar & Internal Scroll */}
-                <ServerTable
-                  servers={paginatedServers}
-                  selectedServer={selectedServer}
-                  onSelectServer={handleSelectServer}
-                  onInspectServer={handleInspectServer}
-                  onEditServer={currentUserRole !== 'viewer' ? handleOpenEditModal : undefined}
-                  onDeleteServer={currentUserRole === 'admin' ? handleOpenDeleteModal : undefined}
-                  onPollDevice={handlePollSingleDevice}
-                  pollingDeviceIds={pollingDeviceIds}
-                  searchQuery={searchQuery}
-                  setSearchQuery={handleSearchChange}
-                  totalFilteredCount={filteredServers.length}
-                  statusFilter={statusFilter}
-                  deviceFilter={deviceFilter}
-                  healthFilter={healthFilter}
-                  datacenters={enrichedDatacenters}
-                  datacenterFilter={datacenterFilter}
-                  onSelectDatacenterFilter={handleDatacenterFilterChange}
-                  onClearSearch={() => handleSearchChange('')}
-                  onClearAllFilters={handleResetAllFilters}
-                >
-                  {/* Pagination Controls at Bottom of Table Card */}
-                  <Pagination
-                    currentPage={safeCurrentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    pageSize={pageSize}
-                    onPageSizeChange={(size) => {
-                      setPageSize(size);
-                      setCurrentPage(1);
-                    }}
-                    totalItems={filteredServers.length}
-                    virtualTotalEstimate={servers.length}
-                  />
-                </ServerTable>
-              </section>
+              </ServerTable>
             </div>
           )}
         </div>

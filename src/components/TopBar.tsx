@@ -125,7 +125,21 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Center/Switch: Segmented View Navigation */}
         <div className="flex items-center bg-base-200/80 p-1 rounded-xl border border-base-content/10 shadow-inner">
-          {/* 1. Incidents Tab (Primary Landing View) */}
+          {/* 1. Full Fleet Dashboard Tab */}
+          <button
+            onClick={() => onNavigate('dashboard')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+              currentView === 'dashboard'
+                ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
+                : 'text-base-content/60 hover:text-base-content hover:bg-base-100/50'
+            }`}
+            title="All Fleet Devices Dashboard"
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
+          </button>
+
+          {/* 2. Incidents Tab */}
           <button
             onClick={() => onNavigate('incidents')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
@@ -146,20 +160,6 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {incidentCount}
               </span>
             )}
-          </button>
-
-          {/* 2. Full Fleet Dashboard Tab */}
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-              currentView === 'dashboard'
-                ? 'bg-base-100 text-primary shadow-sm shadow-base-content/5 font-bold'
-                : 'text-base-content/60 hover:text-base-content hover:bg-base-100/50'
-            }`}
-            title="All Fleet Devices Unfiltered"
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Fleet Dashboard</span>
           </button>
 
           {role !== 'viewer' && (
